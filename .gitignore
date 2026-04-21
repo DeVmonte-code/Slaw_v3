@@ -1,0 +1,83 @@
+# ── macOS ────────────────────────────────────────────────────────────────────
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+.Spotlight-V100
+.Trashes
+
+# ── Python ───────────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+MANIFEST
+pip-log.txt
+pip-delete-this-directory.txt
+
+# ── Virtual environments ──────────────────────────────────────────────────────
+.venv/
+venv/
+env/
+ENV/
+.python-version
+
+# ── uv ───────────────────────────────────────────────────────────────────────
+# uv.lock is intentionally committed; nothing else to exclude beyond .venv
+
+# ── Secrets / environment ─────────────────────────────────────────────────────
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# ── Test / lint caches ────────────────────────────────────────────────────────
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+coverage.xml
+htmlcov/
+.tox/
+
+# ── Generated artefacts ───────────────────────────────────────────────────────
+openapi.json
+
+# ── Node / frontend ───────────────────────────────────────────────────────────
+node_modules/
+.next/
+out/
+.nuxt/
+dist/
+.cache/
+.parcel-cache/
+*.local
+
+# ── Editors & IDEs ────────────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# ── OS misc ───────────────────────────────────────────────────────────────────
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+.venv
+__pycache__
+*.pyc
+.env
+.pytest_cache
+.mypy_cache
+.ruff_cache
+dist
+build
+*.egg-info
+openapi.json
