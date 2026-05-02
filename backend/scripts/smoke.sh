@@ -77,6 +77,14 @@ assert 'childcare_cost_deduction' in ids, 'childcare_cost_deduction missing'
 print('Luis required IDs present')
 "
 
+# Anthropic Opus ITPM (input-tokens-per-minute) is the tightest budget at tier 1.
+# Luis burns most of it in ~12 concurrent verify calls; the next persona scan can
+# rate-limit-fail every verify if we don't pause for the TPM window to roll.
+INTER_PERSONA_SLEEP="${INTER_PERSONA_SLEEP:-60}"
+
+echo "=== Cooling down ${INTER_PERSONA_SLEEP}s for Anthropic TPM window ==="
+sleep "$INTER_PERSONA_SLEEP"
+
 echo "=== Live scan (b_permit_eu_employee — Quellensteuer persona) ==="
 RESP=$(curl -sf -X POST "$API_BASE_URL/scan" \
   -H "content-type: application/json" \
@@ -85,8 +93,13 @@ RESP=$(curl -sf -X POST "$API_BASE_URL/scan" \
 echo "$RESP" | python -c "
 import sys, json
 r = json.load(sys.stdin)
-print(f\"b_permit benefits returned: {len(r['benefits'])}, suppressed: {r['suppressed_count']}\")
+n = len(r['benefits'])
+print(f\"b_permit benefits returned: {n}, suppressed: {r['suppressed_count']}\")
+assert n >= 1, f'FAIL: b_permit_eu_employee expected >= 1 verified, got {n}'
 "
+
+echo "=== Cooling down ${INTER_PERSONA_SLEEP}s for Anthropic TPM window ==="
+sleep "$INTER_PERSONA_SLEEP"
 
 echo "=== Live scan (c_permit_third_country — naturalisation persona) ==="
 RESP=$(curl -sf -X POST "$API_BASE_URL/scan" \
@@ -96,7 +109,9 @@ RESP=$(curl -sf -X POST "$API_BASE_URL/scan" \
 echo "$RESP" | python -c "
 import sys, json
 r = json.load(sys.stdin)
-print(f\"c_permit benefits returned: {len(r['benefits'])}, suppressed: {r['suppressed_count']}\")
+n = len(r['benefits'])
+print(f\"c_permit benefits returned: {n}, suppressed: {r['suppressed_count']}\")
+assert n >= 1, f'FAIL: c_permit_third_country expected >= 1 verified, got {n}'
 "
 
 echo "=== Export OpenAPI ==="
