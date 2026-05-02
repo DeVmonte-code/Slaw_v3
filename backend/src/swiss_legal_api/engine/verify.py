@@ -5,15 +5,15 @@ import json
 import logging
 import re
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 from anthropic import APIConnectionError, APITimeoutError, AsyncAnthropic, RateLimitError
 from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 
 from ..config import settings
-from ..schemas import Citation, ContextProfile, Entitlement
-from .retrieval import retrieve_for_citation
+from ..schemas import Citation, ContextProfile, Entitlement, SupportingDoctrine
+from .retrieval import retrieve_for_citation, retrieve_supporting_context
 
 logger = logging.getLogger(__name__)
 
@@ -40,6 +40,16 @@ Authoritative-source policy:
   verify when the translated wording is unambiguous and clearly on-point, but
   lower confidence accordingly (cap at 0.75) and note the lack of original-
   language source in your reasoning.
+
+Supporting-doctrine policy:
+- The user message MAY include a "supporting_doctrine" array of paragraphs
+  drawn from Swiss legal commentary (e.g. CO 1-183 doctrinal text). These
+  are advisory background ONLY — they help you understand context but are
+  NEVER a substitute for the SR + article authority and MUST NOT be used as
+  the basis of your verification. If "chunks" is empty or unsupportive, do
+  NOT verify on doctrine alone — respond supports=false.
+- Do NOT cite the doctrine in "best_quote"; "best_quote" must come from the
+  retrieved SR/article chunks.
 
 Output rules:
 - Output ONLY valid JSON of shape:
@@ -109,6 +119,11 @@ class VerifyResult:
     confidence: float
     reasoning: str
     best_citation: Citation
+    # Empty by default so existing call sites and tests that don't yet
+    # populate doctrine continue to work unchanged. Populated by
+    # ``verify_entitlement`` from ``retrieve_supporting_context`` when
+    # the curriculum collection has matching chunks above threshold.
+    supporting_doctrine: list[SupportingDoctrine] = field(default_factory=list)
 
 
 async def verify_entitlement(
@@ -126,6 +141,25 @@ async def verify_entitlement(
         None,
         f"entitlement_id={entitlement.id}",
     )
+
+    # Curriculum (CO 1-183 + specialized doctrine) is purely advisory: we
+    # surface up to a few paragraphs to the model alongside the
+    # authoritative chunks so it can reason with context, but the citation
+    # contract is unchanged. Soft-fail on every error path so a missing
+    # collection or a Qdrant outage never blocks the scan.
+    try:
+        doctrine_chunks = await asyncio.to_thread(
+            retrieve_supporting_context,
+            entitlement.title.en,
+            topic_tags=[entitlement.category],
+        )
+    except Exception as exc:
+        logger.warning(
+            "supporting_doctrine_lookup_failed entitlement_id=%s exc=%s",
+            entitlement.id,
+            type(exc).__name__,
+        )
+        doctrine_chunks = []
 
     # Guardrail: refuse without calling Claude when no chunk passed the
     # similarity threshold + canton/date filters. Saves tokens AND prevents
@@ -184,9 +218,24 @@ async def verify_entitlement(
         "business_activity": profile.business_activity,
     }
 
+    # Doctrine payload is intentionally minimal — text + citation slug —
+    # so the model treats it as a hint, not a citable source. The verifier
+    # also re-states the policy in the SYSTEM prompt under "Supporting-
+    # doctrine policy" to remove ambiguity.
+    doctrine_payload = [
+        {
+            "source_doc": d.source_doc,
+            "chapter": d.chapter,
+            "score": round(d.score, 3),
+            "text": d.text,
+        }
+        for d in doctrine_chunks
+    ]
+
     chunks_envelope = {
         "translation_only": translation_only,
         "chunks": chunk_payload,
+        "supporting_doctrine": doctrine_payload,
     }
     chunks_block = (
         f"{_CHUNKS_OPEN}\n"
@@ -262,4 +311,14 @@ Respond with JSON only."""
                 "score": top.score,
             }
         ),
+        supporting_doctrine=[
+            SupportingDoctrine(
+                source_doc=d.source_doc,
+                chapter=d.chapter,
+                # Pydantic field is bounded [0, 1]; the curriculum retriever
+                # already enforces score_threshold>=0, so clamp paranoia.
+                score=max(0.0, min(1.0, d.score)),
+            )
+            for d in doctrine_chunks
+        ],
     )

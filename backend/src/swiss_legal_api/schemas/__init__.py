@@ -1,4 +1,4 @@
-from .benefit_report import Benefit, BenefitReport, EvidenceItem
+from .benefit_report import Benefit, BenefitReport, EvidenceItem, SupportingDoctrine
 from .citation import Citation
 from .context_profile import ContextProfile, LifeEvent
 from .entitlement import Entitlement, EstimatedValue, TitleI18n
@@ -13,6 +13,7 @@ __all__ = [
     "EstimatedValue",
     "EvidenceItem",
     "LifeEvent",
+    "SupportingDoctrine",
     "TitleI18n",
     "TriggerExpr",
 ]

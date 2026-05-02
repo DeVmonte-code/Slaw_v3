@@ -97,14 +97,47 @@ async def health() -> dict[str, bool]:
 
 
 @app.get("/readyz")
-async def readyz() -> dict[str, object]:
+async def readyz(include: str | None = None) -> dict[str, object]:
+    """Liveness + Qdrant reachability probe.
+
+    Default behaviour (no ``include``) is unchanged: confirms Qdrant is
+    reachable and the scan path's primary collection exists implicitly via
+    the ``get_collections()`` call.
+
+    With ``?include=curriculum`` the probe additionally verifies the
+    advisory ``settings.curriculum_collection`` is present. Use this in
+    deployments that have seeded doctrinal PDFs and want a hard signal if
+    the second collection ever drops out from under them.
+    """
     try:
-        qdrant_client().get_collections()
+        cols_resp = qdrant_client().get_collections()
     except Exception as exc:
         logger.warning("readyz: qdrant ping failed (%s)", type(exc).__name__)
         raise HTTPException(
             status_code=503, detail={"ok": False, "qdrant": "unreachable"}
         ) from exc
+
+    if include == "curriculum":
+        names = {c.name for c in cols_resp.collections}
+        if settings.curriculum_collection not in names:
+            logger.warning(
+                "readyz: curriculum collection '%s' not found",
+                settings.curriculum_collection,
+            )
+            raise HTTPException(
+                status_code=503,
+                detail={
+                    "ok": False,
+                    "qdrant": "reachable",
+                    "curriculum": "missing",
+                    "expected_collection": settings.curriculum_collection,
+                },
+            )
+        return {
+            "ok": True,
+            "qdrant": "reachable",
+            "curriculum": "reachable",
+        }
     return {"ok": True, "qdrant": "reachable"}
 
 

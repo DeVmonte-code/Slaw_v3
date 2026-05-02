@@ -28,7 +28,19 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Readyz */
+        /**
+         * Readyz
+         * @description Liveness + Qdrant reachability probe.
+         *
+         *     Default behaviour (no ``include``) is unchanged: confirms Qdrant is
+         *     reachable and the scan path's primary collection exists implicitly via
+         *     the ``get_collections()`` call.
+         *
+         *     With ``?include=curriculum`` the probe additionally verifies the
+         *     advisory ``settings.curriculum_collection`` is present. Use this in
+         *     deployments that have seeded doctrinal PDFs and want a hard signal if
+         *     the second collection ever drops out from under them.
+         */
         get: operations["readyz_readyz_get"];
         put?: never;
         post?: never;
@@ -99,6 +111,8 @@ export interface components {
             time_limit_days?: number | null;
             /** Llm Reasoning */
             llm_reasoning: string;
+            /** Supporting Doctrine */
+            supporting_doctrine?: components["schemas"]["SupportingDoctrine"][];
             /**
              * Disclaimer
              * @default Not a substitute for advice from a Swiss attorney registered with a cantonal bar.
@@ -299,6 +313,33 @@ export interface components {
             /** Month */
             month?: number | null;
         };
+        /**
+         * SupportingDoctrine
+         * @description Advisory-only doctrinal pointer surfaced alongside a Benefit.
+         *
+         *     Sourced from the ``co_curriculum`` Qdrant collection (CO 1-183 +
+         *     specialized PDFs). Never a substitute for the SR + article ``Citation``
+         *     in ``Benefit.citations`` — the citation contract is unchanged. The
+         *     frontend renders these under a "Why this applies" disclosure that is
+         *     visually distinct from the binding-authority "Legal basis" block.
+         */
+        SupportingDoctrine: {
+            /**
+             * Source Doc
+             * @description Filename stem of the doctrinal PDF (e.g. 'co_articles_1_183'). Stable across re-seedings — used as the public identifier.
+             */
+            source_doc: string;
+            /**
+             * Chapter
+             * @description Optional chapter label from the source document's sidecar metadata. Falls back to None when the contributor did not supply a chapter index.
+             */
+            chapter?: string | null;
+            /**
+             * Score
+             * @description Cosine similarity of the supporting chunk (advisory only).
+             */
+            score: number;
+        };
         /** ValidationError */
         ValidationError: {
             /** Location */
@@ -345,7 +386,9 @@ export interface operations {
     };
     readyz_readyz_get: {
         parameters: {
-            query?: never;
+            query?: {
+                include?: string | null;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -361,6 +404,15 @@ export interface operations {
                     "application/json": {
                         [key: string]: unknown;
                     };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

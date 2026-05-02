@@ -11,6 +11,37 @@ class EvidenceItem(BaseModel):
     value: str | int | float | bool | None
 
 
+class SupportingDoctrine(BaseModel):
+    """Advisory-only doctrinal pointer surfaced alongside a Benefit.
+
+    Sourced from the ``co_curriculum`` Qdrant collection (CO 1-183 +
+    specialized PDFs). Never a substitute for the SR + article ``Citation``
+    in ``Benefit.citations`` — the citation contract is unchanged. The
+    frontend renders these under a "Why this applies" disclosure that is
+    visually distinct from the binding-authority "Legal basis" block.
+    """
+
+    source_doc: str = Field(
+        ...,
+        description=(
+            "Filename stem of the doctrinal PDF (e.g. 'co_articles_1_183'). "
+            "Stable across re-seedings — used as the public identifier."
+        ),
+    )
+    chapter: str | None = Field(
+        default=None,
+        description=(
+            "Optional chapter label from the source document's sidecar "
+            "metadata. Falls back to None when the contributor did not "
+            "supply a chapter index."
+        ),
+    )
+    score: float = Field(
+        ..., ge=0, le=1,
+        description="Cosine similarity of the supporting chunk (advisory only).",
+    )
+
+
 class Benefit(BaseModel):
     entitlement_id: str
     title: str
@@ -23,6 +54,10 @@ class Benefit(BaseModel):
     action_template_id: str | None = None
     time_limit_days: int | None = None
     llm_reasoning: str
+    # Defaulted to [] so older clients/snapshots and tests that don't yet
+    # set the field continue to round-trip unchanged. Empty list is the
+    # expected state when the curriculum collection has no PDFs seeded.
+    supporting_doctrine: list[SupportingDoctrine] = Field(default_factory=list)
     disclaimer: str = (
         "Not a substitute for advice from a Swiss attorney "
         "registered with a cantonal bar."

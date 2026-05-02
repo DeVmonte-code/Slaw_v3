@@ -71,12 +71,71 @@ curl -X POST http://localhost:8000/scan \
 
 ## Health Endpoints
 
-| Path      | Purpose                                             |
-| --------- | --------------------------------------------------- |
-| `/health` | Cheap liveness — proves the process is up.          |
-| `/readyz` | Deep readiness — pings Qdrant; 503 if unreachable.  |
+| Path                          | Purpose                                                       |
+| ----------------------------- | ------------------------------------------------------------- |
+| `/health`                     | Cheap liveness — proves the process is up.                    |
+| `/readyz`                     | Deep readiness — pings Qdrant; 503 if unreachable.            |
+| `/readyz?include=curriculum`  | Same plus a check that the curriculum collection exists. 503 if Qdrant is reachable but the curriculum collection is missing. |
 
 `/readyz` is what a load balancer should poll. `/health` is for the process supervisor.
+Use `?include=curriculum` only on deployments that have actually seeded
+doctrinal PDFs — otherwise the bootstrap deployment will fail readiness.
+
+## Trusted curriculum (advisory doctrine)
+
+A second Qdrant collection (`co_curriculum` by default, override via
+`CURRICULUM_COLLECTION`) holds embeddings of trusted doctrinal text — the
+default seed target is the Code of Obligations articles 1-183 plus a small
+set of hand-picked specialized PDFs. **Doctrine is advisory only:** the
+verifier is allowed to read these chunks for context, but the citation
+contract is unchanged — `Benefit.citations[]` always carries SR + article
+authority. The doctrine surfaces on `Benefit.supporting_doctrine[]` for
+transparency (the frontend renders it under a "Why this applies"
+disclosure visually distinct from the binding "Legal basis" block) and is
+never the basis of a verification.
+
+### Contributor workflow
+
+1. Drop a PDF under `backend/seed/curriculum/<stem>.pdf`. Pick a stable,
+   human-readable stem (e.g. `co_articles_1_183`) — the stem is part of
+   the chunk's UUID5 ID, so renaming a PDF orphans its existing points
+   until reconciliation runs.
+2. Optionally, drop a sidecar `<stem>.meta.json` with any of:
+
+   ```json
+   {
+     "language": "en",
+     "topic_tags": ["contracts", "errors"],
+     "chapter_index": {
+       "1":  "Chapter 1: Formation",
+       "12": "Chapter 2: Errors"
+     }
+   }
+   ```
+
+   `chapter_index` is sparse — list only the *first* page of each chapter
+   and the chunker forward-fills the label across the chapter's pages.
+3. Re-seed:
+
+   ```bash
+   python -m swiss_legal_api.seeding.seed_curriculum
+   ```
+
+   The seeder creates the collection on first run, derives stable IDs from
+   `(source_doc, page, chunk_index)` so re-runs upsert in place, and
+   prints per-PDF chunk counts.
+
+### Citation vs. doctrine — at a glance
+
+| Field                        | Source                       | Authoritative? | Where surfaced                     |
+| ---------------------------- | ---------------------------- | -------------- | ---------------------------------- |
+| `Benefit.citations[]`        | `swiss_law` (SR + article)   | Yes            | "Legal basis" — every Benefit      |
+| `Benefit.supporting_doctrine[]` | `co_curriculum` (PDFs)    | No             | "Why this applies" — when present  |
+
+If the curriculum collection is missing or unreachable the verifier
+soft-fails (no doctrine attached, scan returns normally). Use
+`/readyz?include=curriculum` if your deployment depends on doctrine being
+present.
 
 ## Configuration
 
@@ -89,6 +148,7 @@ All settings are read from the environment (see `.env.example`).
 | `QDRANT_URL`           | (empty)                                | Required for readiness and live verified scans. Lifespan pings it but only logs a warning if unreachable; `/readyz` returns 503 in that case. |
 | `QDRANT_API_KEY`       | (empty)                                | Required for Qdrant Cloud.                                                                     |
 | `QDRANT_COLLECTION`    | `swiss_law`                            |                                                                                                |
+| `CURRICULUM_COLLECTION`| `co_curriculum`                        | Second Qdrant collection for advisory doctrinal context (CO 1-183 + specialized PDFs). Only created when the curriculum seeder runs.|
 | `EMBEDDING_MODEL`      | `intfloat/multilingual-e5-small`       | Pre-warmed at startup.                                                                         |
 | `SCAN_CONCURRENCY`     | `3`                                    | Anthropic semaphore.                                                                           |
 | `LOG_LEVEL`            | `INFO`                                 | `DEBUG` / `INFO` / `WARNING` / `ERROR`.                                                        |

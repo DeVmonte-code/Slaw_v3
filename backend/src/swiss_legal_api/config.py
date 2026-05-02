@@ -11,6 +11,11 @@ class Settings(BaseSettings):
     qdrant_url: str = ""
     qdrant_api_key: str = ""
     qdrant_collection: str = "swiss_law"
+    # Second Qdrant collection holding doctrinal context (CO 1-183 + Luis's
+    # specialized PDFs). Treated as advisory-only at retrieval time — never
+    # cited as primary authority. Configurable so that staging clusters can
+    # use a parallel collection name without colliding with production.
+    curriculum_collection: str = "co_curriculum"
     embedding_model: str = "intfloat/multilingual-e5-small"
     scan_concurrency: int = 3
     # Cosine-similarity floor for retrieved Qdrant chunks. Anything below is

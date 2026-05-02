@@ -92,6 +92,30 @@ export function BenefitCard({ benefit: b }: { benefit: Benefit }) {
         </div>
       )}
 
+      {b.supporting_doctrine && b.supporting_doctrine.length > 0 && (
+        <details className="mt-3 rounded border border-dashed border-indigo-200 bg-indigo-50/40 px-3 py-2 text-sm text-gray-700">
+          <summary className="cursor-pointer text-xs font-medium uppercase tracking-wide text-indigo-700">
+            Why this applies (advisory doctrine)
+          </summary>
+          <p className="mt-1 text-xs italic text-indigo-900/70">
+            Background context from Swiss legal commentary. Not binding authority — the
+            <span className="font-medium"> Legal basis</span> citations above remain the
+            sole source of authority.
+          </p>
+          <ul className="mt-2 space-y-1">
+            {b.supporting_doctrine.map((d, i) => (
+              <li key={i} className="text-sm text-gray-700">
+                <span className="font-medium">{d.source_doc}</span>
+                {d.chapter && <span className="text-gray-500"> — {d.chapter}</span>}
+                <span className="ml-2 text-xs text-gray-400">
+                  similarity {Math.round(d.score * 100)}%
+                </span>
+              </li>
+            ))}
+          </ul>
+        </details>
+      )}
+
       <div className="mt-4 flex items-center gap-3">
         <span className="rounded border border-emerald-200 bg-emerald-50 px-3 py-1 text-sm font-medium text-emerald-800">
           Action: {ACTION_LABELS[b.required_action] ?? b.required_action}
