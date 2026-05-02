@@ -201,14 +201,16 @@ offline against the recorded fixtures under `tests/fixtures/fedlex/`.
 ## Source Languages
 
 Fedlex publishes a downloadable English consolidated text for **SR 220** (Code of
-Obligations) only. The other three laws referenced by the seed corpus are not available
+Obligations) only. The other laws referenced by the seed corpus are not available
 in English, only in DE / FR / IT. Per the v3 spec's "no paraphrased law text" rule, the
-seed therefore mixes verbatim **EN** for SR 220 and verbatim **DE** for the other three:
+seed therefore mixes verbatim **EN** for SR 220 and verbatim **DE** for the rest:
 
 | SR        | Title                                               | Source language used | Articles in seed                                       | Fedlex URL                                                                  |
 | --------- | --------------------------------------------------- | -------------------- | ------------------------------------------------------ | --------------------------------------------------------------------------- |
 | `220`     | Code of Obligations (OR / CO)                       | EN                   | 1, 18, 24, 28, 41, 42, 43, 62, 63, 197, 257e, 270a, 271, 321c, 327a, 328, 329f, 331, 335, 335c | https://www.fedlex.admin.ch/eli/cc/27/317_321_377/en                        |
-| `642.11`  | Direct Federal Tax Act (DBG / LIFD)                 | DE                   | 9, 26, 27, 33 Abs 1, 33 Abs 3, 35, 36 Abs 2, 212        | https://www.fedlex.admin.ch/eli/cc/1991/1184_1184_1184/de                   |
+| `141.0`   | Swiss Citizenship Act (BüG / LN)                    | DE                   | 9, 11                                                   | https://www.fedlex.admin.ch/eli/cc/2016/404/de                              |
+| `142.20`  | Foreign Nationals and Integration Act (AIG / LEI)   | DE                   | 43, 44                                                  | https://www.fedlex.admin.ch/eli/cc/2007/758/de                              |
+| `642.11`  | Direct Federal Tax Act (DBG / LIFD)                 | DE                   | 9, 26, 27, 33 Abs 1, 33 Abs 3, 35, 36 Abs 2, 89, 99a, 212 | https://www.fedlex.admin.ch/eli/cc/1991/1184_1184_1184/de                   |
 | `831.40`  | Occupational Pensions Act (BVG / LPP)               | DE                   | 1                                                       | https://www.fedlex.admin.ch/eli/cc/1983/797_797_797/de                      |
 | `837.0`   | Unemployment Insurance Act (AVIG / LACI)            | DE                   | 8                                                       | https://www.fedlex.admin.ch/eli/cc/1982/2184_2184_2184/de                   |
 
@@ -224,6 +226,12 @@ Before relying on this corpus for any production legal advice, spot-check each `
 field against the Fedlex URL above for its `sr_number`. The DE entries were captured
 from Fedlex consolidated text but Fedlex amends the consolidated versions when the laws
 are revised, so the seed should be re-checked at every release cut.
+
+> Note: SR 142.20 Art. 44 Abs. 1 lit. d in the seed reads `Landesprache` (single
+> `s`), which is the verbatim spelling currently published on Fedlex (a known
+> drafting typo — compare Art. 43 Abs. 1 lit. d, which reads `Landessprache`).
+> Do not "correct" it — the verification pipeline expects the seed to match
+> Fedlex character-for-character.
 
 ### Dropped Articles
 
@@ -254,24 +262,6 @@ behaviour the Luis fixture relied on before the sprint.
 | `quellensteuer_subsequent_assessment`    | DBG (SR 642.11) Art. 99a | B permit + non-Swiss                     |
 | `naturalisation_eligibility`             | BüG (SR 141.0) Art. 9    | C permit + ≥10 yrs + non-Swiss            |
 | `family_reunification_right`             | AIG (SR 142.20) Art. 43  | B/C permit + non-Swiss + (married OR kids) |
-
-### Pending verbatim citations
-
-The six SR articles below are seeded with `text: "__PENDING_FEDLEX_VERBATIM__"`
-because Fedlex consolidated text was not pasted in this sprint. They must be
-backfilled with the literal article text before the corpus can support live
-Claude verification of the new entitlements. The `quote_under_15_words` slice
-on each new entitlement is currently a paraphrase (flagged here so that
-reviewers do not mistake them for verbatim Fedlex extracts).
-
-| SR        | Article | Topic                                              | ELI URL                                                       |
-| --------- | ------- | -------------------------------------------------- | ------------------------------------------------------------- |
-| `642.11`  | 89      | Quellensteuerpflicht (source tax obligation)       | https://www.fedlex.admin.ch/eli/cc/1991/1184_1184_1184/de     |
-| `642.11`  | 99a     | Nachträgliche ordentliche Veranlagung (NOV)        | https://www.fedlex.admin.ch/eli/cc/1991/1184_1184_1184/de     |
-| `141.0`   | 9       | Formelle Voraussetzungen Einbürgerung              | https://www.fedlex.admin.ch/eli/cc/2016/404/de                |
-| `141.0`   | 11      | Materielle Voraussetzungen Einbürgerung            | https://www.fedlex.admin.ch/eli/cc/2016/404/de                |
-| `142.20`  | 43      | Familiennachzug — C-Bewilligung                    | https://www.fedlex.admin.ch/eli/cc/2007/758/de                |
-| `142.20`  | 44      | Familiennachzug — B-Bewilligung                    | https://www.fedlex.admin.ch/eli/cc/2007/758/de                |
 
 ### Catalog validator
 
