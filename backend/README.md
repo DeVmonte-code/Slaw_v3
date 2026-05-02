@@ -76,12 +76,34 @@ curl -X POST http://localhost:8000/scan \
 | Path                          | Purpose                                                       |
 | ----------------------------- | ------------------------------------------------------------- |
 | `/health`                     | Cheap liveness — proves the process is up.                    |
-| `/readyz`                     | Deep readiness — pings Qdrant; 503 if unreachable.            |
+| `/readyz`                     | Default readiness — pings Qdrant; 503 if unreachable.         |
+| `/readyz?deep=1`              | Same plus a check that `QDRANT_COLLECTION` (default `swiss_law`) exists **and** holds `> 0` points. 503 with `collection: "missing"` or `collection: "empty"` when the cluster is reachable but the corpus is absent. |
 | `/readyz?include=curriculum`  | Same plus a check that the curriculum collection exists. 503 if Qdrant is reachable but the curriculum collection is missing. |
 
 `/readyz` is what a load balancer should poll. `/health` is for the process supervisor.
 Use `?include=curriculum` only on deployments that have actually seeded
 doctrinal PDFs — otherwise the bootstrap deployment will fail readiness.
+Flags compose: `?deep=1&include=curriculum` runs both checks.
+
+### Catching the "0 benefits" failure mode
+
+Pointing the API at a Qdrant cluster where the `swiss_law` collection is
+missing or empty (wrong cluster, fresh cluster, partially-rolled-back
+seed) used to silently return HTTP 200 from `/scan` with every
+entitlement suppressed — retrieval fell back to "NO RESULTS — treat
+supports as false". To make that state loud:
+
+- **At startup**, the FastAPI lifespan logs `qdrant collection
+  'swiss_law' is MISSING …` (or `… is EMPTY (0 points) …`) at `ERROR`
+  level. Watch the workflow logs after a deploy.
+- **At runtime**, poll `/readyz?deep=1` from your load balancer (or run
+  it as a smoke check) — it returns 503 with
+  `{"collection": "missing", ...}` or `{"collection": "empty", "points": 0}`
+  so the mismatch is impossible to miss.
+
+The fix is always the same: re-run
+`python -m swiss_legal_api.seeding.seed_qdrant` against the configured
+cluster.
 
 ## Trusted curriculum (advisory doctrine)
 
