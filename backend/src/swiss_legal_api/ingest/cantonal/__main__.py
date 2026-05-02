@@ -8,19 +8,21 @@ so a typical bootstrap is::
     python -m swiss_legal_api.ingest.cantonal --canton ZH,BE,GE
     python -m swiss_legal_api.seeding.seed_qdrant
 
-The starter spec list per canton is intentionally tiny — one act per
-canton chosen to exercise the parser and ship one end-to-end smoke
-entitlement. Contributors extend the list as new entitlements need new
-acts; nothing about the framework requires the spec list to be inline
-forever (a follow-up will move it to a YAML manifest under
-``seed/cantonal/``).
+By default the CLI uses each adapter's ``discover_specs()`` to walk the
+canton's published catalogue index (HTML for ZH/BE, OData for GE) and
+ingest every in-force act. ``--use-starter-specs`` forces the small
+inline curated list — useful for smoke runs when the canton's index is
+briefly unreachable, or when a contributor only wants to refresh one
+act for a fix-forward.
 """
 from __future__ import annotations
 
 import argparse
 import logging
 import sys
+from collections.abc import Sequence
 from pathlib import Path
+from typing import Any
 
 from . import bern_bsg, geneva_rs, write_snapshot, zurich_ls
 from .base import CantonalArticleRecord
@@ -28,10 +30,11 @@ from .base import CantonalArticleRecord
 logger = logging.getLogger(__name__)
 
 
-# Per-canton starter spec list. URLs are the published act pages on each
-# cantonal portal; the adapter fetches the HTML and parses in-process.
-# Effective dates are the act's promulgation date so the retrieval
-# filter's "effective_date <= today" gate passes for current scans.
+# Per-canton starter spec list — fallback used by ``--use-starter-specs``
+# and as the seed-snapshot bootstrap when running the CLI offline (no
+# network access to canton portals). One act per canton: chosen because
+# each one anchors the smoke-gate cantonal entitlement and exercises the
+# parser shape end-to-end.
 ZH_STARTER_SPECS = [
     zurich_ls.ArticleSpec(
         url="https://www.zhlex.zh.ch/Erlass.html?Open&Ordnr=412.31",
@@ -57,10 +60,10 @@ GE_STARTER_SPECS = [
     ),
 ]
 
-ADAPTERS: dict[str, tuple[object, list[object]]] = {
-    "ZH": (zurich_ls, list(ZH_STARTER_SPECS)),
-    "BE": (bern_bsg, list(BE_STARTER_SPECS)),
-    "GE": (geneva_rs, list(GE_STARTER_SPECS)),
+ADAPTERS: dict[str, tuple[Any, Sequence[Any]]] = {
+    "ZH": (zurich_ls, ZH_STARTER_SPECS),
+    "BE": (bern_bsg, BE_STARTER_SPECS),
+    "GE": (geneva_rs, GE_STARTER_SPECS),
 }
 
 
@@ -84,6 +87,13 @@ def main(argv: list[str] | None = None) -> int:
         "--out",
         default=None,
         help="Output path (default: backend/seed/law_articles.cantonal.json).",
+    )
+    parser.add_argument(
+        "--use-starter-specs",
+        action="store_true",
+        help="Skip per-canton catalogue discovery and ingest only the small "
+        "curated starter spec list (one act per canton). Useful when the "
+        "canton's index is unreachable.",
     )
     args = parser.parse_args(argv)
 
@@ -110,12 +120,25 @@ def main(argv: list[str] | None = None) -> int:
 
     all_records: list[CantonalArticleRecord] = []
     for canton in cantons:
-        adapter, specs = ADAPTERS[canton]
-        # `adapter.ingest` is the per-canton driver — duck-typed via the
-        # CantonalAdapter Protocol in `base.py`. The module reference is
-        # an `object` at the type level (see ADAPTERS) but is always a
-        # module exposing `ingest()` at runtime.
-        records = adapter.ingest(specs)  # type: ignore[attr-defined]
+        adapter, starter_specs = ADAPTERS[canton]
+        if args.use_starter_specs:
+            specs: Sequence[Any] = starter_specs
+            print(f"{canton}: using {len(specs)} starter spec(s) (no discovery)")
+        else:
+            try:
+                specs = adapter.discover_specs()
+                print(f"{canton}: discovered {len(specs)} in-force act(s)")
+            except Exception as exc:
+                # Discovery failure must not silently shrink the corpus.
+                # Fall back to starter specs and surface the failure so
+                # the operator knows the catalogue surface needs
+                # attention.
+                logger.warning(
+                    "%s: discovery failed (%s) — falling back to starter specs",
+                    canton, exc,
+                )
+                specs = starter_specs
+        records = adapter.ingest(specs)
         print(
             f"{canton}: ingested {len(records)} paragraphs "
             f"across {len({(r.compilation_id, r.article) for r in records})} "

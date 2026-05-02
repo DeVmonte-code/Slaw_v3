@@ -160,33 +160,81 @@ def test_be_marks_repealed_articles():
 
 
 @respx.mock
-def test_be_ingest_skips_pdf_only_entries(caplog):
+def test_be_ingest_routes_pdf_entries_through_pdf_parser():
+    """``ingest`` routes ``application/pdf`` responses through the PDF
+    parser instead of the HTML one, so PDF-only BSG entries land in the
+    corpus alongside the HTML majority.
+    """
     url = "https://www.belex.sites.be.ch/data/legacy.pdf"
     respx.get(url).mock(
+        return_value=httpx.Response(
+            200,
+            content=_build_test_pdf("Art. 7\n1 Diese Bestimmung ist anwendbar."),
+            headers={"content-type": "application/pdf"},
+        )
+    )
+    client = httpx.Client(timeout=5.0)
+    try:
+        records = bern_bsg.ingest(
+            [
+                bern_bsg.ArticleSpec(
+                    url=url,
+                    compilation_id="155.21",
+                    language="de",
+                    effective_date="1985-01-01",
+                    is_pdf=True,
+                )
+            ],
+            client=client,
+        )
+    finally:
+        client.close()
+    assert len(records) == 1
+    assert records[0].canton == "BE"
+    assert records[0].article == "7"
+    assert "anwendbar" in records[0].text
+
+
+@respx.mock
+def test_be_ingest_swallows_corrupt_pdf_without_aborting_run(caplog):
+    """A malformed PDF is logged + skipped; subsequent specs still ingest."""
+    url_bad = "https://www.belex.sites.be.ch/data/broken.pdf"
+    url_good = "https://www.belex.sites.be.ch/data/661.11/de"
+    respx.get(url_bad).mock(
         return_value=httpx.Response(
             200,
             content=b"%PDF-1.4 (binary stub)",
             headers={"content-type": "application/pdf"},
         )
     )
+    respx.get(url_good).mock(
+        return_value=httpx.Response(
+            200,
+            text=(FIXTURES / "be_bsg_661_11.html").read_text(),
+            headers={"content-type": "text/html; charset=utf-8"},
+        )
+    )
     client = httpx.Client(timeout=5.0)
     try:
-        with caplog.at_level("WARNING"):
+        with caplog.at_level("ERROR"):
             records = bern_bsg.ingest(
                 [
                     bern_bsg.ArticleSpec(
-                        url=url,
-                        compilation_id="999.99",
-                        language="de",
-                        effective_date="1985-01-01",
-                    )
+                        url=url_bad, compilation_id="999.99",
+                        language="de", effective_date="1985-01-01",
+                    ),
+                    bern_bsg.ArticleSpec(
+                        url=url_good, compilation_id="661.11",
+                        language="de", effective_date="1996-01-01",
+                    ),
                 ],
                 client=client,
             )
     finally:
         client.close()
-    assert records == []
-    assert any("bsg_pdf_only" in r.message for r in caplog.records)
+    assert any("bsg_pdf_parse_failed" in r.message for r in caplog.records)
+    # Subsequent HTML spec must still produce records.
+    assert any(r.compilation_id == "661.11" for r in records)
 
 
 # ----- Geneva (RSG) --------------------------------------------------------
@@ -288,6 +336,202 @@ def test_write_snapshot_is_deterministic(tmp_path):
         assert required.issubset(row.keys()), f"missing keys: {required - row.keys()}"
     # Cantons all three present.
     assert {row["canton"] for row in payload} == {"ZH", "BE", "GE"}
+
+
+# ----- Catalogue index discovery (per-canton) -----------------------------
+
+
+def test_zh_index_discovers_in_force_acts_only():
+    """ZH-Lex catalogue index parser yields specs only for live acts."""
+    html = (FIXTURES / "zh_lex_index.html").read_text()
+    specs = zurich_ls.parse_index(html)
+    ordnrs = {s.compilation_id for s in specs}
+    assert ordnrs == {"412.31", "170.1"}, (
+        "repealed entries must be excluded; got " + repr(ordnrs)
+    )
+    spec = next(s for s in specs if s.compilation_id == "412.31")
+    assert spec.url.endswith("Ordnr=412.31")
+    assert spec.effective_date == "2005-08-22"
+    assert spec.language == "de"
+
+
+def test_be_index_marks_pdf_entries():
+    """BSG catalogue index parser flags PDF-only acts so ``ingest`` routes
+    them through the PDF parser instead of the HTML one.
+    """
+    html = (FIXTURES / "be_bsg_index.html").read_text()
+    specs = bern_bsg.parse_index(html)
+    by_bsg = {s.compilation_id: s for s in specs}
+    assert set(by_bsg) == {"661.11", "155.21"}, "repealed entries excluded"
+    assert by_bsg["661.11"].is_pdf is False
+    assert by_bsg["155.21"].is_pdf is True
+    assert by_bsg["155.21"].url.endswith(".pdf")
+
+
+def test_ge_odata_feed_discovers_in_force_acts_only():
+    """Geneva OData catalogue parser skips abrogated acts."""
+    xml = (FIXTURES / "ge_rsg_odata.xml").read_text()
+    specs = geneva_rs.parse_odata_feed(xml)
+    ids = {s.compilation_id for s in specs}
+    assert ids == {"A2.05", "E5.05"}, (
+        "abrogated entries must be excluded; got " + repr(ids)
+    )
+    a205 = next(s for s in specs if s.compilation_id == "A2.05")
+    assert a205.url.startswith("https://www.lexfind.ch/")
+    assert a205.language == "fr"
+    assert a205.effective_date == "2013-06-01"
+
+
+def test_ge_odata_feed_handles_empty_feed():
+    """Defensive: empty Atom feed yields zero specs without error."""
+    xml = (
+        '<?xml version="1.0" encoding="utf-8" standalone="yes"?>\n'
+        '<feed xmlns="http://www.w3.org/2005/Atom"></feed>'
+    )
+    assert geneva_rs.parse_odata_feed(xml) == []
+
+
+# ----- Bern PDF fallback --------------------------------------------------
+
+
+_BSG_PDF_TEXT = """
+Mietverfahrensverordnung (MVV)
+
+Art. 11
+1   Das Verfahren vor der Schlichtungsbehoerde ist kostenlos.
+2   Die unterliegende Partei kann zu einer Parteientschaedigung
+verpflichtet werden, wenn das Verhalten als treuwidrig erscheint.
+3   Vorbehalten bleiben besondere Bestimmungen.
+
+Art. 12
+1   Schriftliches Verfahren ist die Regel.
+"""
+
+
+def test_bern_parse_pdf_text_splits_articles_and_paragraphs():
+    """The PDF text splitter handles ``Art. N`` headers and numeric
+    paragraph numerals on the lectern-format BSG template.
+    """
+    records = bern_bsg.parse_pdf_text(
+        _BSG_PDF_TEXT,
+        compilation_id="661.11",
+        language="de",
+        source_url="https://www.belex.sites.be.ch/data/661.11/de.pdf",
+        effective_date="1996-01-01",
+    )
+    by_key = {(r.article, r.paragraph): r for r in records}
+    assert ("11", "1") in by_key
+    assert ("11", "2") in by_key
+    assert ("11", "3") in by_key
+    assert ("12", "1") in by_key
+    # Multi-line paragraph 2 must be joined back into one record.
+    assert "treuwidrig" in by_key[("11", "2")].text
+    assert by_key[("11", "2")].text.startswith("Die unterliegende")
+
+
+def test_bern_parse_pdf_text_repeal_marker_flags_whole_article():
+    """An article body containing 'aufgehoben' anywhere flags every
+    paragraph in that article (article-scope, retroactive)."""
+    text = """
+Art. 5
+1   Aufgehoben durch Anpassung 2024.
+2   Diese Bestimmung gilt nicht mehr.
+
+Art. 6
+1   Diese Bestimmung ist weiterhin in Kraft.
+"""
+    records = bern_bsg.parse_pdf_text(
+        text,
+        compilation_id="661.11",
+        language="de",
+        source_url="https://x",
+        effective_date="1996-01-01",
+    )
+    art5 = [r for r in records if r.article == "5"]
+    art6 = [r for r in records if r.article == "6"]
+    assert len(art5) == 2 and all(r.repealed_date == "9999-12-31" for r in art5)
+    assert len(art6) == 1 and art6[0].repealed_date is None
+
+
+def test_bern_extract_pdf_text_round_trip():
+    """End-to-end PDF binary -> records via :func:`parse_pdf_articles`.
+
+    Constructs a tiny but valid PDF with one article header and one
+    paragraph numeral, then asserts the extracted record matches.
+    """
+    pdf_bytes = _build_test_pdf("Art. 11\n1 Das Verfahren ist kostenlos.")
+    records = bern_bsg.parse_pdf_articles(
+        pdf_bytes,
+        compilation_id="661.11",
+        language="de",
+        source_url="https://x.pdf",
+        effective_date="1996-01-01",
+    )
+    assert len(records) == 1
+    assert records[0].article == "11"
+    assert records[0].paragraph == "1"
+    assert "kostenlos" in records[0].text
+
+
+def _build_test_pdf(text: str) -> bytes:
+    """Hand-build the smallest possible single-page PDF containing ``text``.
+
+    Lives in the test module (rather than under fixtures/) because the
+    byte offsets must be recomputed any time the page object changes,
+    and shipping a binary fixture would obscure that. Keeps the test
+    deterministic without needing reportlab.
+    """
+    # Each text line becomes a separate ``Tj`` showing operator, with a
+    # ``T*`` newline between them so pypdf renders distinct lines.
+    lines = text.splitlines()
+    show_ops = []
+    for i, line in enumerate(lines):
+        # Escape PDF-special chars in the literal string operand.
+        esc = line.replace("\\", "\\\\").replace("(", "\\(").replace(")", "\\)")
+        if i == 0:
+            show_ops.append(f"({esc}) Tj")
+        else:
+            show_ops.append(f"T* ({esc}) Tj")
+    content = (
+        "BT\n"
+        "/F1 12 Tf\n"
+        "14 TL\n"            # leading (line height) for T*
+        "50 750 Td\n"
+        + "\n".join(show_ops)
+        + "\nET\n"
+    ).encode("latin-1")
+
+    objects: list[bytes] = []
+
+    def add(body: bytes) -> int:
+        objects.append(body)
+        return len(objects)
+
+    add(b"<< /Type /Catalog /Pages 2 0 R >>")
+    add(b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>")
+    add(
+        b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] "
+        b"/Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>"
+    )
+    add(b"<< /Length " + str(len(content)).encode()
+        + b" >>\nstream\n" + content + b"endstream")
+    add(b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>")
+
+    parts: list[bytes] = [b"%PDF-1.4\n%\xe2\xe3\xcf\xd3\n"]
+    offsets: list[int] = []
+    for i, body in enumerate(objects, start=1):
+        offsets.append(sum(len(p) for p in parts))
+        parts.append(f"{i} 0 obj\n".encode() + body + b"\nendobj\n")
+    xref_pos = sum(len(p) for p in parts)
+    xref = [f"xref\n0 {len(objects)+1}\n", "0000000000 65535 f \n"]
+    for off in offsets:
+        xref.append(f"{off:010d} 00000 n \n")
+    parts.append("".join(xref).encode())
+    parts.append(
+        f"trailer\n<< /Size {len(objects)+1} /Root 1 0 R >>\n"
+        f"startxref\n{xref_pos}\n%%EOF\n".encode()
+    )
+    return b"".join(parts)
 
 
 # ----- Edge-case coverage flagged by code review --------------------------

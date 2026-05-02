@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?>
+<feed xml:base="https://ge.ch/legislation/rsg/odata/"
+      xmlns="http://www.w3.org/2005/Atom"
+      xmlns:d="http://schemas.microsoft.com/ado/2007/08/dataservices"
+      xmlns:m="http://schemas.microsoft.com/ado/2007/08/dataservices/metadata">
+  <title type="text">Acts</title>
+  <id>https://ge.ch/legislation/rsg/odata/Acts</id>
+  <entry>
+    <id>https://ge.ch/legislation/rsg/odata/Acts('A2.05')</id>
+    <title type="text">Constitution de la R&#233;publique et canton de Gen&#232;ve</title>
+    <content type="application/xml">
+      <m:properties>
+        <d:CompilationId>A2.05</d:CompilationId>
+        <d:Language>fr</d:Language>
+        <d:EffectiveDate>2013-06-01</d:EffectiveDate>
+        <d:Status>in_force</d:Status>
+        <d:HtmlUrl>https://www.lexfind.ch/fe/fr/tol/24891/fr</d:HtmlUrl>
+      </m:properties>
+    </content>
+  </entry>
+  <entry>
+    <id>https://ge.ch/legislation/rsg/odata/Acts('E5.05')</id>
+    <title type="text">Loi sur l'imposition des personnes physiques (LIPP)</title>
+    <content type="application/xml">
+      <m:properties>
+        <d:CompilationId>E5.05</d:CompilationId>
+        <d:Language>fr</d:Language>
+        <d:EffectiveDate>2010-01-01</d:EffectiveDate>
+        <d:Status>in_force</d:Status>
+        <d:HtmlUrl>https://www.lexfind.ch/fe/fr/tol/27184/fr</d:HtmlUrl>
+      </m:properties>
+    </content>
+  </entry>
+  <entry>
+    <id>https://ge.ch/legislation/rsg/odata/Acts('Z9.99')</id>
+    <title type="text">Acte abrog&#233;</title>
+    <content type="application/xml">
+      <m:properties>
+        <d:CompilationId>Z9.99</d:CompilationId>
+        <d:Language>fr</d:Language>
+        <d:EffectiveDate>1900-01-01</d:EffectiveDate>
+        <d:Status>abrogated</d:Status>
+        <d:HtmlUrl>https://www.lexfind.ch/fe/fr/tol/00000/fr</d:HtmlUrl>
+      </m:properties>
+    </content>
+  </entry>
+</feed>

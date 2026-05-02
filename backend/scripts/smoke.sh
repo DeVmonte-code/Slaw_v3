@@ -120,6 +120,36 @@ print(f\"c_permit benefits returned: {n}, suppressed: {r['suppressed_count']}\")
 assert n >= 1, f'FAIL: c_permit_third_country expected >= 1 verified, got {n}'
 "
 
+echo "=== Cooling down ${INTER_PERSONA_SLEEP}s for Anthropic TPM window ==="
+sleep "$INTER_PERSONA_SLEEP"
+
+# Cantonal smoke gate (Task #21). Asserts the cantonal ingest +
+# seed_qdrant pipeline actually surfaces a cantonal entitlement
+# end-to-end. The bern_tenant_profile fixture triggers
+# `bern_rental_conciliation_free_procedure`, which cites BSG 661.11
+# Art. 11 §3 — a record only present in `seed/law_articles.cantonal.json`,
+# so a green here proves the cantonal corpus is in Qdrant and the
+# canton-scoped retrieval filter passes the row through.
+echo "=== Live scan (bern_tenant — cantonal BSG entitlement) ==="
+RESP=$(curl -sf -X POST "$API_BASE_URL/scan" \
+  -H "content-type: application/json" \
+  -d @fixtures/bern_tenant_profile.json \
+  --max-time 180)
+echo "$RESP" | python -c "
+import sys, json
+r = json.load(sys.stdin)
+n = len(r['benefits'])
+ids = [b['entitlement_id'] for b in r['benefits']]
+print(f\"bern_tenant benefits returned: {n}, ids: {ids}\")
+assert n >= 1, f'FAIL: bern_tenant expected >= 1 verified cantonal entitlement, got {n}'
+assert 'bern_rental_conciliation_free_procedure' in ids, (
+    f'FAIL: bern_rental_conciliation_free_procedure missing from {ids} — '
+    'cantonal corpus may not be seeded into Qdrant. Run '
+    '\"python -m swiss_legal_api.ingest.cantonal --use-starter-specs && '
+    'python -m swiss_legal_api.seeding.seed_qdrant\" first.'
+)
+"
+
 echo "=== Export OpenAPI ==="
 python scripts/export_openapi.py
 

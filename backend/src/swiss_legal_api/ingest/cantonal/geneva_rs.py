@@ -1,9 +1,16 @@
 """Geneva (GE) — Recueil systématique genevois (RSG) adapter.
 
-Geneva publishes the RSG under ``https://www.lexfind.ch/`` and via an
-OData feed at ``https://ge.ch/legislation/rsg/`` (the OData feed is the
-official machine-readable surface but the HTML face is more stable in
-practice — they share the same upstream content).
+Geneva publishes the RSG with two complementary surfaces:
+
+  * **OData feed** — ``https://ge.ch/legislation/rsg/odata/Acts`` is the
+    official machine-readable catalogue. Each ``<entry>`` describes one
+    act (compilation ID, title, effective date, repeal status, link to
+    the per-act XML view). We prefer this in production because it ships
+    structured metadata; the HTML pages are a stable fallback.
+  * **lexfind.ch / ge.ch HTML pages** — per-act pages with the
+    ``<div class="rsg-article">`` structure we parse below. Used for
+    full text extraction once OData has told us which acts are in
+    force.
 
 Compilation IDs in RSG use a letter + numeric pattern (e.g.
 ``"A 2 05"`` for the constitution, ``"E 5 05"`` for the LIPP/income tax
@@ -17,10 +24,18 @@ Parser shape (HTML):
   * ``<h3 class="rsg-art-num">Art. N</h3>`` per article header.
   * ``<div class="rsg-alinea" data-al="K">`` per paragraph (alinéa).
   * Optional ``<div class="rsg-abrogated">…</div>`` repeal marker.
+
+Parser shape (OData feed) — Atom XML with ``ge:Act`` entries:
+
+  * ``<entry><id>…/Acts(<id>)</id></entry>``
+  * ``<m:properties>`` containing ``<d:CompilationId>``,
+    ``<d:Language>``, ``<d:EffectiveDate>``, ``<d:Status>``,
+    ``<d:HtmlUrl>``.
 """
 from __future__ import annotations
 
 import re
+import xml.etree.ElementTree as ET
 from collections.abc import Iterable
 from dataclasses import dataclass
 from html.parser import HTMLParser
@@ -241,6 +256,75 @@ def ingest(
                 )
             )
         return out
+    finally:
+        if own_client:
+            http.close()
+
+
+# ----- OData catalogue discovery ----------------------------------------
+
+RSG_ODATA_URL = "https://ge.ch/legislation/rsg/odata/Acts"
+
+# Atom/OData namespaces used by the Geneva feed. Captured here so the
+# parser is robust to the canton occasionally rev-ing the OData minor
+# version (the namespace URIs are part of the OData v2 spec).
+_ATOM_NS = "http://www.w3.org/2005/Atom"
+_ODATA_M_NS = "http://schemas.microsoft.com/ado/2007/08/dataservices/metadata"
+_ODATA_D_NS = "http://schemas.microsoft.com/ado/2007/08/dataservices"
+
+_RSG_REPEAL_STATUSES = {"abrogated", "abrogé", "repealed"}
+
+
+def _odata_prop(props: ET.Element, name: str) -> str:
+    """Read one ``<d:Name>`` text node from an OData ``<m:properties>``."""
+    el = props.find(f"./{{{_ODATA_D_NS}}}{name}")
+    return (el.text or "").strip() if el is not None else ""
+
+
+def parse_odata_feed(xml_text: str) -> list[_GEArticleSpec]:
+    """Pure parser: an OData Atom feed -> list of in-force-act specs.
+
+    Skips entries with status in :data:`_RSG_REPEAL_STATUSES` so the
+    discovered spec list stays scoped to currently in-force law.
+    Compilation IDs from the feed are ALREADY in encoded form
+    (``A2.05``) per Geneva's OData contract — we keep them unchanged.
+    """
+    root = ET.fromstring(xml_text)
+    entries = root.findall(f".//{{{_ATOM_NS}}}entry")
+    out: list[_GEArticleSpec] = []
+    for entry in entries:
+        props = entry.find(f"./{{{_ATOM_NS}}}content/{{{_ODATA_M_NS}}}properties")
+        if props is None:
+            continue
+        if _odata_prop(props, "Status").lower() in _RSG_REPEAL_STATUSES:
+            continue
+        compilation_id = _odata_prop(props, "CompilationId")
+        html_url = _odata_prop(props, "HtmlUrl")
+        if not compilation_id or not html_url:
+            continue
+        out.append(
+            _GEArticleSpec(
+                url=html_url,
+                compilation_id=compilation_id,
+                language=_odata_prop(props, "Language") or "fr",
+                effective_date=_odata_prop(props, "EffectiveDate") or None,
+            )
+        )
+    return out
+
+
+def discover_specs(
+    *,
+    odata_url: str = RSG_ODATA_URL,
+    client: httpx.Client | None = None,
+) -> list[_GEArticleSpec]:
+    """Fetch the RSG OData catalogue and return one spec per in-force act."""
+    own_client = client is None
+    http = client if client is not None else httpx.Client(timeout=30.0)
+    try:
+        resp = http.get(odata_url, headers={"Accept": "application/atom+xml"})
+        resp.raise_for_status()
+        return parse_odata_feed(resp.text)
     finally:
         if own_client:
             http.close()

@@ -268,11 +268,18 @@ no unified SPARQL endpoint analogous to Fedlex. Adapters live under
 shape (`CantonalArticleRecord`) so the CLI and seeder treat them
 uniformly:
 
-- `zurich_ls.py`  — Zurich Loseblattsammlung (ZH-Lex), HTML.
-- `bern_bsg.py`   — Bern BSG / Belex, HTML (PDF entries are logged and
-  skipped — that fallback is a documented follow-up).
-- `geneva_rs.py`  — Geneva RSG, HTML; the OData feed is documented in
-  the module docstring as the official machine-readable surface.
+- `zurich_ls.py`  — Zurich Loseblattsammlung (ZH-Lex). HTML index +
+  per-act HTML pages. `discover_specs()` walks the catalogue index at
+  `Inhalt.html` and emits one spec per in-force act.
+- `bern_bsg.py`   — Bern BSG / Belex. HTML index + per-act HTML or PDF.
+  PDF entries flagged in the catalogue (`data-format="pdf"`) are
+  routed through `parse_pdf_articles()` (pypdf text extraction +
+  `Art. N` / paragraph-numeral splitter), so PDF-only acts land in
+  the corpus alongside HTML.
+- `geneva_rs.py`  — Geneva RSG. **OData feed** at
+  `https://ge.ch/legislation/rsg/odata/Acts` is the primary surface;
+  `parse_odata_feed()` reads the Atom XML and `discover_specs()`
+  fetches it. Per-act bodies still come from the lexfind/ge.ch HTML.
 
 Each record carries a `canton` payload field; retrieval already filters
 on `canton ∈ {profile_canton, "CH"}`, so cantonal rows naturally
@@ -288,37 +295,59 @@ them. The frontend's citation renderer reverses the encoding for display.
 ### Bootstrapping cantonal seed
 
 ```bash
-# Emits seed/law_articles.cantonal.json (deterministic, additive).
+# Default: walk each canton's catalogue index (HTML for ZH/BE, OData
+# for GE) and ingest every in-force act. Emits the deterministic
+# snapshot at seed/law_articles.cantonal.json.
 python -m swiss_legal_api.ingest.cantonal --canton ZH,BE,GE
+
+# Offline / smoke fallback: ingest only the small inline starter spec
+# list (one act per canton). Useful when a canton's index is briefly
+# unreachable, or when bootstrapping a fresh checkout that doesn't yet
+# have network access to the cantonal portals.
+python -m swiss_legal_api.ingest.cantonal --use-starter-specs
+
 # The seeder auto-merges that file alongside fedlex+manual on the next reseed.
 python -m swiss_legal_api.seeding.seed_qdrant
 ```
 
-### End-to-end smoke (manual)
+### End-to-end smoke gate
 
 `fixtures/bern_tenant_profile.json` is a Bern tenant persona that
-triggers the new `bern_rental_conciliation_free_procedure` entitlement
-(citing BSG 661.11 Art. 11 §3). After running the cantonal ingest +
-seeder above, scanning that fixture should return at least one verified
-benefit:
+triggers `bern_rental_conciliation_free_procedure` (cites BSG 661.11
+Art. 11 §3 — a record only present in the cantonal seed file).
+`scripts/smoke.sh` runs this scan after the federal personas and
+asserts both `>=1 verified` and that the cantonal entitlement ID is
+present, so a green smoke proves the cantonal pipeline is wired
+end-to-end.
+
+Run order on a fresh cluster:
 
 ```bash
-curl -s -X POST localhost:8000/scan \
-  -H 'content-type: application/json' \
-  -d @fixtures/bern_tenant_profile.json | jq '.benefits | length'
+python -m swiss_legal_api.ingest.cantonal --use-starter-specs  # or full discovery
+python -m swiss_legal_api.seeding.seed_qdrant
+bash scripts/smoke.sh
 ```
-
-This step is intentionally not wired into `smoke.sh` because the
-default smoke run does not seed cantonal corpora — adding it would
-break smoke until the cantonal ingest has been run on the cluster.
 
 ### Tests
 
-`tests/test_cantonal_ingest.py` covers article extraction, canton
-tagging, repealed-article detection, and snapshot determinism for all
-three adapters against literal HTML fixtures under
-`tests/fixtures/cantonal/`. Networked `ingest()` calls are stubbed via
-`respx` so the suite runs offline.
+`tests/test_cantonal_ingest.py` covers, for all three adapters against
+literal HTML/XML fixtures under `tests/fixtures/cantonal/`:
+
+- per-act parser: article extraction, canton tagging, paragraph
+  normalisation, repealed-article detection (including marker-after-
+  paragraphs ordering for BE/GE), and nested-`<div>` alinéa preservation
+  for Geneva;
+- catalogue index discovery: ZH-Lex `Inhalt.html`, BSG `data/index/de`,
+  and Geneva OData feed all yield specs scoped to currently in-force
+  acts only;
+- Bern PDF fallback: `parse_pdf_text` splits articles + numeric
+  paragraph numerals from extracted lectern text, and `ingest()` routes
+  `application/pdf` responses through the PDF parser end-to-end (with a
+  hand-built one-page PDF round-trip);
+- snapshot determinism + seeder cantonal auto-merge.
+
+Networked `ingest()`/`discover_specs()` calls are stubbed via `respx`
+so the suite runs offline.
 
 ## Source Languages
 

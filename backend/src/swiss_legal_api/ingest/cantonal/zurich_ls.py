@@ -1,8 +1,19 @@
 """Zurich (ZH) — Loseblattsammlung (LS) adapter.
 
 ZH publishes its Systematic Compilation as HTML under
-``https://www.zhlex.zh.ch/`` (per-act pages). Each act page follows a
-predictable structure that we walk with the stdlib HTML parser:
+``https://www.zhlex.zh.ch/`` with two surfaces:
+
+  * The catalogue index at ``/Inhalt.html?Open`` listing every in-force
+    act with its LS number, title, and a link to the act page.
+  * Per-act pages (``/Erlass.html?Open&Ordnr=NNN.NN``) containing the
+    full structured text.
+
+Index parser shape (``<a class="lsentry" data-ordnr="412.31"
+data-status="in_force" data-effective="2005-08-22" href="…">``). Acts
+flagged with ``data-status="repealed"`` are excluded from
+``discover_specs`` so the corpus only contains live law.
+
+Per-act parser shape:
 
   * ``<article class="enactment">`` wraps the whole act.
   * ``<section class="art" id="art-N">`` per article.
@@ -13,10 +24,10 @@ predictable structure that we walk with the stdlib HTML parser:
     by a repeal notice (Zurich publishes repealed shells with a banner
     rather than removing the page).
 
-We intentionally do NOT touch live URLs in the test suite — the parser
-is pure-string-in / records-out so the offline tests use literal HTML
-fixtures and ``ingest()`` is exercised against ``respx``-stubbed endpoints
-in the live runbook only.
+We intentionally do NOT touch live URLs in the test suite — both
+parsers are pure-string-in / records-out so the offline tests use
+literal HTML fixtures and ``ingest()``/``discover_specs`` are exercised
+against ``respx``-stubbed endpoints in the live runbook only.
 """
 from __future__ import annotations
 
@@ -175,10 +186,9 @@ def ingest(
 ) -> list[CantonalArticleRecord]:
     """Drive :func:`parse_articles` over a list of live act URLs.
 
-    The CLI passes a curated starter list (see :mod:`__main__`) so the
-    first cut of cantonal ingestion is reproducible without scraping the
-    full catalogue. Future contributors expand the list as new
-    entitlements need new acts.
+    Specs come from :func:`discover_specs` (the default in production)
+    or from a curated inline list (used as a fallback so smoke ingests
+    work even if the canton's index is briefly unreachable).
     """
     own_client = client is None
     http = client if client is not None else httpx.Client(timeout=30.0)
@@ -197,6 +207,72 @@ def ingest(
                 )
             )
         return out
+    finally:
+        if own_client:
+            http.close()
+
+
+# ----- Catalogue index discovery -----------------------------------------
+
+ZHLEX_INDEX_URL = "https://www.zhlex.zh.ch/Inhalt.html?Open"
+_ACT_URL_TEMPLATE = "https://www.zhlex.zh.ch/Erlass.html?Open&Ordnr={ordnr}"
+
+
+class _ZHIndexParser(HTMLParser):
+    """Walk the ZH-Lex catalogue index and collect in-force act entries.
+
+    The published index uses ``<a class="lsentry" data-ordnr=…
+    data-status=… data-effective=… data-language=… href=…>`` per row.
+    We skip ``data-status="repealed"`` so the discovered spec list
+    contains only currently in-force acts.
+    """
+
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self.entries: list[_ZHArticleSpec] = []
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        if tag != "a":
+            return
+        attr = {k: (v or "") for k, v in attrs}
+        if "lsentry" not in attr.get("class", "").split():
+            return
+        if attr.get("data-status", "in_force") != "in_force":
+            return
+        ordnr = attr.get("data-ordnr", "").strip()
+        if not ordnr:
+            return
+        href = attr.get("href") or _ACT_URL_TEMPLATE.format(ordnr=ordnr)
+        self.entries.append(
+            _ZHArticleSpec(
+                url=href,
+                compilation_id=ordnr,
+                language=attr.get("data-language", "de") or "de",
+                effective_date=attr.get("data-effective") or None,
+            )
+        )
+
+
+def parse_index(html: str) -> list[_ZHArticleSpec]:
+    """Pure parser: index HTML -> list of in-force-act specs."""
+    p = _ZHIndexParser()
+    p.feed(html)
+    p.close()
+    return p.entries
+
+
+def discover_specs(
+    *,
+    index_url: str = ZHLEX_INDEX_URL,
+    client: httpx.Client | None = None,
+) -> list[_ZHArticleSpec]:
+    """Fetch the ZH-Lex catalogue and return one spec per in-force act."""
+    own_client = client is None
+    http = client if client is not None else httpx.Client(timeout=30.0)
+    try:
+        resp = http.get(index_url)
+        resp.raise_for_status()
+        return parse_index(resp.text)
     finally:
         if own_client:
             http.close()
