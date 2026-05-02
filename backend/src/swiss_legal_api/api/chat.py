@@ -23,7 +23,9 @@ _anthropic = AsyncAnthropic(api_key=settings.anthropic_api_key)
     retry=retry_if_exception_type((RateLimitError, APIConnectionError, APITimeoutError)),
     reraise=True,
 )
-async def _call_claude(message_content: str) -> tuple[str, AgentProvenance]:
+async def _call_claude(
+    message_content: str, *, site: str = "api.chat"
+) -> tuple[str, AgentProvenance]:
     """Run one Claude inference for /chat and return (text, provenance).
 
     Same audit contract as :func:`engine.verify._call_claude` (Task #25).
@@ -54,23 +56,13 @@ async def _call_claude(message_content: str) -> tuple[str, AgentProvenance]:
         input_tokens=input_tokens,
         output_tokens=output_tokens,
     )
-    logger.info(
-        "claude_call call_kind=%s agent_backed=%s model=%s "
-        "latency_ms=%d input_tokens=%d output_tokens=%d "
-        "tool_use_count=%d mcp_tool_use_count=%d",
-        prov.call_kind,
-        str(prov.agent_backed).lower(),
-        prov.model,
-        prov.latency_ms,
-        prov.input_tokens,
-        prov.output_tokens,
-        prov.tool_use_count,
-        prov.mcp_tool_use_count,
-    )
+    logger.info("%s", prov.to_log_fields(site=site))
     return text, prov
 
 
-async def answer_follow_up(message: str, benefit_id: str | None) -> str:
+async def answer_follow_up(
+    message: str, benefit_id: str | None
+) -> tuple[str, AgentProvenance]:
     context = ""
     if benefit_id:
         ent = next((e for e in load_catalog() if e.id == benefit_id), None)
@@ -91,5 +83,11 @@ async def answer_follow_up(message: str, benefit_id: str | None) -> str:
             )
 
     payload = f"{context}\n\nUser question: {message}"
-    text, _provenance = await _call_claude(payload)
-    return text
+    # Provenance is propagated to the caller (and into the /chat
+    # response envelope) so auditors can prove a chat answer wasn't
+    # produced by a managed agent — Task #25 contract for the
+    # non-persisted call site.
+    text, provenance = await _call_claude(
+        payload, site=f"api.chat:{benefit_id or 'no_benefit'}"
+    )
+    return text, provenance

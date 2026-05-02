@@ -372,7 +372,7 @@ async def test_verifier_envelope_includes_supporting_doctrine(
 
     captured: dict[str, str] = {}
 
-    async def _fake_call_claude(content: str) -> tuple[str, AgentProvenance]:
+    async def _fake_call_claude(content: str, *, site: str = "") -> tuple[str, AgentProvenance]:
         captured["content"] = content
         body = json.dumps(
             {
@@ -434,7 +434,7 @@ async def test_verifier_works_when_curriculum_empty(
 
     captured: dict[str, str] = {}
 
-    async def _fake_call_claude(content: str) -> tuple[str, AgentProvenance]:
+    async def _fake_call_claude(content: str, *, site: str = "") -> tuple[str, AgentProvenance]:
         captured["content"] = content
         return (
             json.dumps(
@@ -478,7 +478,7 @@ async def test_verifier_soft_fails_on_doctrine_lookup_exception(
 
     monkeypatch.setattr(verify_mod, "retrieve_supporting_context", _boom)
 
-    async def _fake_call_claude(_content: str) -> tuple[str, AgentProvenance]:
+    async def _fake_call_claude(_content: str, *, site: str = "") -> tuple[str, AgentProvenance]:
         return (
             json.dumps(
                 {

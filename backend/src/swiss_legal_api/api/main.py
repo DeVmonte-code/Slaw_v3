@@ -5,7 +5,7 @@ import sys
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, Header, HTTPException
+from fastapi import FastAPI, Header, HTTPException, Query
 from fastapi import Path as PathParam
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -18,6 +18,7 @@ from ..config import settings
 from ..engine.retrieval import _client as qdrant_client
 from ..engine.scan import run_benefit_scan
 from ..schemas import (
+    AgentProvenance,
     Alert,
     BenefitReport,
     ContextProfile,
@@ -173,6 +174,13 @@ class ChatRequest(BaseModel):
 
 class ChatResponse(BaseModel):
     answer: str
+    # Provenance of the Claude call that produced this answer — the
+    # /chat call site doesn't persist anything, so the response
+    # envelope is the only audit trail the caller (and the frontend
+    # "Unverified by agent" badge) gets. Always present for new
+    # responses; defaulted to None only so legacy clients deserialising
+    # an older snapshot don't break.
+    agent_provenance: AgentProvenance | None = None
 
 
 @app.get("/health")
@@ -293,8 +301,8 @@ async def scan(profile: ContextProfile) -> BenefitReport:
 @app.post("/chat", response_model=ChatResponse)
 async def chat(req: ChatRequest) -> ChatResponse:
     try:
-        answer = await answer_follow_up(req.message, req.benefit_id)
-        return ChatResponse(answer=answer)
+        answer, provenance = await answer_follow_up(req.message, req.benefit_id)
+        return ChatResponse(answer=answer, agent_provenance=provenance)
     except Exception as exc:
         logger.exception("chat failed: %s", type(exc).__name__)
         raise HTTPException(status_code=500, detail="Internal error") from exc
@@ -436,18 +444,41 @@ def _check_admin_token(token: str | None) -> None:
 @app.get("/admin/audits/agent-backed")
 def admin_audit_agent_backed(
     x_admin_token: str | None = Header(default=None),
+    since: str | None = Query(
+        default=None,
+        description=(
+            "ISO-8601 timestamp; only reports generated at or after "
+            "this instant are counted."
+        ),
+    ),
+    entitlement_id: str | None = Query(
+        default=None,
+        description=(
+            "Restrict to a single entitlement — the drill-down mode "
+            "auditors use to answer 'was THIS verification "
+            "agent-backed?'."
+        ),
+    ),
+    details: bool = Query(
+        default=False,
+        description=(
+            "Include the full per-verification provenance list under "
+            "``records``. Off by default so the headline call stays "
+            "cheap."
+        ),
+    ),
 ) -> dict[str, object]:
     """Aggregate provenance over every persisted scan in the database.
 
     Counts every ``Benefit.agent_provenance`` across every persisted
-    ``BenefitReport``, not just the latest report per user — so a
-    user with 12 historical scans contributes all 12 reports' worth
-    of analyses. Returns the same dict shape as
-    :func:`swiss_legal_api.audits.agent_backed_summary` so the CLI and
-    the endpoint stay in lockstep. The Task #25 baseline expects
-    ``agent_backed_pct=0.0`` (every call site still uses
-    ``messages.create``); Task #26 will flip the call sites and the
-    same query will start reporting ``agent_backed > 0``.
+    ``BenefitReport``, not just the latest report per user. Filters
+    (``since``, ``entitlement_id``) and the ``details`` drill-down
+    mode mirror the CLI's flags (``--since``, ``--entitlement-id``,
+    ``--details``) so the HTTP and cron interfaces cannot drift.
     """
     _check_admin_token(x_admin_token)
-    return agent_backed_summary()
+    return agent_backed_summary(
+        since=since,
+        entitlement_id=entitlement_id,
+        include_records=details,
+    )

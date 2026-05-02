@@ -98,3 +98,32 @@ class AgentProvenance(BaseModel):
         default_factory=list,
         description="Names of MCP servers whose tools were actually invoked.",
     )
+
+    def to_log_fields(self, *, site: str) -> str:
+        """Render the full provenance as a single ``key=value`` log line.
+
+        Used by every Claude call site so the structured ``claude_call``
+        log carries the complete contract — including nullable
+        managed-agent fields rendered as ``key=`` (empty value) on the
+        ``messages.create`` baseline. Auditors grepping logs for
+        ``claude_call`` get the same field set whether the source is
+        ``engine.verify``, ``api.chat``, or any future call site.
+        """
+        def _opt(v: object) -> str:
+            return "" if v is None else str(v)
+
+        return (
+            f"claude_call site={site} call_kind={self.call_kind} "
+            f"agent_backed={str(self.agent_backed).lower()} "
+            f"model={self.model} latency_ms={self.latency_ms} "
+            f"input_tokens={self.input_tokens} "
+            f"output_tokens={self.output_tokens} "
+            f"agent_id={_opt(self.agent_id)} "
+            f"agent_version={_opt(self.agent_version)} "
+            f"session_id={_opt(self.session_id)} "
+            f"environment_id={_opt(self.environment_id)} "
+            f"tools_offered={','.join(self.tools_offered)} "
+            f"tool_use_count={self.tool_use_count} "
+            f"mcp_tool_use_count={self.mcp_tool_use_count} "
+            f"mcp_servers_invoked={','.join(self.mcp_servers_invoked)}"
+        )

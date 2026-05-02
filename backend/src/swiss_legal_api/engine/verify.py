@@ -101,7 +101,9 @@ def _is_authoritative_language(sr_number: str, lang: str) -> bool:
     retry=retry_if_exception_type((RateLimitError, APIConnectionError, APITimeoutError)),
     reraise=True,
 )
-async def _call_claude(user_content: str) -> tuple[str, AgentProvenance]:
+async def _call_claude(
+    user_content: str, *, site: str = "engine.verify"
+) -> tuple[str, AgentProvenance]:
     """Run one Claude inference and return (text, provenance).
 
     Provenance is the audit contract for Task #25: every Claude call in
@@ -131,22 +133,13 @@ async def _call_claude(user_content: str) -> tuple[str, AgentProvenance]:
         input_tokens=input_tokens,
         output_tokens=output_tokens,
     )
-    # One stable structured line per Claude call. The audit endpoint and
-    # CLI parse persisted Benefit.agent_provenance, but ``/chat`` and any
-    # future non-persisted call site still leave an audit trail here.
-    logger.info(
-        "claude_call call_kind=%s agent_backed=%s model=%s "
-        "latency_ms=%d input_tokens=%d output_tokens=%d "
-        "tool_use_count=%d mcp_tool_use_count=%d",
-        prov.call_kind,
-        str(prov.agent_backed).lower(),
-        prov.model,
-        prov.latency_ms,
-        prov.input_tokens,
-        prov.output_tokens,
-        prov.tool_use_count,
-        prov.mcp_tool_use_count,
-    )
+    # One stable structured line per Claude call carrying the FULL
+    # provenance contract (nullable managed-agent fields included as
+    # empty values on the messages.create baseline). The audit endpoint
+    # and CLI parse persisted Benefit.agent_provenance, but ``/chat``
+    # and any future non-persisted call site still leave an audit trail
+    # here that auditors can grep with one ``claude_call`` selector.
+    logger.info("%s", prov.to_log_fields(site=site))
     return text, prov
 
 
@@ -311,7 +304,9 @@ Retrieved legal text (authoritative chunks first):
 
 Respond with JSON only."""
 
-    text, provenance = await _call_claude(user_content)
+    text, provenance = await _call_claude(
+        user_content, site=f"engine.verify:{entitlement.id}"
+    )
     logger.info(
         "claude_verify entitlement_id=%s latency_ms=%d input_tokens=%d "
         "output_tokens=%d agent_backed=%s",

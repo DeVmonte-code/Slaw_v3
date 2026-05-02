@@ -41,26 +41,38 @@ audit pipeline (CLI + `GET /admin/audits/agent-backed`) reads to answer:
 ## Structured log line
 
 Every Claude call emits exactly one `claude_call` log line with the
-fields above plus a `site` tag:
+FULL provenance contract — including the nullable managed-agent
+fields rendered as empty values on the `messages.create` baseline.
+Centralised in `AgentProvenance.to_log_fields(site=...)` so every
+call site speaks the same language:
 
 ```
 claude_call site=engine.verify:tax_deduction_xyz call_kind=messages.create
   agent_backed=false model=claude-opus-4-7 latency_ms=812
-  input_tokens=1124 output_tokens=87 tool_use_count=0 mcp_tool_use_count=0
+  input_tokens=1124 output_tokens=87
+  agent_id= agent_version= session_id= environment_id=
+  tools_offered= tool_use_count=0 mcp_tool_use_count=0
+  mcp_servers_invoked=
 ```
 
-This is the audit trail for `/chat` (and any future non-persisted call
-site) where there is no `Benefit` row to inspect.
+The `/chat` envelope additionally returns `agent_provenance` to the
+caller — for that call site the response is also part of the audit
+trail (no `Benefit` row exists to inspect later).
 
 ## Audit consumers
 
 * `GET /admin/audits/agent-backed` (gated by `ADMIN_AUDIT_TOKEN` when
-  set, 403 in production when unset).
-* `python -m swiss_legal_api.audits agent_backed` — same JSON shape,
-  for cron / CI.
+  set, 403 in production when unset). Query params:
+  - `since=<iso8601>` — only reports generated at or after this instant
+  - `entitlement_id=<id>` — drill down to a single verification
+  - `details=true` — include per-verification `records` payload
+* `python -m swiss_legal_api.audits agent_backed [--since ...]
+  [--entitlement-id ...] [--details]` — same JSON shape, for cron / CI.
 
-Both call `swiss_legal_api.audits.agent_backed_summary()`, which walks
-every persisted `BenefitReport.benefits[*].agent_provenance` and emits:
+Both call `swiss_legal_api.audits.agent_backed_summary(...)`, which
+walks every persisted `BenefitReport.benefits[*].agent_provenance` (via
+`storage.iter_all_scans()` so EVERY persisted scan counts, not just
+the latest one per user) and emits:
 
 ```json
 {
@@ -70,9 +82,21 @@ every persisted `BenefitReport.benefits[*].agent_provenance` and emits:
   "unknown_provenance": N_legacy_null,
   "agent_backed_pct": float,
   "by_call_kind": {"messages.create": N, "sessions.events": N},
-  "by_model": {...}
+  "by_model": {...},
+  "filter": {"since": "...", "entitlement_id": "..."},
+  "records": [
+    {
+      "entitlement_id": "...",
+      "generated_at": "...",
+      "confidence": 0.83,
+      "agent_provenance": { ... }
+    }
+  ]
 }
 ```
+
+`records` is only present when `details=true` /
+`include_records=True`.
 
 ## Frontend signal
 

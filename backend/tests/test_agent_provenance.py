@@ -100,7 +100,7 @@ async def test_verify_entitlement_attaches_provenance(monkeypatch) -> None:
     )
     monkeypatch.setattr(verify_mod, "retrieve_for_citation", lambda *a, **k: [chunk])
 
-    async def _fake_call_claude(_user: str) -> tuple[str, AgentProvenance]:
+    async def _fake_call_claude(_user: str, *, site: str = "") -> tuple[str, AgentProvenance]:
         return (
             json.dumps(
                 {
@@ -143,7 +143,7 @@ async def test_bad_json_path_still_carries_provenance(monkeypatch) -> None:
     )
     monkeypatch.setattr(verify_mod, "retrieve_for_citation", lambda *a, **k: [chunk])
 
-    async def _fake_call_claude(_user: str) -> tuple[str, AgentProvenance]:
+    async def _fake_call_claude(_user: str, *, site: str = "") -> tuple[str, AgentProvenance]:
         return "this is not json at all", AgentProvenance(
             call_kind="messages.create",
             agent_backed=False,
@@ -173,7 +173,7 @@ async def test_persisted_benefit_round_trips_provenance(monkeypatch) -> None:
     )
     monkeypatch.setattr(verify_mod, "retrieve_for_citation", lambda *a, **k: [chunk])
 
-    async def _fake_call_claude(_user: str) -> tuple[str, AgentProvenance]:
+    async def _fake_call_claude(_user: str, *, site: str = "") -> tuple[str, AgentProvenance]:
         return (
             json.dumps(
                 {
@@ -218,7 +218,7 @@ async def test_audit_summary_baseline_is_zero_agent_backed(monkeypatch) -> None:
     )
     monkeypatch.setattr(verify_mod, "retrieve_for_citation", lambda *a, **k: [chunk])
 
-    async def _fake_call_claude(_u: str) -> tuple[str, AgentProvenance]:
+    async def _fake_call_claude(_u: str, *, site: str = "") -> tuple[str, AgentProvenance]:
         return (
             json.dumps(
                 {
@@ -314,7 +314,7 @@ async def test_audit_counts_every_persisted_scan_not_just_latest(monkeypatch) ->
     )
     monkeypatch.setattr(verify_mod, "retrieve_for_citation", lambda *a, **k: [chunk])
 
-    async def _fake_call_claude(_u: str) -> tuple[str, AgentProvenance]:
+    async def _fake_call_claude(_u: str, *, site: str = "") -> tuple[str, AgentProvenance]:
         return (
             json.dumps(
                 {
@@ -414,6 +414,160 @@ def _is_consistent(p: AgentProvenance) -> bool:
     if p.call_kind == "messages.create":
         return p.agent_backed is False
     return p.agent_backed == ((p.tool_use_count + p.mcp_tool_use_count) > 0)
+
+
+@pytest.mark.asyncio
+async def test_audit_filters_since_and_entitlement_id_with_drilldown(
+    monkeypatch,
+) -> None:
+    """The audit must support per-verification drilldown:
+
+    * ``since`` — narrow to a recent window
+    * ``entitlement_id`` — answer "was THIS analysis agent-backed?"
+    * ``include_records=True`` (HTTP ``details=1``) — return the full
+      provenance payload per matched record, not just aggregates.
+    """
+    chunk = RetrievedChunk(
+        text="Originaler deutscher Gesetzestext.",
+        score=0.91,
+        language="de",
+        effective_date=date(1995, 1, 1),
+    )
+    monkeypatch.setattr(verify_mod, "retrieve_for_citation", lambda *a, **k: [chunk])
+
+    async def _fake_call_claude(_u: str, *, site: str = "") -> tuple[str, AgentProvenance]:
+        return (
+            json.dumps(
+                {
+                    "supports": True,
+                    "confidence": 0.9,
+                    "reasoning": "ok",
+                    "best_quote": "Quote within fifteen words.",
+                }
+            ),
+            AgentProvenance(
+                call_kind="messages.create",
+                agent_backed=False,
+                model="claude-fake",
+                latency_ms=3,
+            ),
+        )
+
+    monkeypatch.setattr(verify_mod, "_call_claude", _fake_call_claude)
+    storage.upsert_user("u1", _profile(), notify_enabled=True)
+
+    for ts in ("2026-04-01T00:00:00Z", "2026-04-15T00:00:00Z"):
+        report = await run_benefit_scan(_profile(), [_entitlement()])
+        report = report.model_copy(update={"generated_at": ts})
+        storage.insert_scan("u1", report)
+
+    full = agent_backed_summary()
+    assert full["total_benefits"] == 2
+
+    windowed = agent_backed_summary(since="2026-04-10T00:00:00Z")
+    assert windowed["total_benefits"] == 1
+    assert windowed["filter"] == {
+        "since": "2026-04-10T00:00:00Z",
+        "entitlement_id": None,
+    }
+
+    drill = agent_backed_summary(
+        entitlement_id="test_ent_prov", include_records=True
+    )
+    assert drill["total_benefits"] == 2
+    assert "records" in drill
+    assert len(drill["records"]) == 2
+    rec = drill["records"][0]
+    assert rec["entitlement_id"] == "test_ent_prov"
+    assert rec["agent_provenance"]["call_kind"] == "messages.create"
+    assert rec["agent_provenance"]["agent_backed"] is False
+
+    miss = agent_backed_summary(entitlement_id="not_a_real_id")
+    assert miss["total_benefits"] == 0
+    assert miss["agent_backed_pct"] == 0.0
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as c:
+        r = await c.get(
+            "/admin/audits/agent-backed",
+            params={
+                "since": "2026-04-10T00:00:00Z",
+                "entitlement_id": "test_ent_prov",
+                "details": "true",
+            },
+        )
+        assert r.status_code == 200
+        body = r.json()
+        assert body["total_benefits"] == 1
+        assert body["records"][0]["entitlement_id"] == "test_ent_prov"
+
+
+@pytest.mark.asyncio
+async def test_chat_response_envelope_carries_provenance(monkeypatch) -> None:
+    """``/chat`` is non-persisted, so the response envelope is the only
+    audit trail. The endpoint must surface ``agent_provenance`` so the
+    frontend badge and any audit script can prove the answer wasn't
+    produced by a managed agent.
+    """
+    from swiss_legal_api.api import chat as chat_mod
+
+    async def _fake_call_claude(_p: str, *, site: str = "") -> tuple[str, AgentProvenance]:
+        assert site.startswith("api.chat:")
+        return "the answer text", AgentProvenance(
+            call_kind="messages.create",
+            agent_backed=False,
+            model="claude-fake",
+            latency_ms=9,
+        )
+
+    monkeypatch.setattr(chat_mod, "_call_claude", _fake_call_claude)
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as c:
+        r = await c.post(
+            "/chat",
+            json={"message": "is this thing on?", "benefit_id": None},
+        )
+        assert r.status_code == 200
+        body = r.json()
+        assert body["answer"] == "the answer text"
+        assert body["agent_provenance"]["call_kind"] == "messages.create"
+        assert body["agent_provenance"]["agent_backed"] is False
+        assert body["agent_provenance"]["model"] == "claude-fake"
+
+
+def test_claude_call_log_carries_full_provenance_contract() -> None:
+    """The structured ``claude_call`` log line must include every
+    provenance field — including the nullable managed-agent fields
+    rendered as empty values on the messages.create baseline — so a
+    future Task #26 migration can be diffed against the same selector.
+    """
+    prov = AgentProvenance(
+        call_kind="messages.create",
+        agent_backed=False,
+        model="claude-fake",
+        latency_ms=42,
+        input_tokens=10,
+        output_tokens=5,
+    )
+    line = prov.to_log_fields(site="engine.verify:abc")
+    for token in (
+        "claude_call",
+        "site=engine.verify:abc",
+        "call_kind=messages.create",
+        "agent_backed=false",
+        "model=claude-fake",
+        "latency_ms=42",
+        "input_tokens=10",
+        "output_tokens=5",
+        "agent_id=",
+        "agent_version=",
+        "session_id=",
+        "environment_id=",
+        "tools_offered=",
+        "tool_use_count=0",
+        "mcp_tool_use_count=0",
+        "mcp_servers_invoked=",
+    ):
+        assert token in line, f"missing {token!r} in {line!r}"
 
 
 @pytest.mark.asyncio

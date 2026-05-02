@@ -185,7 +185,9 @@ async def test_de_chunk_marked_authoritative_for_de_provenance(
 
     captured: dict[str, str] = {}
 
-    async def _fake_call_claude(user_content: str) -> tuple[str, AgentProvenance]:
+    async def _fake_call_claude(
+        user_content: str, *, site: str = ""
+    ) -> tuple[str, AgentProvenance]:
         captured["content"] = user_content
         body = json.dumps(
             {
@@ -247,7 +249,9 @@ async def test_translation_only_keeps_en_non_authoritative(
 
     captured: dict[str, str] = {}
 
-    async def _fake_call_claude(user_content: str) -> tuple[str, AgentProvenance]:
+    async def _fake_call_claude(
+        user_content: str, *, site: str = ""
+    ) -> tuple[str, AgentProvenance]:
         captured["content"] = user_content
         body = json.dumps(
             {
@@ -304,7 +308,7 @@ async def test_translation_only_caps_confidence_server_side(
         verify_mod, "retrieve_for_citation", lambda *a, **k: [en_only]
     )
 
-    async def _fake_call_claude(_user: str) -> tuple[str, AgentProvenance]:
+    async def _fake_call_claude(_user: str, *, site: str = "") -> tuple[str, AgentProvenance]:
         # Model misbehaves and returns 0.95 despite the prompt cap.
         body = json.dumps(
             {
