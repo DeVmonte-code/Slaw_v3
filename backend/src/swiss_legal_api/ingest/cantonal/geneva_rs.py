@@ -38,8 +38,9 @@ import logging
 import re
 import xml.etree.ElementTree as ET
 from collections.abc import Iterable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from html.parser import HTMLParser
+from urllib.parse import urljoin
 
 import httpx
 
@@ -355,12 +356,20 @@ class _RSGHtmlIndexParser(HTMLParser):
         )
 
 
-def parse_html_index(html: str) -> list[_GEArticleSpec]:
-    """Pure parser: ge.ch HTML RSG index -> list of in-force-act specs."""
+def parse_html_index(
+    html: str, *, base_url: str = RSG_HTML_INDEX_URL
+) -> list[_GEArticleSpec]:
+    """Pure parser: ge.ch HTML RSG index -> list of in-force-act specs.
+
+    Relative ``href`` values are resolved against ``base_url`` so the
+    fallback path is just as resilient as the OData primary.
+    """
     p = _RSGHtmlIndexParser()
     p.feed(html)
     p.close()
-    return p.entries
+    return [
+        replace(spec, url=urljoin(base_url, spec.url)) for spec in p.entries
+    ]
 
 
 def discover_specs(
@@ -392,7 +401,7 @@ def discover_specs(
             )
         resp = http.get(html_index_url)
         resp.raise_for_status()
-        return parse_html_index(resp.text)
+        return parse_html_index(resp.text, base_url=str(resp.url))
     finally:
         if own_client:
             http.close()

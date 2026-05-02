@@ -23,7 +23,7 @@ import re
 from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Protocol
+from typing import Any
 
 
 @dataclass(frozen=True)
@@ -68,20 +68,6 @@ class CantonalArticleRecord:
             "effective_date": self.effective_date,
             "repealed_date": self.repealed_date,
         }
-
-
-class CantonalAdapter(Protocol):
-    """Structural type every per-canton module conforms to.
-
-    Each adapter module must expose a module-level ``ingest()`` callable
-    matching this signature so :mod:`__main__` can drive them uniformly.
-    """
-
-    CANTON: str
-    COMPILATION_LABEL: str
-
-    def ingest(self) -> list[CantonalArticleRecord]:  # pragma: no cover - protocol
-        ...
 
 
 def _split_numeric(s: str) -> tuple[int, str]:

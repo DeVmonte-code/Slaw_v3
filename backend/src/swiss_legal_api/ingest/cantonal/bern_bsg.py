@@ -35,8 +35,9 @@ import io
 import logging
 import re
 from collections.abc import Iterable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from html.parser import HTMLParser
+from urllib.parse import urljoin
 
 import httpx
 
@@ -426,12 +427,18 @@ class _BSGIndexParser(HTMLParser):
         )
 
 
-def parse_index(html: str) -> list[_BEArticleSpec]:
-    """Pure parser: BSG index HTML -> list of in-force-act specs."""
+def parse_index(html: str, *, base_url: str = BSG_INDEX_URL) -> list[_BEArticleSpec]:
+    """Pure parser: BSG index HTML -> list of in-force-act specs.
+
+    ``href`` values are resolved against ``base_url`` so relative links
+    (``data/text/...``) survive into a fetchable spec URL.
+    """
     p = _BSGIndexParser()
     p.feed(html)
     p.close()
-    return p.entries
+    return [
+        replace(spec, url=urljoin(base_url, spec.url)) for spec in p.entries
+    ]
 
 
 def discover_specs(
@@ -445,7 +452,7 @@ def discover_specs(
     try:
         resp = http.get(index_url)
         resp.raise_for_status()
-        return parse_index(resp.text)
+        return parse_index(resp.text, base_url=str(resp.url))
     finally:
         if own_client:
             http.close()

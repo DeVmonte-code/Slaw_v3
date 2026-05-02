@@ -19,13 +19,11 @@ signature as the existing adapters, and add it to ``ADAPTERS`` in
 from __future__ import annotations
 
 from .base import (
-    CantonalAdapter,
     CantonalArticleRecord,
     write_snapshot,
 )
 
 __all__ = [
-    "CantonalAdapter",
     "CantonalArticleRecord",
     "write_snapshot",
 ]
