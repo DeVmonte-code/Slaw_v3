@@ -10,6 +10,9 @@ from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_ex
 
 from ..catalog import load_catalog
 from ..config import settings
+from ..engine.agent_runner import (
+    RetryableManagedAgentsError as _RetryableManagedAgentsError,
+)
 from ..engine.retrieval import retrieve_for_citation
 from ..schemas import AgentProvenance
 
@@ -30,6 +33,11 @@ _anthropic = AsyncAnthropic(api_key=settings.anthropic_api_key)
             APIConnectionError,
             APITimeoutError,
             httpx.TransportError,
+            # Managed-agents semantic retry: server emits
+            # ``session.error`` with ``retry_status='retryable'``.
+            # Retry with the same backoff. Fatal errors raise
+            # ManagedAgentsError instead and are NOT retried.
+            _RetryableManagedAgentsError,
         )
     ),
     reraise=True,

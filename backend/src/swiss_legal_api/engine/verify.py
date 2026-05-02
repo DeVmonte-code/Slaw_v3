@@ -20,6 +20,7 @@ from ..schemas import (
     Entitlement,
     SupportingDoctrine,
 )
+from .agent_runner import RetryableManagedAgentsError as _RetryableManagedAgentsError
 from .retrieval import retrieve_for_citation, retrieve_supporting_context
 
 logger = logging.getLogger(__name__)
@@ -109,6 +110,12 @@ def _is_authoritative_language(sr_number: str, lang: str) -> bool:
             APIConnectionError,
             APITimeoutError,
             httpx.TransportError,
+            # Managed-agents semantic retry signal: server emits
+            # ``session.error`` with ``retry_status='retryable'``. Treat
+            # it identically to a transport blip — same exponential
+            # backoff, capped attempts. Fatal/no_retry errors raise
+            # ManagedAgentsError instead and are NOT retried.
+            _RetryableManagedAgentsError,
         )
     ),
     reraise=True,
@@ -229,6 +236,35 @@ async def _verify_via_managed_agent(
     # parametric memory. Refuse — the architectural inversion of
     # Task #26 only holds if every managed verdict is grounded in an
     # MCP tool call.
+    # Translation-only confidence cap (Task #25 policy) MUST hold on
+    # the managed path too — we cannot trust the agent to honour the
+    # cap from the system prompt alone. We do a cheap server-side
+    # retrieval probe (small top_k, federal-only) to compute the
+    # ``translation_only`` flag from the same chunk-language signal
+    # used in ``_verify_local``. Soft-fail to "not capped" if the
+    # probe errors out so a flaky retrieval does not turn into a
+    # false low-confidence verdict.
+    translation_only_managed = False
+    try:
+        probe_chunks = await asyncio.to_thread(
+            retrieve_for_citation,
+            cit,
+            entitlement.title.en,
+            profile.canton,
+            None,
+            None,
+            f"managed-cap-probe entitlement_id={entitlement.id}",
+        )
+        translation_only_managed = bool(probe_chunks) and not any(
+            _is_authoritative_language(cit.sr_number, c.language)
+            for c in probe_chunks
+        )
+    except Exception as exc:
+        logger.warning(
+            "managed_cap_probe_failed entitlement_id=%s exc=%s",
+            entitlement.id,
+            type(exc).__name__,
+        )
     if (provenance.mcp_tool_use_count or 0) == 0:
         logger.warning(
             "managed_verify_no_mcp_tools entitlement_id=%s session=%s "
@@ -265,6 +301,17 @@ async def _verify_via_managed_agent(
         )
     quote = " ".join(str(parsed.get("best_quote", "")).strip().split()[:14])
     confidence = max(0.0, min(1.0, float(parsed.get("confidence", 0.0))))
+    # Apply the translation-only cap regardless of what the agent
+    # returned — policy is enforced server-side, not just in the
+    # prompt. Mirrors the cap branch in ``_verify_local``.
+    if translation_only_managed and confidence > _TRANSLATION_ONLY_CONFIDENCE_CAP:
+        logger.info(
+            "managed_verify_capped entitlement_id=%s raw=%.2f cap=%.2f",
+            entitlement.id,
+            confidence,
+            _TRANSLATION_ONLY_CONFIDENCE_CAP,
+        )
+        confidence = _TRANSLATION_ONLY_CONFIDENCE_CAP
     return VerifyResult(
         supports=bool(parsed.get("supports", False)),
         confidence=confidence,

@@ -43,6 +43,18 @@ from ..schemas import AgentProvenance
 logger = logging.getLogger(__name__)
 
 
+class RetryableManagedAgentsError(RuntimeError):
+    """Raised on a ``session.error`` with ``retry_status='retryable'``.
+
+    Wired into the tenacity retry filter on both call sites
+    (engine.verify._call_claude, api.chat._call_claude) so a transient
+    managed-session failure is retried with the same backoff schedule
+    used for ``httpx.TransportError``. Fatal errors (``no_retry``,
+    ``fatal``, or no ``retry_status``) bubble up as :class:`ManagedAgentsError`
+    instead and are surfaced to the operator.
+    """
+
+
 class ManagedAgentsError(RuntimeError):
     """Raised on unrecoverable session failures (terminated / fatal error).
 
@@ -306,6 +318,17 @@ async def run_session(
 
     latency_ms = int((time.perf_counter() - started) * 1000)
 
+    # Retryable semantic failure: server says "try again". Raise the
+    # dedicated exception so tenacity at the call site retries it
+    # alongside transport errors. Distinguished from fatal errors so a
+    # genuine retry-loop bug can't be masked.
+    if acc.last_error is not None:
+        retry_status = acc.last_error.get("retry_status")
+        if retry_status == "retryable":
+            raise RetryableManagedAgentsError(
+                f"session_error_retryable session_id={session_id} "
+                f"error={acc.last_error}"
+            )
     if acc.terminated:
         raise ManagedAgentsError(
             f"session_terminated session_id={session_id} error={acc.last_error}"

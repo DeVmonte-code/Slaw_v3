@@ -91,6 +91,19 @@ async def _verify_one(
             v = await verify_entitlement(e, profile, evidence)
             return e, evidence, v
         except Exception as exc:
+            # Managed-agents fatal errors (terminated session, fatal
+            # session.error) MUST surface to the operator — silently
+            # turning them into "fewer benefits" hides outages and
+            # defeats the audit trail. Re-raise so /scan returns 5xx.
+            from .agent_runner import ManagedAgentsError
+
+            if isinstance(exc, ManagedAgentsError):
+                logger.error(
+                    "verify_entitlement managed-fatal entitlement_id=%s exc=%s",
+                    e.id,
+                    exc,
+                )
+                raise
             logger.exception(
                 "verify_entitlement failed for entitlement_id=%s exc_type=%s",
                 e.id,

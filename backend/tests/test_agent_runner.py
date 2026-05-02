@@ -146,6 +146,27 @@ async def test_terminated_session_raises_managed_agents_error() -> None:
         )
 
 
+async def test_retryable_session_error_raises_retryable_exception() -> None:
+    """``session.error`` with ``retry_status='retryable'`` must surface
+    as :class:`RetryableManagedAgentsError` so the tenacity filter at
+    the call site retries it (same backoff as a transport blip)
+    instead of failing fatally on the first attempt.
+    """
+    transport = _make_transport(
+        [
+            {
+                "type": "session.error",
+                "error": {"message": "transient", "retry_status": "retryable"},
+            },
+            {"type": "session.status_idle"},
+        ]
+    )
+    with pytest.raises(agent_runner.RetryableManagedAgentsError):
+        await agent_runner.run_session(
+            "transient", site="engine.verify:retry", transport=transport
+        )
+
+
 async def test_managed_verify_refuses_when_no_mcp_tool_invoked(
     monkeypatch,
 ) -> None:
