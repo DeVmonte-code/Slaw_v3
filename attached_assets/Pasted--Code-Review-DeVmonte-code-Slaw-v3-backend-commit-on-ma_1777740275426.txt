@@ -1,0 +1,270 @@
+# Code Review — DeVmonte-code/Slaw_v3 backend (commit on `main`)
+
+**Reviewer:** Claude (against v3 mega-prompt spec + Python/FastAPI industry standards)
+**Files read (12):** `pyproject.toml`, `config.py`, `catalog.py`, `api/main.py`, `api/chat.py`, `engine/scan.py`, `engine/verify.py`, `engine/retrieval.py`, `engine/trigger.py`, `schemas/trigger_dsl.py`, `seed/law_articles.json`, `seed/entitlements.json`, `README.md`. Tests dir listed but not opened — flagged where relevant.
+
+**Overall:** the backend is structurally faithful to the v3 spec. Layout, schemas, trigger DSL, scan orchestrator, retry-with-tenacity, semaphore concurrency, async-correct retrieval bridging — all present and competent. Two real problems and several smaller gaps. **Not safe to demo to anyone who knows Swiss law until the seed corpus is fixed.**
+
+---
+
+# 🔴 Blockers (must fix before any demo)
+
+## 🔴 B1 — Seed corpus is paraphrased, not verbatim Fedlex
+
+**File:** `backend/seed/law_articles.json` (and matching `quote_under_15_words` strings in `entitlements.json`)
+
+**The v3 spec said:** *"You must not invent Swiss legal text. Seed entitlements only reference articles whose exact Fedlex-published English text you can reproduce verbatim. If an article cannot be reproduced faithfully, drop it and note in README."*
+
+**What the file actually contains:** plausible-sounding English summaries of the underlying articles, not the authoritative Fedlex text. Examples:
+
+| Article | Your seed | Real Fedlex EN |
+|---|---|---|
+| OR 270a | "The tenant may contest the level of the rent at any time when the reference interest rate used to calculate the rent changes, by serving notice on the landlord and requesting a rent reduction. If the landlord does not accept the request, the tenant may within 30 days refer the matter to the conciliation authority." | *"The tenant may contest the level of the rent on the grounds that the landlord is making an excessive return from the leased property within the meaning of Articles 269 and 269a, where 1. the rent is based on the customary rents in the locality or district (Art. 269a let. a), or 2. the rent is based on cost increases or additional services rendered by the landlord."* |
+| OR 41 | "Any person who unlawfully causes loss or damage to another, whether wilfully or negligently, is obliged to provide compensation." | Closer to verbatim, but missing the structure of paragraphs 1+2 and the specific wording. |
+| OR 24 | "An error is a fundamental one in particular where a party was mistaken regarding the nature of the contract, the object of the contract, the quantity of the object, or the person of the other party where such person was a material consideration." | Real Art. 24 §1 enumerates the four cases more strictly and uses different phrasing; also has §2 about errors regarding the quantity. |
+
+**Why this matters here, specifically:** your verification stage feeds these strings to Claude as *"the authoritative source"*, then asks Claude whether the entitlement is supported. The entire LLM-grounding loop is therefore grounded in fabricated Swiss law. The system will produce confident benefit reports citing the right SR + article number but with paraphrased text the user cannot independently verify on Fedlex. This is the worst possible failure mode for a legal-AI tool — it looks correct, the citations resolve to real statute numbers, but the substance has been silently rewritten.
+
+**Why README claim makes it worse:** `README.md` declares *"All law text in seed/law_articles.json is sourced from [Fedlex URLs]"*. That is currently false. The "Dropped Articles" section is also a placeholder (`_(This section is updated during Phase B2 seeding.)_`), implying nothing was dropped — but the spec specifically said to drop rather than paraphrase.
+
+**Fix (any one):**
+1. **Manual replacement.** Open each Fedlex EN URL listed in the README, copy the actual paragraph text verbatim, replace the corresponding `text` field. This is ~30 minutes of work and the only fully-correct solution for v1.
+2. **Programmatic ingestion.** Write a one-shot script that fetches each article from `data.fedlex.admin.ch` SPARQL or the HTML page, extracts the paragraph by ELI URI, writes it to `law_articles.json`. Bigger scope; better for v2.
+3. **Drop and document.** If you cannot get the verbatim text for an article, remove that article and the dependent entitlement, and list it under "Dropped Articles" in README. This was the spec's intended fallback.
+
+**Same fix needed for** every `quote_under_15_words` in `entitlements.json` — those should be 15-word slices of the verbatim text, not summaries.
+
+---
+
+## 🔴 B2 — Silent exception swallowing in scan orchestrator
+
+**File:** `backend/src/swiss_legal_api/engine/scan.py` lines 22–26
+
+```python
+async def _verify_one(...) -> ...:
+    async with sem:
+        try:
+            v = await verify_entitlement(e, profile, evidence)
+            return e, evidence, v
+        except Exception:           # ← bare catch, no logging
+            return e, evidence, None
+```
+
+Any exception during verification — Anthropic outage, Qdrant timeout, JSON parse error, OOM during embedding — is silently swallowed and the entitlement is marked "suppressed". You cannot debug a scan because the error never surfaces in logs. In production this becomes "the scan reports 3 benefits instead of 5, no error, no idea why."
+
+**Fix:**
+
+```python
+import logging
+logger = logging.getLogger(__name__)
+
+async def _verify_one(e, profile, evidence, sem):
+    async with sem:
+        try:
+            v = await verify_entitlement(e, profile, evidence)
+            return e, evidence, v
+        except Exception as exc:
+            logger.exception(
+                "verify_entitlement failed for %s: %s", e.id, exc
+            )
+            return e, evidence, None
+```
+
+Pair this with structured logging configured in `api/main.py` (see G3 below).
+
+---
+
+# 🟡 High-priority gaps (production blockers, not demo blockers)
+
+## 🟡 G1 — No FastAPI lifespan, no observability hooks
+
+**File:** `backend/src/swiss_legal_api/api/main.py`
+
+The app has no `lifespan` context manager. That means:
+- The Anthropic client is created at *module import time* (`api/chat.py` line 11, `engine/verify.py` line 33) — runs on `import`, before settings might be properly loaded
+- The Qdrant client is created lazily via `lru_cache` (better, but still no startup health check)
+- The sentence-transformer model is loaded only on first request — that user pays a 10–60s cold-start latency
+- No graceful shutdown; in-flight scans on SIGTERM will be cut
+
+**Fix:**
+
+```python
+from contextlib import asynccontextmanager
+from .seeding.embedder import get_embedder
+from .engine.retrieval import _client
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # warm caches at startup
+    get_embedder()
+    _client().get_collections()  # ping Qdrant
+    yield
+    # cleanup on shutdown if needed
+
+app = FastAPI(title=..., lifespan=lifespan)
+```
+
+## 🟡 G2 — `/health` doesn't actually verify dependencies
+
+```python
+@app.get("/health")
+async def health() -> dict[str, bool]:
+    return {"ok": True}
+```
+
+This proves the process is up, nothing more. A load balancer reading this endpoint cannot tell whether Qdrant is reachable or your Anthropic key is valid.
+
+**Fix:** add a `/readyz` (or rename current to `/livez`) that does:
+- Ping Qdrant `client.get_collections()` with a 2s timeout
+- Optionally a one-token Anthropic ping (cheap dry-run, costs almost nothing)
+
+Return 503 if either fails. Keep `/health` as the cheap liveness check.
+
+## 🟡 G3 — No logging anywhere
+
+`grep -rn "logging\|logger\|getLogger" src/` returns zero hits. No structured logs, no request IDs, no per-scan metrics. For a legal-AI product where audit trails matter, this is a real gap.
+
+**Fix (minimum):**
+
+```python
+# api/main.py top
+import logging, sys, json
+logging.basicConfig(
+    level=logging.INFO,
+    format='{"ts":"%(asctime)s","lvl":"%(levelname)s","msg":"%(message)s","logger":"%(name)s"}',
+    stream=sys.stdout,
+)
+```
+
+Then in `scan.py`, log per-scan: `profile_hash`, triggered count, verified count, suppressed count, total duration. In `verify.py`, log per-Claude-call: `entitlement_id`, `input_tokens`, `output_tokens`, latency.
+
+## 🟡 G4 — Generic 500 catch leaks `str(exc)` to clients
+
+**File:** `api/main.py` lines 38–46
+
+```python
+except Exception as exc:
+    raise HTTPException(status_code=500, detail=str(exc)) from exc
+```
+
+`str(exc)` for an Anthropic exception can include the API key in the URL, partial request bodies, etc. Returning that to a public-facing client is an information disclosure risk.
+
+**Fix:** log the full exception server-side, return only a generic message:
+
+```python
+except Exception as exc:
+    logger.exception("scan failed: %s", exc)
+    raise HTTPException(status_code=500, detail="Internal error during scan") from exc
+```
+
+## 🟡 G5 — `datetime.utcnow()` is deprecated in Python 3.12
+
+**File:** `engine/scan.py` line 75
+**Symptom:** `DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version.`
+
+**Fix:** `datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")`
+
+---
+
+# 🟢 Nice-to-have improvements
+
+## 🟢 N1 — Discriminated union in trigger DSL is untagged
+
+**File:** `schemas/trigger_dsl.py`
+
+```python
+TriggerExpr = (
+    All | Any_ | Not | Eq | Gte | Lte | Gt | Lt | In | Between | Exists | EventWithinYears
+)
+```
+
+Pydantic v2 supports tagged unions via `Field(discriminator=...)`, which:
+- Is faster (no probe-each-variant validation)
+- Produces a cleaner OpenAPI schema (matters for the frontend's openapi-typescript generation)
+- Gives better error messages on parse failure
+
+For a 12-variant union evaluated potentially thousands of times during a scan, this is worth doing. Add a `kind: Literal["all"]` field per variant and use `Field(discriminator="kind")` on the union.
+
+## 🟢 N2 — No respx mocking of Anthropic in tests
+
+The pyproject pulls `respx` as a dev dep but I didn't see it used in `test_scan.py` (file listed but not read). If `test_scan.py` only runs when `ANTHROPIC_API_KEY` is set (live test), the test is non-deterministic and CI-unfriendly. Add an `respx`-mocked variant that returns a canned `{"supports": true, "confidence": 0.85, ...}` so the scan pipeline is testable without burning Anthropic tokens.
+
+## 🟢 N3 — `lru_cache` on Qdrant client is fine but not async-safe
+
+`@lru_cache(maxsize=1)` on a sync `_client()` factory works because Qdrant's REST client is thread-safe. For long-running services consider `qdrant_client.AsyncQdrantClient` directly so you can drop the `asyncio.to_thread` wrapper. Performance gain is small at this scale; correctness gain is conceptual cleanliness.
+
+## 🟢 N4 — CORS wildcard
+
+`allow_origins=["*"]` is per-spec for v1 but flag it in README as dev-only. Lock it to the frontend origin before any deployment.
+
+## 🟢 N5 — README's "Dropped Articles" section is a placeholder
+
+Either populate it (with whichever you intentionally dropped) or remove the heading. As-is, it suggests nothing was dropped and conflicts with the seed-corpus reality.
+
+## 🟢 N6 — `chat.py` has no retries
+
+`api/chat.py` calls Anthropic directly with no `tenacity` decorator. `verify.py` has retries; chat doesn't. If a user clicks "ask follow-up" and Anthropic returns a transient 429, they get an error instead of a retry. Apply the same `_call_claude` pattern from `verify.py`.
+
+---
+
+# Spec-fidelity scorecard
+
+| Phase | Spec requirement | Status |
+|---|---|---|
+| B0 | pyproject.toml, .python-version, ruff, .env.example | ✅ |
+| B1 | Pydantic v2 schemas (5 files) | ✅ |
+| B2 | seed/law_articles.json ≥20, seed/entitlements.json = 15 | ⚠️ count OK (21 + 15) but text is paraphrased — see B1 |
+| B3 | Qdrant seeder script | ✅ (file present, not opened) |
+| B4 | Trigger evaluator pure Python | ✅ |
+| B5 | Retrieval service (sync), bridged into async | ✅ |
+| B6 | Verification service with tenacity retry | ✅ + retries beyond spec |
+| B7 | Scan orchestrator with semaphore + ranking | ✅ but silent except (B2 above) |
+| B8 | FastAPI app with /health, /scan, /chat | ✅ minimal; no lifespan, tags, deep health |
+| B9 | OpenAPI export script | ✅ (file present) |
+| B10 | smoke.sh end-to-end | ✅ (file present) |
+
+---
+
+# What I'd fix in what order
+
+1. **🔴 Replace seed corpus with verbatim Fedlex text.** This is the only fix that turns the system from "demo that looks plausible" into "tool I'd let a Swiss resident actually read." 30–90 minutes manual.
+2. **🔴 Add logging to the silent except in `_verify_one`.** 5 minutes. Without this you cannot diagnose why a scan returned fewer benefits than expected.
+3. **🟡 Add `lifespan` + warm-up + `/readyz` deep healthcheck.** 30 minutes. Required before deployment.
+4. **🟡 Configure stdlib logging at app boot, log per-scan metrics.** 30 minutes.
+5. **🟡 Sanitize 500 detail strings.** 5 minutes.
+6. **🟡 Replace `datetime.utcnow()`.** 1 minute.
+7. **🟢 Discriminated union, respx tests, chat retries, README cleanup.** Day's work, can wait until v2 sprint.
+
+---
+
+# What you got right (worth calling out)
+
+- `verify.py` correctly uses `await asyncio.to_thread(retrieve_for_citation, ...)`. The async-blocking trap I flagged in the checklist as the most-likely landmine — you avoided it.
+- Tenacity retry with the right exception classes (`RateLimitError, APIConnectionError, APITimeoutError`). Correct, not the default Anthropic SDK suggestion.
+- Single AsyncAnthropic instance at module level instead of per-request — correct.
+- `_client()` cached via `lru_cache` — correct.
+- Profile hash in BenefitReport — useful for caching/dedupe later.
+- Scan ranks by `confidence × log1p(value_max)` exactly as spec'd.
+- Pydantic v2 idioms throughout: zero `class Config:`, zero `@validator`, zero `.dict()` calls.
+- The 6-test suite mirrors the spec's expected coverage.
+- Tenacity, respx, ruff, mypy, pytest-asyncio all in dev deps as the senior-Python tooling baseline.
+
+The scaffolding is genuinely solid. The two blockers are correctable in under 90 minutes. After that, you have a defensible v1 you can ship to a small group of friendly users.
+
+---
+
+# What I'd want to know to go deeper
+
+If you'd like a pass on these specific files I haven't read yet, paste them or push them and I'll review:
+
+- `backend/scripts/smoke.sh` — does it actually fail loudly on partial success?
+- `backend/scripts/export_openapi.py` — does it produce a stable schema?
+- `backend/src/swiss_legal_api/seeding/seed_qdrant.py` — does it idempotently re-seed?
+- `backend/src/swiss_legal_api/seeding/embedder.py` — `lru_cache` on the model?
+- `backend/tests/test_scan.py` — live-only or respx-mocked?
+- `backend/src/swiss_legal_api/catalog.py` — any caching beyond the spec's `@lru_cache`?
+- `backend/src/swiss_legal_api/schemas/{citation,context_profile,entitlement,benefit_report}.py` — confirm Pydantic v2 idioms.
+- `backend/.env.example` and `backend/.gitignore` — confirm secrets discipline.
+- `backend/doc/`, `backend/docs/`, `backend/prompt/` — what's in there?
+
+Just say *"review the rest"* and I'll pull them.
