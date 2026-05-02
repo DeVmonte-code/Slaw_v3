@@ -62,6 +62,9 @@ cd backend && PYTHONPATH=src pytest tests/test_schemas.py tests/test_trigger.py 
 - `frontend/app/results/page.tsx` — Results page with benefit cards
 - `frontend/lib/api-types.ts` — Auto-generated from backend OpenAPI
 - `frontend/lib/api-client.ts` — Typed openapi-fetch client
+- `frontend/Dockerfile` — Production container build (3-stage node:20-alpine, port 5000)
+- `frontend/.dockerignore` — Build context exclusions
+- `frontend/scripts/smoke.sh` — End-to-end frontend smoke test (run with workflow stopped)
 
 ## Legal Disclaimer
 
