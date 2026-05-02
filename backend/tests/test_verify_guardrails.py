@@ -2,26 +2,35 @@
 
 Covers Task #18:
 
-(i)   Repealed-law clause is present in the Qdrant query filter.
-(ii)  Wrong-canton chunks are excluded by the canton MatchAny clause.
-(iii) Sub-threshold retrieval short-circuits the verifier — no Claude call.
-(iv)  DE chunk is presented to Claude as is_authoritative=true alongside an
-      EN translation marked is_authoritative=false (DE-provenance SR).
+(i)    Repealed-law clause is present in the Qdrant query filter.
+(ii)   Wrong-canton chunks are excluded by the canton MatchAny clause.
+(iii)  Sub-threshold retrieval short-circuits the verifier — no Claude call.
+(iv)   DE chunk is presented to Claude as is_authoritative=true alongside an
+       EN translation marked is_authoritative=false (DE-provenance SR).
+(v)    EN-only retrieval keeps is_authoritative=false and sets
+       translation_only=true on the envelope.
+(vi)   Server-side cap clamps translation-only confidence to 0.75.
+(vii)  Integration: retrieve_for_citation passes score_threshold to Qdrant,
+       transforms payload (language + effective_date), and probes once for
+       telemetry when the above-threshold response is empty.
 """
 from __future__ import annotations
 
 import json
 from datetime import date
+from types import SimpleNamespace
 from typing import Any
 from unittest.mock import AsyncMock
 
 import pytest
 from qdrant_client.http import models as qmodels
 
+from swiss_legal_api.engine import retrieval as retrieval_mod
 from swiss_legal_api.engine import verify as verify_mod
 from swiss_legal_api.engine.retrieval import (
     RetrievedChunk,
     _build_query_filter,
+    retrieve_for_citation,
 )
 from swiss_legal_api.engine.verify import (
     _CHUNKS_CLOSE,
@@ -305,3 +314,105 @@ async def test_translation_only_caps_confidence_server_side(
 
     assert result.supports is True
     assert result.confidence == pytest.approx(0.75)
+
+
+def test_retrieve_for_citation_integration_with_mocked_qdrant(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """(vii) End-to-end retrieval against a stubbed Qdrant client.
+
+    Asserts that retrieve_for_citation:
+      - passes ``score_threshold`` to ``query_points`` (source-side prune),
+      - transforms point payloads into RetrievedChunk with language and
+        effective_date,
+      - drops sub-threshold points via the defense-in-depth client filter,
+      - issues the no-threshold probe query exactly once when above-threshold
+        retrieval is empty (so operators get a top_score telemetry line).
+    """
+    monkeypatch.setattr(retrieval_mod, "embed_query", lambda _q: [0.0] * 384)
+
+    calls: list[dict[str, Any]] = []
+
+    def make_response(points: list[Any]) -> SimpleNamespace:
+        return SimpleNamespace(points=points)
+
+    def stub_query_points(**kwargs: Any) -> SimpleNamespace:
+        calls.append(kwargs)
+        # First call carries score_threshold; return one above + one below
+        # to exercise both Qdrant-side and client-side pruning paths.
+        if "score_threshold" in kwargs and kwargs["score_threshold"] is not None:
+            above = SimpleNamespace(
+                score=0.91,
+                payload={
+                    "text": "Original German law text.",
+                    "language": "de",
+                    "effective_date": "1995-01-01T00:00:00Z",
+                },
+            )
+            # Defense-in-depth: even if Qdrant accidentally returns a
+            # below-threshold chunk, the client filter must drop it.
+            below = SimpleNamespace(
+                score=0.40,
+                payload={
+                    "text": "Should be dropped.",
+                    "language": "de",
+                    "effective_date": "1995-01-01T00:00:00Z",
+                },
+            )
+            return make_response([above, below])
+        # Probe query (no threshold) — used only for telemetry on empty above.
+        return make_response([SimpleNamespace(score=0.42, payload=None)])
+
+    fake_client = SimpleNamespace(query_points=stub_query_points)
+    monkeypatch.setattr(retrieval_mod, "_client", lambda: fake_client)
+
+    cit = _de_citation()
+    result = retrieve_for_citation(cit, "training", profile_canton="ZH")
+
+    # Source-side score_threshold was passed to Qdrant, populated from settings.
+    assert calls, "expected at least one query_points call"
+    assert calls[0]["score_threshold"] == retrieval_mod.settings.score_threshold
+    # Filter built into the request includes the canton + repealed_date guards.
+    flt = calls[0]["query_filter"]
+    assert isinstance(flt, qmodels.Filter)
+
+    # Only the above-threshold point survives, transformed correctly.
+    assert len(result) == 1
+    chunk = result[0]
+    assert chunk.score == pytest.approx(0.91)
+    assert chunk.language == "de"
+    assert chunk.effective_date == date(1995, 1, 1)
+    assert "Original German" in chunk.text
+    # No probe call needed when above-threshold retrieval was non-empty.
+    assert len(calls) == 1
+
+
+def test_retrieve_for_citation_probes_for_telemetry_on_empty(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """When Qdrant returns nothing above threshold, exactly one probe query
+    (no threshold) is issued so operators see the actual top observed score."""
+    monkeypatch.setattr(retrieval_mod, "embed_query", lambda _q: [0.0] * 384)
+
+    calls: list[dict[str, Any]] = []
+
+    def stub_query_points(**kwargs: Any) -> SimpleNamespace:
+        calls.append(kwargs)
+        if "score_threshold" in kwargs and kwargs["score_threshold"] is not None:
+            return SimpleNamespace(points=[])
+        # Probe response: return one low-similarity point for telemetry.
+        return SimpleNamespace(
+            points=[SimpleNamespace(score=0.31, payload=None)]
+        )
+
+    monkeypatch.setattr(
+        retrieval_mod, "_client", lambda: SimpleNamespace(query_points=stub_query_points)
+    )
+
+    result = retrieve_for_citation(_de_citation(), "training", profile_canton="ZH")
+
+    assert result == []
+    # Two calls: the threshold-gated query + the no-threshold telemetry probe.
+    assert len(calls) == 2
+    assert calls[0]["score_threshold"] == retrieval_mod.settings.score_threshold
+    assert "score_threshold" not in calls[1] or calls[1].get("score_threshold") is None
