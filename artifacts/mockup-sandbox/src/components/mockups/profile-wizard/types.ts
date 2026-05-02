@@ -40,6 +40,19 @@ export type IncomeBand =
   | "120_200k"
   | "gt_200k";
 
+export type PermitType =
+  | "none"
+  | "B"
+  | "C"
+  | "L"
+  | "F"
+  | "N"
+  | "S"
+  | "G"
+  | "Ci";
+
+export type NationalityStatus = "swiss" | "eu_efta" | "third_country";
+
 export type LifeEventKind =
   | "moved_canton"
   | "had_child"
@@ -78,6 +91,10 @@ export interface ContextProfile {
   has_third_pillar: boolean;
   third_pillar_chf_this_year: number;
 
+  permit_type: PermitType;
+  nationality_status: NationalityStatus;
+  years_in_switzerland: number | null;
+
   recent_life_events: LifeEvent[];
 }
 
@@ -101,6 +118,10 @@ export const DEFAULT_CONTEXT_PROFILE: ContextProfile = {
   income_band_chf: "120_200k",
   has_third_pillar: true,
   third_pillar_chf_this_year: 7056,
+
+  permit_type: "none",
+  nationality_status: "swiss",
+  years_in_switzerland: null,
 
   recent_life_events: [],
 };

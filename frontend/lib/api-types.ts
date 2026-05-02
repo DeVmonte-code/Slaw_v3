@@ -21,6 +21,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/readyz": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Readyz */
+        get: operations["readyz_readyz_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/scan": {
         parameters: {
             query?: never;
@@ -211,6 +228,20 @@ export interface components {
             commute_km_daily?: number | null;
             /** Childcare Cost Chf Yearly */
             childcare_cost_chf_yearly?: number | null;
+            /**
+             * Permit Type
+             * @default none
+             * @enum {string}
+             */
+            permit_type: "none" | "B" | "C" | "L" | "F" | "N" | "S" | "G" | "Ci";
+            /**
+             * Nationality Status
+             * @default swiss
+             * @enum {string}
+             */
+            nationality_status: "swiss" | "eu_efta" | "third_country";
+            /** Years In Switzerland */
+            years_in_switzerland?: number | null;
             /** Recent Life Events */
             recent_life_events?: components["schemas"]["LifeEvent"][];
             /** Free Text Narrative */
@@ -292,6 +323,28 @@ export interface operations {
                 content: {
                     "application/json": {
                         [key: string]: boolean;
+                    };
+                };
+            };
+        };
+    };
+    readyz_readyz_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
                     };
                 };
             };

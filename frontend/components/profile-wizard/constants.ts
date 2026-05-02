@@ -29,6 +29,30 @@ export const MARITAL_OPTIONS: { value: ContextProfile["marital_status"]; label: 
   { value: "widowed", label: "Widowed" },
 ];
 
+export const NATIONALITY_OPTIONS: {
+  value: ContextProfile["nationality_status"];
+  label: string;
+}[] = [
+  { value: "swiss", label: "Swiss citizen" },
+  { value: "eu_efta", label: "EU / EFTA national" },
+  { value: "third_country", label: "Third-country national" },
+];
+
+export const PERMIT_OPTIONS: {
+  value: ContextProfile["permit_type"];
+  label: string;
+}[] = [
+  { value: "none", label: "No permit / not applicable" },
+  { value: "B", label: "B — Residence permit" },
+  { value: "C", label: "C — Settlement permit" },
+  { value: "L", label: "L — Short-stay permit" },
+  { value: "F", label: "F — Provisional admission" },
+  { value: "N", label: "N — Asylum seeker" },
+  { value: "S", label: "S — Protection status" },
+  { value: "G", label: "G — Cross-border commuter" },
+  { value: "Ci", label: "Ci — Family of intl. official" },
+];
+
 export const INCOME_OPTIONS: { value: ContextProfile["income_band_chf"]; label: string }[] = [
   { value: "lt_30k", label: "Under CHF 30,000" },
   { value: "30_50k", label: "CHF 30,000–50,000" },
@@ -81,5 +105,8 @@ export const DEFAULT_PROFILE: ContextProfile = {
   third_pillar_chf_this_year: 7056,
   business_activity: "none",
   childcare_cost_chf_yearly: 18000,
+  permit_type: "none",
+  nationality_status: "swiss",
+  years_in_switzerland: null,
   recent_life_events: [],
 };

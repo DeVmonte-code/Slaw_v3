@@ -11,6 +11,8 @@ import {
   MARITAL_OPTIONS,
   INCOME_OPTIONS,
   LIFE_EVENT_OPTIONS,
+  NATIONALITY_OPTIONS,
+  PERMIT_OPTIONS,
   DEFAULT_PROFILE,
 } from "./constants";
 import "./wizard.css";
@@ -20,6 +22,7 @@ type LifeEventKind = LifeEvent["event"];
 
 const STEPS = [
   { id: "location", title: "Location & Employment" },
+  { id: "residency", title: "Residency & Permit" },
   { id: "housing", title: "Housing" },
   { id: "household", title: "Household & Family" },
   { id: "income", title: "Income & Savings" },
@@ -108,6 +111,14 @@ export function SteppedWizard() {
       out.childcare_cost_chf_yearly = null;
       out.children_ages = [];
     }
+    // Swiss citizens hold no permit and the years-in-Switzerland number
+    // doesn't gate any entitlement for them. Force the canonical values so
+    // we never accidentally ship a stale "B permit / 3 years" from a user
+    // who flipped back to Swiss after experimenting.
+    if (out.nationality_status === "swiss") {
+      out.permit_type = "none";
+      out.years_in_switzerland = null;
+    }
     return out;
   };
 
@@ -151,6 +162,30 @@ export function SteppedWizard() {
       }
     }
     if (idx === 1) {
+      if (!profile.nationality_status) {
+        e.nationality_status = "Select your nationality status.";
+      }
+      if (profile.nationality_status !== "swiss") {
+        if (!profile.permit_type) {
+          e.permit_type = "Select your permit type.";
+        }
+        // Required for non-Swiss because naturalisation, family-reunification,
+        // and source-tax thresholds all gate on a numeric years count.
+        // Swiss residents may leave it blank (handled by the outer branch).
+        if (
+          profile.years_in_switzerland === null ||
+          profile.years_in_switzerland === undefined
+        ) {
+          e.years_in_switzerland = "Enter how many years you have lived in Switzerland.";
+        } else {
+          const ys = num(profile.years_in_switzerland);
+          if (!Number.isInteger(ys) || ys < 0 || ys > 100) {
+            e.years_in_switzerland = "Years must be a whole number between 0 and 100.";
+          }
+        }
+      }
+    }
+    if (idx === 2) {
       if (!profile.housing_status) e.housing_status = "Select your housing status.";
       if (profile.housing_status === "tenant") {
         const ry = num(profile.rental_start_year);
@@ -163,7 +198,7 @@ export function SteppedWizard() {
         }
       }
     }
-    if (idx === 2) {
+    if (idx === 3) {
       if (!profile.marital_status) e.marital_status = "Select your marital status.";
       const hs = num(profile.household_size);
       if (!Number.isInteger(hs) || hs < 1 || hs > 12) {
@@ -180,7 +215,7 @@ export function SteppedWizard() {
         }
       }
     }
-    if (idx === 3) {
+    if (idx === 4) {
       if (!profile.income_band_chf) e.income_band_chf = "Select your income band.";
       if (profile.has_third_pillar) {
         const p3 = num(profile.third_pillar_chf_this_year);
@@ -382,6 +417,75 @@ export function SteppedWizard() {
 
                 {stepIndex === 1 && (
                   <div className="flex flex-col gap-5">
+                    <Field
+                      label="Nationality / Residency Status"
+                      error={errors.nationality_status}
+                    >
+                      <select
+                        name="nationality_status"
+                        value={profile.nationality_status}
+                        onChange={handleChange}
+                        className={inputClass}
+                      >
+                        {NATIONALITY_OPTIONS.map((o) => (
+                          <option key={o.value} value={o.value}>
+                            {o.label}
+                          </option>
+                        ))}
+                      </select>
+                    </Field>
+
+                    {profile.nationality_status !== "swiss" && (
+                      <>
+                        <Field label="Residence Permit" error={errors.permit_type}>
+                          <select
+                            name="permit_type"
+                            value={profile.permit_type ?? "none"}
+                            onChange={handleChange}
+                            className={inputClass}
+                          >
+                            {PERMIT_OPTIONS.map((o) => (
+                              <option key={o.value} value={o.value}>
+                                {o.label}
+                              </option>
+                            ))}
+                          </select>
+                        </Field>
+
+                        <Field
+                          label="Years living in Switzerland"
+                          error={errors.years_in_switzerland}
+                        >
+                          <input
+                            name="years_in_switzerland"
+                            type="number"
+                            min={0}
+                            max={100}
+                            value={profile.years_in_switzerland ?? ""}
+                            onChange={handleChange}
+                            className={inputClass}
+                            placeholder="e.g. 5"
+                          />
+                          <span className="text-xs text-[var(--slaw-ink-soft)] mt-1 block">
+                            Used to check naturalisation, family-reunification
+                            and source-tax thresholds. Use 0 if you arrived
+                            this year.
+                          </span>
+                        </Field>
+                      </>
+                    )}
+
+                    {profile.nationality_status === "swiss" && (
+                      <p className="text-xs text-[var(--slaw-ink-soft)] rounded-md bg-[var(--slaw-line)] px-3 py-2">
+                        Swiss citizens don&rsquo;t need a residence permit, so
+                        we&rsquo;ll skip those questions.
+                      </p>
+                    )}
+                  </div>
+                )}
+
+                {stepIndex === 2 && (
+                  <div className="flex flex-col gap-5">
                     <Field label="Housing Status" error={errors.housing_status}>
                       <select
                         name="housing_status"
@@ -440,7 +544,7 @@ export function SteppedWizard() {
                   </div>
                 )}
 
-                {stepIndex === 2 && (
+                {stepIndex === 3 && (
                   <div className="flex flex-col gap-5">
                     <Field label="Marital Status" error={errors.marital_status}>
                       <select
@@ -530,7 +634,7 @@ export function SteppedWizard() {
                   </div>
                 )}
 
-                {stepIndex === 3 && (
+                {stepIndex === 4 && (
                   <div className="flex flex-col gap-5">
                     <Field label="Income Band (CHF/year)" error={errors.income_band_chf}>
                       <select
