@@ -1,0 +1,23 @@
+{
+  "canton": "VD",
+  "language": "fr",
+  "employment_status": "employee_full_time",
+  "employment_start_year": 2022,
+  "weekly_hours": 40,
+  "housing_status": "tenant",
+  "rental_start_year": 2022,
+  "lease_reference_rate_tracked": false,
+  "rent_chf_monthly": 1800,
+  "household_size": 1,
+  "children_count": 0,
+  "children_ages": [],
+  "marital_status": "single",
+  "income_band_chf": "80_120k",
+  "has_third_pillar": false,
+  "business_activity": "none",
+  "commute_km_daily": 8,
+  "permit_type": "B",
+  "nationality_status": "eu_efta",
+  "years_in_switzerland": 3,
+  "recent_life_events": []
+}

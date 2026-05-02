@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Annotated, Any, Literal, Union
+from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Discriminator, Field, Tag
 
@@ -15,17 +15,17 @@ class _StrictTrigger(BaseModel):
 
 class All(_StrictTrigger):
     kind: Literal["all"] = "all"
-    all: list["TriggerExpr"]
+    all: list[TriggerExpr]
 
 
 class Any_(_StrictTrigger):
     kind: Literal["any"] = "any"
-    any: list["TriggerExpr"]
+    any: list[TriggerExpr]
 
 
 class Not(_StrictTrigger):
     kind: Literal["not"] = "not"
-    not_: "TriggerExpr" = Field(alias="not")
+    not_: TriggerExpr = Field(alias="not")
 
 
 class Eq(_StrictTrigger):
@@ -107,20 +107,20 @@ def _trigger_discriminator(v: Any) -> str | None:
 
 
 TriggerExpr = Annotated[
-    Union[
-        Annotated[All, Tag("all")],
-        Annotated[Any_, Tag("any")],
-        Annotated[Not, Tag("not")],
-        Annotated[Eq, Tag("eq")],
-        Annotated[Gte, Tag("gte")],
-        Annotated[Lte, Tag("lte")],
-        Annotated[Gt, Tag("gt")],
-        Annotated[Lt, Tag("lt")],
-        Annotated[In, Tag("in")],
-        Annotated[Between, Tag("between")],
-        Annotated[Exists, Tag("exists")],
-        Annotated[EventWithinYears, Tag("event_within_years")],
-    ],
+    (
+        Annotated[All, Tag("all")]
+        | Annotated[Any_, Tag("any")]
+        | Annotated[Not, Tag("not")]
+        | Annotated[Eq, Tag("eq")]
+        | Annotated[Gte, Tag("gte")]
+        | Annotated[Lte, Tag("lte")]
+        | Annotated[Gt, Tag("gt")]
+        | Annotated[Lt, Tag("lt")]
+        | Annotated[In, Tag("in")]
+        | Annotated[Between, Tag("between")]
+        | Annotated[Exists, Tag("exists")]
+        | Annotated[EventWithinYears, Tag("event_within_years")]
+    ),
     Discriminator(_trigger_discriminator),
 ]
 

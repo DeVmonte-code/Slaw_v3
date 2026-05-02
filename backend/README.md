@@ -138,6 +138,69 @@ None. Every entitlement in `seed/entitlements.json` resolves to an article in
 article that has no Fedlex EN translation **and** is not reproducible verbatim in DE,
 list it here with the reason and remove the dependent entitlement.
 
+## Permit-Status Sprint (Option C)
+
+The catalog now distinguishes Swiss residents from foreign permit holders.
+`ContextProfile` carries three permit-status fields:
+
+| Field                   | Type / values                                                       | Default  |
+| ----------------------- | ------------------------------------------------------------------- | -------- |
+| `permit_type`           | `none`, `B`, `C`, `L`, `F`, `N`, `S`, `G`, `Ci`                     | `none`   |
+| `nationality_status`    | `swiss`, `eu_efta`, `third_country`                                 | `swiss`  |
+| `years_in_switzerland`  | `int` ≥ 0, ≤ 100, or `null` (user-supplied; not derived)            | `null`   |
+
+The defaults preserve backward compatibility: a fixture that omits these
+fields evaluates as a Swiss resident with no permit, exactly the regression
+behaviour the Luis fixture relied on before the sprint.
+
+### New entitlements
+
+| ID                                       | Citation             | Trigger gist                              |
+| ---------------------------------------- | -------------------- | ----------------------------------------- |
+| `quellensteuer_subsequent_assessment`    | DBG (SR 642.11) Art. 99a | B permit + non-Swiss                     |
+| `naturalisation_eligibility`             | BüG (SR 141.0) Art. 9    | C permit + ≥10 yrs + non-Swiss            |
+| `family_reunification_right`             | AIG (SR 142.20) Art. 43  | B/C permit + non-Swiss + (married OR kids) |
+
+### Pending verbatim citations
+
+The six SR articles below are seeded with `text: "__PENDING_FEDLEX_VERBATIM__"`
+because Fedlex consolidated text was not pasted in this sprint. They must be
+backfilled with the literal article text before the corpus can support live
+Claude verification of the new entitlements. The `quote_under_15_words` slice
+on each new entitlement is currently a paraphrase (flagged here so that
+reviewers do not mistake them for verbatim Fedlex extracts).
+
+| SR        | Article | Topic                                              | ELI URL                                                       |
+| --------- | ------- | -------------------------------------------------- | ------------------------------------------------------------- |
+| `642.11`  | 89      | Quellensteuerpflicht (source tax obligation)       | https://www.fedlex.admin.ch/eli/cc/1991/1184_1184_1184/de     |
+| `642.11`  | 99a     | Nachträgliche ordentliche Veranlagung (NOV)        | https://www.fedlex.admin.ch/eli/cc/1991/1184_1184_1184/de     |
+| `141.0`   | 9       | Formelle Voraussetzungen Einbürgerung              | https://www.fedlex.admin.ch/eli/cc/2016/404/de                |
+| `141.0`   | 11      | Materielle Voraussetzungen Einbürgerung            | https://www.fedlex.admin.ch/eli/cc/2016/404/de                |
+| `142.20`  | 43      | Familiennachzug — C-Bewilligung                    | https://www.fedlex.admin.ch/eli/cc/2007/758/de                |
+| `142.20`  | 44      | Familiennachzug — B-Bewilligung                    | https://www.fedlex.admin.ch/eli/cc/2007/758/de                |
+
+### Catalog validator
+
+`scripts/validate_catalog.py` walks every trigger expression in
+`seed/entitlements.json`, extracts the field paths referenced by leaf
+operators, and asserts that each top-level field exists on `ContextProfile`.
+It also validates that any `event_within_years` event name is a real
+`LifeEventKind`. The validator is wired into `scripts/smoke.sh` as a hard
+gate that runs before the unit tests, so a new entitlement that references
+a typo'd profile field fails CI immediately rather than at scan time.
+
+### Persona fixtures
+
+- `fixtures/luis_profile.json` — Swiss, ZH, married, 2 kids (regression baseline).
+- `fixtures/b_permit_eu_employee.json` — EU/EFTA, B permit, VD, single, 3 yrs in CH (Quellensteuer persona).
+- `fixtures/c_permit_third_country.json` — third country, C permit, GE, married + 1 kid, 11 yrs in CH (naturalisation persona).
+
+### Trigger-DSL constraint
+
+The sprint did **not** add any new trigger operators. All permit-status
+gating is expressed with the existing 12 operators (notably `eq`, `in`,
+`not`, `gte`, `any`).
+
 ## Trigger DSL
 
 The trigger DSL (`schemas/trigger_dsl.py`) is a Pydantic v2 tagged union dispatched

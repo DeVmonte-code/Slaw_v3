@@ -17,6 +17,12 @@ HousingStatus = Literal["tenant", "owner", "living_with_family"]
 MaritalStatus = Literal["single", "married", "registered_partnership", "divorced", "widowed"]
 IncomeBand = Literal["lt_30k", "30_50k", "50_80k", "80_120k", "120_200k", "gt_200k"]
 BusinessActivity = Literal["none", "freelance", "sole_proprietor", "gmbh", "ag"]
+# Residence permits per Ausländer- und Integrationsgesetz (AIG, SR 142.20).
+# "none" stands in for Swiss citizens (who hold no permit) and for unspecified
+# fixtures; entitlements that depend on a foreign permit gate against the
+# specific letter directly.
+PermitType = Literal["none", "B", "C", "L", "F", "N", "S", "G", "Ci"]
+NationalityStatus = Literal["swiss", "eu_efta", "third_country"]
 LifeEventKind = Literal[
     "moved_canton", "had_child", "got_married", "got_divorced",
     "lost_job", "started_business", "started_studies", "bought_property", "retired",
@@ -57,6 +63,16 @@ class ContextProfile(BaseModel):
 
     commute_km_daily: float | None = Field(default=None, ge=0)
     childcare_cost_chf_yearly: float | None = Field(default=None, ge=0)
+
+    # Permit-status fields (Option C — added in the permit-status sprint).
+    # Default to a Swiss-resident, no-permit baseline so existing fixtures and
+    # tests written before the sprint keep passing without migration.
+    permit_type: PermitType = "none"
+    nationality_status: NationalityStatus = "swiss"
+    # User-supplied; not derived from arrival_year. None means unknown / N/A
+    # (Swiss citizens leave it blank). Naturalisation triggers gate on a
+    # numeric threshold so unknown values correctly fail to match.
+    years_in_switzerland: int | None = Field(default=None, ge=0, le=100)
 
     recent_life_events: list[LifeEvent] = Field(default_factory=list)
     free_text_narrative: str | None = Field(default=None, max_length=2000)

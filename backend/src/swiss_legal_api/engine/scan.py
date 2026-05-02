@@ -6,7 +6,7 @@ import json
 import logging
 import math
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from ..config import settings
@@ -95,7 +95,7 @@ async def run_benefit_scan(
     )
 
     return BenefitReport(
-        generated_at=datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+        generated_at=datetime.now(UTC).isoformat().replace("+00:00", "Z"),
         profile_hash=profile_hash,
         benefits=benefits,
         suppressed_count=suppressed,

@@ -18,5 +18,8 @@
   "business_activity": "none",
   "commute_km_daily": 12,
   "childcare_cost_chf_yearly": 18000,
+  "permit_type": "none",
+  "nationality_status": "swiss",
+  "years_in_switzerland": null,
   "recent_life_events": []
 }

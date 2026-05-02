@@ -17,13 +17,19 @@ def test_law_articles_parse():
 
 def test_entitlements_parse_and_count():
     data = json.loads((_root() / "seed" / "entitlements.json").read_text())
-    assert len(data) == 15
+    # 15 baseline + 3 permit-status sprint additions =
+    # quellensteuer_subsequent_assessment, naturalisation_eligibility,
+    # family_reunification_right.
+    assert len(data) == 18
     ids = set()
     for row in data:
         e = Entitlement.model_validate(row)
         ids.add(e.id)
     assert "rent_reduction_reference_rate" in ids
     assert "childcare_cost_deduction" in ids
+    assert "quellensteuer_subsequent_assessment" in ids
+    assert "naturalisation_eligibility" in ids
+    assert "family_reunification_right" in ids
 
 
 def test_entitlement_citations_exist_in_corpus():

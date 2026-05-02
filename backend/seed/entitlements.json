@@ -303,7 +303,11 @@
     ],
     "trigger": {
       "all": [
-        {"eq": ["employment_status", "unemployed"]}
+        {"eq": ["employment_status", "unemployed"]},
+        {"any": [
+          {"eq": ["nationality_status", "swiss"]},
+          {"in": ["permit_type", ["B", "C"]]}
+        ]}
       ]
     },
     "estimated_value_chf": {"min": 12000, "max": 70000, "per": "year"},
@@ -413,5 +417,97 @@
     "required_action": "consultation_with_lawyer",
     "time_limit_days": 3650,
     "confidence_floor": 0.5
+  },
+  {
+    "id": "quellensteuer_subsequent_assessment",
+    "title": {
+      "de": "Nachträgliche ordentliche Veranlagung (Quellensteuer)",
+      "en": "Subsequent Ordinary Assessment (Source Tax)"
+    },
+    "category": "tax_deduction",
+    "jurisdiction": "CH",
+    "source_citations": [
+      {
+        "sr_number": "642.11",
+        "article": "99a",
+        "paragraph": "1",
+        "canton": "CH",
+        "language": "de",
+        "quote_under_15_words": "Source-taxed persons may request subsequent ordinary assessment to claim deductions"
+      }
+    ],
+    "trigger": {
+      "all": [
+        {"eq": ["permit_type", "B"]},
+        {"not": {"eq": ["nationality_status", "swiss"]}}
+      ]
+    },
+    "estimated_value_chf": {"min": 500, "max": 5000, "per": "year"},
+    "required_action": "cantonal_application",
+    "time_limit_days": null,
+    "confidence_floor": 0.6
+  },
+  {
+    "id": "naturalisation_eligibility",
+    "title": {
+      "de": "Anspruch auf ordentliche Einbürgerung",
+      "en": "Ordinary Naturalisation Eligibility"
+    },
+    "category": "social_security",
+    "jurisdiction": "CH",
+    "source_citations": [
+      {
+        "sr_number": "141.0",
+        "article": "9",
+        "paragraph": "1",
+        "canton": "CH",
+        "language": "de",
+        "quote_under_15_words": "Naturalisation requires ten years residence and a settlement permit"
+      }
+    ],
+    "trigger": {
+      "all": [
+        {"eq": ["permit_type", "C"]},
+        {"gte": ["years_in_switzerland", 10]},
+        {"not": {"eq": ["nationality_status", "swiss"]}}
+      ]
+    },
+    "estimated_value_chf": {"min": 0, "max": 2000, "per": "one_time"},
+    "required_action": "cantonal_application",
+    "time_limit_days": null,
+    "confidence_floor": 0.6
+  },
+  {
+    "id": "family_reunification_right",
+    "title": {
+      "de": "Recht auf Familiennachzug",
+      "en": "Family Reunification Right"
+    },
+    "category": "social_security",
+    "jurisdiction": "CH",
+    "source_citations": [
+      {
+        "sr_number": "142.20",
+        "article": "43",
+        "paragraph": "1",
+        "canton": "CH",
+        "language": "de",
+        "quote_under_15_words": "Permit holders may bring spouse and minor children to Switzerland"
+      }
+    ],
+    "trigger": {
+      "all": [
+        {"not": {"eq": ["nationality_status", "swiss"]}},
+        {"in": ["permit_type", ["B", "C"]]},
+        {"any": [
+          {"eq": ["marital_status", "married"]},
+          {"gte": ["children_count", 1]}
+        ]}
+      ]
+    },
+    "estimated_value_chf": {"min": 0, "max": 3000, "per": "one_time"},
+    "required_action": "cantonal_application",
+    "time_limit_days": null,
+    "confidence_floor": 0.6
   }
 ]
