@@ -61,6 +61,45 @@ class Settings(BaseSettings):
     # audit endpoint.
     admin_audit_token: str = ""
 
+    # ----- Managed Agents (Task #26) -------------------------------------
+    # When True, every ``_call_claude`` call site (engine.verify and
+    # api.chat) routes through ``engine.agent_runner.run_session`` instead
+    # of ``messages.create``. The runner opens a managed-agents session,
+    # streams events, and returns the same ``(text, AgentProvenance)``
+    # tuple the messages.create path returns — but with
+    # ``call_kind='sessions.events'`` and the tool/MCP traces populated so
+    # the Task #25 audit flips to ``agent_backed=True``.
+    #
+    # Defaulted off so a misconfigured deploy (missing agent_id, vault,
+    # MCP servers) cannot silently degrade to zero-result scans. Flip this
+    # flag only after ``managed_agents.bootstrap`` has populated the IDs
+    # below and the three MCP servers are reachable over HTTPS.
+    use_managed_agents: bool = False
+    # Persisted IDs from the one-shot bootstrap. The bootstrap script
+    # writes them back to the .env on success; the runner refuses to
+    # start a session when ``use_managed_agents=True`` and any of these
+    # are empty (fail loudly, not silently).
+    managed_agent_id: str = ""
+    managed_agent_version: int = 0
+    managed_environment_id: str = ""
+    managed_vault_id: str = ""
+    # HTTPS URLs for the three MCP servers the agent registers.
+    # Empty values are tolerated only for read-only deployments that
+    # explicitly don't need a given server (the bootstrap script will
+    # skip the corresponding ``mcp_toolset`` entry).
+    mcp_swiss_law_url: str = ""
+    mcp_contract_tools_url: str = ""
+    mcp_user_context_url: str = ""
+    # Anthropic Managed Agents beta header value. Centralised so a future
+    # GA bump only changes one constant.
+    managed_agents_beta: str = "managed-agents-2026-04-01"
+    # Anthropic API base URL — overridable in tests.
+    anthropic_api_base: str = "https://api.anthropic.com"
+    # Per-session wall-clock cap. Managed-agents sessions are bounded by
+    # the agent's tool budget too, but we add a client-side timeout so
+    # one stuck session can't block a /scan request indefinitely.
+    managed_session_timeout_s: float = 180.0
+
     def cors_origins_list(self) -> list[str]:
         raw = self.cors_allow_origins or self.frontend_origin
         if not raw.strip():

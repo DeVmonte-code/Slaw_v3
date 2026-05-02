@@ -98,6 +98,34 @@ Key modules:
 - `frontend/lib/api-client.ts` — `getOrCreateUserId()` localStorage helper
 - See `backend/README.md` "Scheduled sweep" section for full configuration / endpoint reference.
 
+## Managed Agents pipeline (Task #26)
+
+Every `_call_claude` site (`engine/verify.py`, `api/chat.py`) can route
+through a Claude Managed Agents session instead of `messages.create`.
+Gated by `USE_MANAGED_AGENTS` (default false) so dev/test environments
+without provisioned agent IDs still work.
+
+- `backend/src/swiss_legal_api/mcp_servers/{swiss_law,contract_tools,user_context}.py`
+  — three MCP servers (read-only retrieval; verify/scan; user docs).
+  Each tool is a thin wrapper around shared callables; the SSOT test
+  asserts identity so Config A and Config B can't drift.
+- `backend/src/swiss_legal_api/engine/agent_runner.py` — opens the SSE
+  stream first, sends `user.message`, consumes events until
+  `session.status_idle`, returns `(text, AgentProvenance)` with
+  `call_kind="sessions.events"` populated. `agent_backed` is True iff
+  ≥1 tool/MCP-tool event was observed.
+- `backend/src/swiss_legal_api/managed_agents/bootstrap.py` —
+  `python -m swiss_legal_api.managed_agents.bootstrap` provisions agent
+  + environment + vault and writes IDs back to `.env`.
+- Operator runbook: `backend/doc/audits/2026-05-02-managed-agents-flip.md`.
+- Tests: `backend/tests/test_agent_runner.py` (mocked SSE),
+  `backend/tests/test_mcp_single_source_of_truth.py`.
+
+Required settings to flip the flag: `MANAGED_AGENT_ID`,
+`MANAGED_ENVIRONMENT_ID`, `MCP_SWISS_LAW_URL`,
+`MCP_CONTRACT_TOOLS_URL`, `MCP_USER_CONTEXT_URL`. Missing IDs raise
+`ManagedAgentsConfigError` at request time (no silent degrade).
+
 ## Key Files
 
 - `backend/src/swiss_legal_api/api/main.py` — FastAPI app

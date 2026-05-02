@@ -4,6 +4,7 @@ import asyncio
 import logging
 import time
 
+import httpx
 from anthropic import APIConnectionError, APITimeoutError, AsyncAnthropic, RateLimitError
 from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 
@@ -20,7 +21,17 @@ _anthropic = AsyncAnthropic(api_key=settings.anthropic_api_key)
 @retry(
     stop=stop_after_attempt(3),
     wait=wait_exponential(multiplier=1, min=2, max=30),
-    retry=retry_if_exception_type((RateLimitError, APIConnectionError, APITimeoutError)),
+    # Same retry parity as engine.verify._call_claude — the managed
+    # agents path raises httpx.TransportError on transient failures,
+    # which must be retried alongside the legacy Anthropic SDK errors.
+    retry=retry_if_exception_type(
+        (
+            RateLimitError,
+            APIConnectionError,
+            APITimeoutError,
+            httpx.TransportError,
+        )
+    ),
     reraise=True,
 )
 async def _call_claude(
@@ -30,8 +41,14 @@ async def _call_claude(
 
     Same audit contract as :func:`engine.verify._call_claude` (Task #25).
     /chat answers are not persisted, so the structured ``claude_call`` log
-    line is the only audit trail for this call site.
+    line is the only audit trail for this call site. When
+    ``settings.use_managed_agents`` is True, routes through
+    :func:`engine.agent_runner.run_session` (Task #26).
     """
+    if settings.use_managed_agents:
+        from ..engine.agent_runner import run_session
+
+        return await run_session(message_content, site=site)
     started = time.perf_counter()
     resp = await _anthropic.messages.create(
         model=settings.claude_model,

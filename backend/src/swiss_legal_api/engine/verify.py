@@ -8,6 +8,7 @@ import time
 from dataclasses import dataclass, field
 from typing import Any
 
+import httpx
 from anthropic import APIConnectionError, APITimeoutError, AsyncAnthropic, RateLimitError
 from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 
@@ -98,7 +99,18 @@ def _is_authoritative_language(sr_number: str, lang: str) -> bool:
 @retry(
     stop=stop_after_attempt(3),
     wait=wait_exponential(multiplier=1, min=2, max=30),
-    retry=retry_if_exception_type((RateLimitError, APIConnectionError, APITimeoutError)),
+    # Cover both the messages.create path (Anthropic SDK exceptions)
+    # and the managed-agents path (httpx transport errors raised by
+    # agent_runner.run_session). Without httpx.TransportError the
+    # managed path would lose retry parity with the legacy path.
+    retry=retry_if_exception_type(
+        (
+            RateLimitError,
+            APIConnectionError,
+            APITimeoutError,
+            httpx.TransportError,
+        )
+    ),
     reraise=True,
 )
 async def _call_claude(
@@ -106,13 +118,19 @@ async def _call_claude(
 ) -> tuple[str, AgentProvenance]:
     """Run one Claude inference and return (text, provenance).
 
-    Provenance is the audit contract for Task #25: every Claude call in
-    the codebase emits a structured ``claude_call`` log line and returns
-    an :class:`AgentProvenance`. Today's path is always
-    ``call_kind="messages.create"`` and ``agent_backed=False`` — Task #26
-    will flip the call sites to ``sessions.events`` and the same
-    contract will start surfacing tool-use evidence.
+    When ``settings.use_managed_agents`` is True (Task #26 production
+    posture) the call routes through
+    :func:`engine.agent_runner.run_session` and the provenance carries
+    ``call_kind='sessions.events'`` plus the observed tool-use counts.
+    Otherwise we fall back to ``messages.create`` so dev / test
+    environments without a provisioned managed agent still work.
     """
+    if settings.use_managed_agents:
+        # Lazy import keeps the messages.create cold-start path free of
+        # the agent_runner / httpx-streaming machinery.
+        from .agent_runner import run_session
+
+        return await run_session(user_content, site=site)
     started = time.perf_counter()
     resp = await _anthropic.messages.create(
         model=settings.claude_model,
