@@ -3,7 +3,8 @@ import React, { useState, FormEvent, ReactNode } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { ChevronLeft, ChevronRight, CheckCircle2 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { api, type ContextProfile } from "@/lib/api-client";
+import { api, getOrCreateUserId, type ContextProfile } from "@/lib/api-client";
+import Link from "next/link";
 import {
   CANTONS,
   EMPLOYMENT_OPTIONS,
@@ -59,6 +60,11 @@ export function SteppedWizard() {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  // Task #22 opt-in: when checked, the cleaned profile is also posted to
+  // ``/users/{user_id}/profile`` so the nightly sweep picks it up.
+  // The user_id is a per-browser UUID stored in localStorage; auth is
+  // intentionally out of scope for v1.
+  const [notifyEnabled, setNotifyEnabled] = useState(true);
 
   const update = <K extends keyof ContextProfile>(key: K, value: ContextProfile[K]) => {
     setProfile((prev) => ({ ...prev, [key]: value }));
@@ -269,12 +275,31 @@ export function SteppedWizard() {
     setErrors({});
     setSubmitError(null);
     setIsSubmitting(true);
-    const { data, error } = await api.POST("/scan", { body: sanitizeForSubmit(profile) });
-    setIsSubmitting(false);
+    const cleaned = sanitizeForSubmit(profile);
+    const { data, error } = await api.POST("/scan", { body: cleaned });
     if (error || !data) {
+      setIsSubmitting(false);
       setSubmitError(String(error ?? "Unknown error — is the backend running?"));
       return;
     }
+    // Persist the profile for the nightly sweep. We always upsert (not
+    // only when opting in) so flipping the toggle off here propagates
+    // ``notify_enabled=false`` to the backend and stops the sweep for
+    // returning users. Failure to register is non-fatal: /scan already
+    // succeeded above.
+    const userId = getOrCreateUserId();
+    if (userId) {
+      try {
+        await api.POST("/users/{user_id}/profile", {
+          params: { path: { user_id: userId } },
+          body: { profile: cleaned, notify_enabled: notifyEnabled },
+        });
+      } catch (e) {
+        // eslint-disable-next-line no-console
+        console.warn("sweep_profile_upsert_failed", e);
+      }
+    }
+    setIsSubmitting(false);
     sessionStorage.setItem("benefit_report", JSON.stringify(data));
     router.push("/results");
   };
@@ -738,6 +763,28 @@ export function SteppedWizard() {
               </button>
             )}
           </div>
+
+          {stepIndex === STEPS.length - 1 && (
+            <div className="mb-3 flex items-center justify-center gap-2 text-xs text-[var(--slaw-ink-soft)]">
+              <input
+                id="notify-enabled"
+                type="checkbox"
+                checked={notifyEnabled}
+                onChange={(e) => setNotifyEnabled(e.target.checked)}
+                className="h-3.5 w-3.5 accent-[var(--slaw-primary)]"
+              />
+              <label htmlFor="notify-enabled" className="cursor-pointer">
+                Notify me when my rights change (nightly sweep)
+              </label>
+              <span className="text-[var(--slaw-line-strong)]">·</span>
+              <Link
+                href="/alerts"
+                className="text-[var(--slaw-primary-strong)] hover:underline"
+              >
+                View alerts
+              </Link>
+            </div>
+          )}
 
           <p className="text-center text-[10px] leading-relaxed text-[var(--slaw-ink-soft)] opacity-80 max-w-[280px] mx-auto">
             Not a substitute for advice from a Swiss attorney registered with a cantonal bar.

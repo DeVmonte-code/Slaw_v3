@@ -28,6 +28,31 @@ class Settings(BaseSettings):
     frontend_origin: str = ""
     app_env: str = "development"
 
+    # ----- Scheduled benefit sweep (Task #22) -----------------------------
+    # Single-process APScheduler started in the FastAPI lifespan when
+    # ``sweep_enabled`` is true. Off by default so test/dev runs don't
+    # spawn a background thread silently.
+    sweep_enabled: bool = False
+    # Cron HOUR for the nightly sweep, in the server's local timezone.
+    # Decoupled from minute=0 so two clusters in the same region can
+    # stagger by a few minutes without colliding on Fedlex / Anthropic.
+    sweep_cron_hour: int = 3
+    sweep_cron_minute: int = 17
+    # Per-user retention. ``run_benefit_scan`` snapshots are not free
+    # (each carries a full BenefitReport JSON) so we cap history per
+    # user — diff only ever compares to the latest, older rows are
+    # historical telemetry.
+    sweep_retention_per_user: int = 30
+    # SQLite path for the persistent layer. Override to ``:memory:``
+    # in tests; production uses a file under ``backend/data/``.
+    sweep_db_path: str = "data/sweep.db"
+    # Path to the *previous* Fedlex snapshot. The sweep diffs the
+    # current ``seed/law_articles.fedlex.json`` against this file to
+    # build the changed-eli_uri set. After a successful sweep the
+    # current snapshot is copied into this slot so the next run picks
+    # up only deltas. Configurable so tests can use a tmpdir.
+    fedlex_previous_snapshot_path: str = "data/law_articles.fedlex.previous.json"
+
     def cors_origins_list(self) -> list[str]:
         raw = self.cors_allow_origins or self.frontend_origin
         if not raw.strip():

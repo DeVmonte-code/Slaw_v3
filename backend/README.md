@@ -477,6 +477,83 @@ do not need migration. All variants set `extra="forbid"` so payloads that smuggl
 operators in one node (e.g. `{"eq": [...], "gt": [...]}`) fail loudly instead of
 silently dropping the unmatched branch.
 
+## Scheduled sweep
+
+The API ships with an opt-in **nightly benefit sweep** (Task #22) that
+re-scans every stored user and writes a small inbox of NEW / GONE /
+UPDATED alerts whenever their entitlements move.
+
+### What it does
+
+1. APScheduler fires once per night (default `03:17` server-local).
+2. For each user with `notify_enabled=true`, the orchestrator calls
+   the same `run_benefit_scan` that powers `/scan` so diffs are
+   apples-to-apples with the synchronous endpoint.
+3. The new report is diffed against the user's previous one:
+   * **NEW** — entitlement appeared.
+   * **GONE** — entitlement disappeared.
+   * **UPDATED** — `estimated_value_chf` changed, the cited
+     `(sr_number, article)` set changed, *or* the entitlement cites
+     an article whose Fedlex text changed since the last sweep
+     (the "force rescan on Fedlex amendment" branch).
+4. Old scans beyond `SWEEP_RETENTION_PER_USER` (default 30) are
+   pruned per user. Alerts are kept indefinitely until the user
+   marks them read.
+
+### Storage
+
+SQLite at `backend/data/sweep.db` (override via `SWEEP_DB_PATH`).
+Three tables: `users`, `scan_results`, `alerts`. Single-process is
+fine for v1 — the scheduler runs in the same uvicorn worker as the
+API, so we don't need an external broker. Postgres would be the next
+step if/when this scales past one worker; the storage module has a
+single, narrow surface so the swap is one file.
+
+### Fedlex diff sub-job
+
+Each sweep diffs the current `seed/law_articles.fedlex.json` against
+the previous-run snapshot at `data/law_articles.fedlex.previous.json`
+(configurable). The aggregated text per `(sr_number, article)` is
+hashed so paragraph re-numbering by Fedlex doesn't cause spurious
+amendment alerts. After every successful sweep the current snapshot
+is promoted into the previous slot.
+
+### Configuration
+
+| Env var                          | Default                                | Notes                                   |
+|----------------------------------|----------------------------------------|-----------------------------------------|
+| `SWEEP_ENABLED`                  | `false`                                | Off in dev/test by default.             |
+| `SWEEP_CRON_HOUR`                | `3`                                    | Local-time hour for the nightly job.    |
+| `SWEEP_CRON_MINUTE`              | `17`                                   | Minute offset.                          |
+| `SWEEP_RETENTION_PER_USER`       | `30`                                   | Per-user scan history cap.              |
+| `SWEEP_DB_PATH`                  | `data/sweep.db`                        | Relative to `backend/`. Set `:memory:` for tests. |
+| `FEDLEX_PREVIOUS_SNAPSHOT_PATH`  | `data/law_articles.fedlex.previous.json` | Set to a writable tmp path in CI.       |
+
+### HTTP surface
+
+| Method | Path                                          | Purpose                                  |
+|--------|-----------------------------------------------|------------------------------------------|
+| POST   | `/users/{user_id}/profile`                    | Idempotent upsert (also flips opt-in).   |
+| GET    | `/users/{user_id}/profile`                    | Read back the stored profile.            |
+| GET    | `/users/{user_id}/scans/latest`               | Most-recent persisted `BenefitReport`.   |
+| GET    | `/users/{user_id}/alerts`                     | Inbox; `?unread_only=true` filters.      |
+| POST   | `/users/{user_id}/alerts/{alert_id}/read`     | Mark one alert as read (204).            |
+
+`user_id` is opaque — the frontend mints a UUID v4 in `localStorage`
+when the user opts in. Auth and push notifications are intentionally
+out of scope for v1.
+
+### Tests
+
+`tests/test_sweep.py` runs entirely offline: classifier rules,
+Fedlex snapshot diff, retention prune, alert idempotency, the
+orchestrator with a stubbed `scan_fn`, and the HTTP endpoints via
+ASGITransport.
+
+```bash
+pytest tests/test_sweep.py -v
+```
+
 ## Legal Disclaimer
 
 This software is not a substitute for advice from a Swiss attorney registered with a cantonal bar.

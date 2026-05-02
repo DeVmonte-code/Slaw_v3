@@ -32,14 +32,24 @@ export interface paths {
          * Readyz
          * @description Liveness + Qdrant reachability probe.
          *
-         *     Default behaviour (no ``include``) is unchanged: confirms Qdrant is
-         *     reachable and the scan path's primary collection exists implicitly via
-         *     the ``get_collections()`` call.
+         *     Default behaviour (no flags) is unchanged: confirms Qdrant is
+         *     reachable. The primary scan collection's *existence* is implied by
+         *     the cluster being up — but absence (or an empty collection) is a
+         *     silent killer for ``/scan`` (0 benefits, HTTP 200), so:
+         *
+         *     With ``?deep=1`` the probe additionally verifies that
+         *     ``settings.qdrant_collection`` exists **and** holds ``> 0`` points.
+         *     Returns 503 with a precise reason (``collection_missing`` /
+         *     ``collection_empty``) so operators pointing the backend at a fresh
+         *     or wrong cluster fail fast instead of debugging a "scan returns
+         *     nothing" mystery.
          *
          *     With ``?include=curriculum`` the probe additionally verifies the
          *     advisory ``settings.curriculum_collection`` is present. Use this in
          *     deployments that have seeded doctrinal PDFs and want a hard signal if
          *     the second collection ever drops out from under them.
+         *
+         *     The two flags compose: ``?deep=1&include=curriculum`` runs both.
          */
         get: operations["readyz_readyz_get"];
         put?: never;
@@ -84,10 +94,154 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/users/{user_id}/profile": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Profile */
+        get: operations["get_profile_users__user_id__profile_get"];
+        put?: never;
+        /**
+         * Upsert Profile
+         * @description Create or update a stored user profile.
+         *
+         *     Idempotent: re-posting the same profile only bumps ``last_seen_at``.
+         *     Setting ``notify_enabled=False`` opts the user out of the nightly
+         *     sweep without dropping their stored history (so a re-opt-in keeps
+         *     diffing from the last known state).
+         */
+        post: operations["upsert_profile_users__user_id__profile_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/users/{user_id}/scans/latest": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Latest Scan
+         * @description Return the most-recent persisted sweep report for this user.
+         *
+         *     404 when the user exists but has no sweep yet (e.g. profile was
+         *     posted seconds ago and the nightly job hasn't fired). The frontend
+         *     treats this as "loading — sweep pending" rather than an error.
+         */
+        get: operations["get_latest_scan_users__user_id__scans_latest_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/users/{user_id}/alerts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Alerts */
+        get: operations["get_alerts_users__user_id__alerts_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/users/{user_id}/alerts/{alert_id}/read": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Mark Alert Read */
+        post: operations["mark_alert_read_users__user_id__alerts__alert_id__read_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /**
+         * Alert
+         * @description One row of the ``alerts`` table.
+         *
+         *     ``alert_id`` is a deterministic UUID5 derived from
+         *     ``(user_id, scan_at, kind, entitlement_id)`` so re-running a sweep
+         *     over the same scan + diff is idempotent — the second insert is a
+         *     no-op rather than a duplicate inbox entry.
+         */
+        Alert: {
+            /** Alert Id */
+            alert_id: string;
+            /** User Id */
+            user_id: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "NEW" | "GONE" | "UPDATED";
+            /** Entitlement Id */
+            entitlement_id: string;
+            /** Created At */
+            created_at: string;
+            /** Read At */
+            read_at?: string | null;
+            payload: components["schemas"]["AlertPayload"];
+        };
+        /**
+         * AlertList
+         * @description List wrapper so the openapi-typescript client gets a named type.
+         */
+        AlertList: {
+            /** Alerts */
+            alerts: components["schemas"]["Alert"][];
+        };
+        /**
+         * AlertPayload
+         * @description Self-contained snapshot of the entitlement an alert refers to.
+         *
+         *     Stored as JSON inside the ``alerts`` row — see module docstring for
+         *     why this is a copy rather than a foreign key.
+         */
+        AlertPayload: {
+            /** Entitlement Id */
+            entitlement_id: string;
+            /** Title */
+            title: string;
+            /** Category */
+            category: string;
+            /** Estimated Value Chf Min */
+            estimated_value_chf_min: number;
+            /** Estimated Value Chf Max */
+            estimated_value_chf_max: number;
+            /** Previous Estimated Value Chf Min */
+            previous_estimated_value_chf_min?: number | null;
+            /** Previous Estimated Value Chf Max */
+            previous_estimated_value_chf_max?: number | null;
+            /** Changed Citations */
+            changed_citations?: string[];
+        };
         /** Benefit */
         Benefit: {
             /** Entitlement Id */
@@ -129,6 +283,11 @@ export interface components {
             benefits: components["schemas"]["Benefit"][];
             /** Suppressed Count */
             suppressed_count: number;
+            /**
+             * Pending Corpus Backfill
+             * @default 0
+             */
+            pending_corpus_backfill: number;
         };
         /** ChatRequest */
         ChatRequest: {
@@ -345,6 +504,36 @@ export interface components {
              */
             score: number;
         };
+        /**
+         * UserProfileUpsert
+         * @description Request body for ``POST /users/{user_id}/profile``.
+         */
+        UserProfileUpsert: {
+            profile: components["schemas"]["ContextProfile"];
+            /**
+             * Notify Enabled
+             * @default true
+             */
+            notify_enabled: boolean;
+        };
+        /**
+         * UserRecord
+         * @description One row of the ``users`` table — what the API returns and stores.
+         */
+        UserRecord: {
+            /** User Id */
+            user_id: string;
+            profile: components["schemas"]["ContextProfile"];
+            /**
+             * Notify Enabled
+             * @default true
+             */
+            notify_enabled: boolean;
+            /** Created At */
+            created_at: string;
+            /** Last Seen At */
+            last_seen_at: string;
+        };
         /** ValidationError */
         ValidationError: {
             /** Location */
@@ -393,6 +582,7 @@ export interface operations {
         parameters: {
             query?: {
                 include?: string | null;
+                deep?: boolean;
             };
             header?: never;
             path?: never;
@@ -476,6 +666,167 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["ChatResponse"];
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_profile_users__user_id__profile_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                user_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    upsert_profile_users__user_id__profile_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                user_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UserProfileUpsert"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_latest_scan_users__user_id__scans_latest_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                user_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BenefitReport"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_alerts_users__user_id__alerts_get: {
+        parameters: {
+            query?: {
+                unread_only?: boolean;
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                user_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AlertList"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    mark_alert_read_users__user_id__alerts__alert_id__read_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                user_id: string;
+                alert_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {

@@ -6,14 +6,23 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException
+from fastapi import Path as PathParam
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
+from .. import scheduler as sweep_scheduler
+from .. import storage
 from ..catalog import load_catalog
 from ..config import settings
 from ..engine.retrieval import _client as qdrant_client
 from ..engine.scan import run_benefit_scan
-from ..schemas import BenefitReport, ContextProfile
+from ..schemas import (
+    Alert,
+    BenefitReport,
+    ContextProfile,
+    UserProfileUpsert,
+    UserRecord,
+)
 from ..seeding.embedder import get_embedder
 from .chat import answer_follow_up
 
@@ -106,7 +115,18 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             "qdrant unreachable at startup (%s); /readyz will reflect this",
             type(exc).__name__,
         )
+    # Start the nightly benefit-sweep scheduler. No-op when
+    # ``settings.sweep_enabled`` is false (the default), so dev runs
+    # don't spawn a background thread silently.
+    try:
+        sweep_scheduler.start()
+    except Exception as exc:
+        logger.exception("sweep_scheduler_start_failed err=%s", type(exc).__name__)
     yield
+    try:
+        sweep_scheduler.stop()
+    except Exception as exc:
+        logger.exception("sweep_scheduler_stop_failed err=%s", type(exc).__name__)
 
 
 app = FastAPI(
@@ -277,3 +297,102 @@ async def chat(req: ChatRequest) -> ChatResponse:
     except Exception as exc:
         logger.exception("chat failed: %s", type(exc).__name__)
         raise HTTPException(status_code=500, detail="Internal error") from exc
+
+
+# ============================================================================
+# Scheduled sweep — stateful endpoints (Task #22)
+# ============================================================================
+# These endpoints are the user-facing surface for the nightly benefit sweep:
+# the wizard's "notify me" toggle posts the profile here, the results page
+# fetches the latest sweep result, and the inbox lists alerts.
+#
+# Auth is intentionally out of scope (per task brief): ``user_id`` is a
+# client-generated UUID stored in localStorage. The frontend treats it as
+# opaque; the backend only validates length so the SQLite primary key
+# stays well-formed.
+
+# Reasonable upper bound — long enough for any UUID v4/v5 representation
+# (36 chars), short enough that a malicious client can't bloat the DB.
+_USER_ID_PATH = PathParam(..., min_length=1, max_length=128)
+
+
+class AlertList(BaseModel):
+    """List wrapper so the openapi-typescript client gets a named type."""
+    alerts: list[Alert]
+
+
+@app.post("/users/{user_id}/profile", response_model=UserRecord)
+def upsert_profile(
+    body: UserProfileUpsert,
+    user_id: str = _USER_ID_PATH,
+) -> UserRecord:
+    """Create or update a stored user profile.
+
+    Idempotent: re-posting the same profile only bumps ``last_seen_at``.
+    Setting ``notify_enabled=False`` opts the user out of the nightly
+    sweep without dropping their stored history (so a re-opt-in keeps
+    diffing from the last known state).
+    """
+    try:
+        return storage.upsert_user(user_id, body.profile, body.notify_enabled)
+    except Exception as exc:
+        logger.exception(
+            "upsert_profile failed user_id=%s err=%s",
+            user_id, type(exc).__name__,
+        )
+        raise HTTPException(status_code=500, detail="Internal error") from exc
+
+
+@app.get("/users/{user_id}/profile", response_model=UserRecord)
+def get_profile(user_id: str = _USER_ID_PATH) -> UserRecord:
+    rec = storage.get_user(user_id)
+    if rec is None:
+        raise HTTPException(status_code=404, detail="user not found")
+    return rec
+
+
+@app.get("/users/{user_id}/scans/latest", response_model=BenefitReport)
+def get_latest_scan(user_id: str = _USER_ID_PATH) -> BenefitReport:
+    """Return the most-recent persisted sweep report for this user.
+
+    404 when the user exists but has no sweep yet (e.g. profile was
+    posted seconds ago and the nightly job hasn't fired). The frontend
+    treats this as "loading — sweep pending" rather than an error.
+    """
+    if storage.get_user(user_id) is None:
+        raise HTTPException(status_code=404, detail="user not found")
+    report = storage.latest_scan(user_id)
+    if report is None:
+        raise HTTPException(status_code=404, detail="no scan yet")
+    return report
+
+
+@app.get("/users/{user_id}/alerts", response_model=AlertList)
+def get_alerts(
+    user_id: str = _USER_ID_PATH,
+    unread_only: bool = False,
+    limit: int = 100,
+) -> AlertList:
+    if storage.get_user(user_id) is None:
+        raise HTTPException(status_code=404, detail="user not found")
+    return AlertList(
+        alerts=storage.list_alerts(
+            user_id, unread_only=unread_only, limit=max(1, min(limit, 500)),
+        )
+    )
+
+
+@app.post("/users/{user_id}/alerts/{alert_id}/read", status_code=204)
+def mark_alert_read(
+    user_id: str = _USER_ID_PATH,
+    alert_id: str = PathParam(..., min_length=1, max_length=128),
+) -> None:
+    """Mark one alert as read. Idempotent: 204 whether the alert was
+    unread, already read, or doesn't exist for this user. We expose
+    ``alerts_exists`` checking via :func:`storage.alert_exists` so the
+    handler can still return 404 when the alert truly isn't visible
+    to this user — that's the case the frontend wants to surface, not
+    "already read"."""
+    if not storage.alert_exists(user_id, alert_id):
+        raise HTTPException(status_code=404, detail="alert not found")
+    storage.mark_alert_read(user_id, alert_id)

@@ -15,6 +15,7 @@ dependencies = [
   "python-dotenv>=1.0.1",
   "tenacity>=8.0.0",
   "pypdf>=4.0.0",
+  "apscheduler>=3.10.0",
 ]
 
 [project.optional-dependencies]
@@ -34,6 +35,10 @@ pythonpath = ["src"]
 [tool.mypy]
 strict = true
 python_version = "3.12"
+
+[[tool.mypy.overrides]]
+module = ["apscheduler.*"]
+ignore_missing_imports = true
 
 [build-system]
 requires = ["hatchling"]

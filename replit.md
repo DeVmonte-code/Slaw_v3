@@ -80,6 +80,24 @@ Live-secrets-gated tests in `test_api.py::test_scan_endpoint_live`,
 `QDRANT_URL` are not the real production values. The other 23 tests run
 offline using respx + monkeypatched Qdrant retrieval.
 
+## Scheduled benefit sweep (Task #22)
+
+Stateful layer added on top of the synchronous `/scan` endpoint:
+SQLite-backed `users` / `scan_results` / `alerts` tables, an
+APScheduler nightly job (off by default, gated on `SWEEP_ENABLED=1`),
+and a Fedlex-diff sub-job that force-classifies `UPDATED` alerts when
+a user's cited articles change in `seed/law_articles.fedlex.json`.
+
+Key modules:
+- `backend/src/swiss_legal_api/storage.py` — sqlite3 persistence (users, scans, alerts; WAL mode; idempotent upserts)
+- `backend/src/swiss_legal_api/engine/sweep.py` — `classify_diff` (NEW/GONE/UPDATED), `fedlex_changed_articles`, `sweep_all_users`
+- `backend/src/swiss_legal_api/scheduler.py` — APScheduler glue, started in FastAPI lifespan when enabled
+- `backend/src/swiss_legal_api/schemas/sweep.py` — `UserRecord`, `Alert`, `AlertPayload`
+- `backend/tests/test_sweep.py` — 23 offline tests (classifier, Fedlex diff, storage, orchestrator, HTTP endpoints)
+- `frontend/app/alerts/page.tsx` — Alerts inbox UI
+- `frontend/lib/api-client.ts` — `getOrCreateUserId()` localStorage helper
+- See `backend/README.md` "Scheduled sweep" section for full configuration / endpoint reference.
+
 ## Key Files
 
 - `backend/src/swiss_legal_api/api/main.py` — FastAPI app
