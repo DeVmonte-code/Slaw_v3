@@ -108,21 +108,25 @@ def retrieve_for_citation(
 
     vec = embed_query(f"{citation.article} {extra_query}")
     flt = _build_query_filter(citation, profile_canton, today)
-    response = _client().query_points(
+    client = _client()
+    # Source-side prune: Qdrant drops sub-threshold chunks before they ever
+    # leave the cluster. Defense-in-depth client-side filter below catches
+    # any SDK/server skew without a second network round-trip.
+    response = client.query_points(
         collection_name=settings.qdrant_collection,
         query=vec,
         limit=3,
         query_filter=flt,
         with_payload=True,
+        score_threshold=threshold,
     )
 
-    chunks: list[RetrievedChunk] = []
-    top_score = 0.0
+    above: list[RetrievedChunk] = []
     for r in response.points:
         payload = r.payload or {}
         score = float(r.score)
-        if score > top_score:
-            top_score = score
+        if score < threshold:
+            continue
         eff_raw = payload.get("effective_date")
         eff_date: date | None = None
         if isinstance(eff_raw, str) and eff_raw:
@@ -130,7 +134,7 @@ def retrieve_for_citation(
                 eff_date = date.fromisoformat(eff_raw[:10])
             except ValueError:
                 eff_date = None
-        chunks.append(
+        above.append(
             RetrievedChunk(
                 text=str(payload.get("text", "")),
                 score=score,
@@ -139,18 +143,26 @@ def retrieve_for_citation(
             )
         )
 
-    above = [c for c in chunks if c.score >= threshold]
     ctx = f" {caller_context}" if caller_context else ""
     if not above:
+        # Probe (no threshold) only when above-threshold retrieval was empty,
+        # to log the actual top observed score for tuning.
+        probe = client.query_points(
+            collection_name=settings.qdrant_collection,
+            query=vec,
+            limit=1,
+            query_filter=flt,
+            with_payload=False,
+        )
+        top_score = float(probe.points[0].score) if probe.points else 0.0
         logger.info(
             "retrieval_below_threshold sr=%s art=%s canton=%s "
-            "top_score=%.3f threshold=%.3f n_pre=%d%s",
+            "top_score=%.3f threshold=%.3f%s",
             citation.sr_number,
             citation.article,
             profile_canton,
             top_score,
             threshold,
-            len(chunks),
             ctx,
         )
     else:

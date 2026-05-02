@@ -28,13 +28,18 @@ SYSTEM = """You verify whether a specific Swiss legal article supports a specifi
 entitlement for a specific user context.
 
 Authoritative-source policy:
-- Each retrieved chunk has an "is_authoritative" flag and a "language".
 - Swiss federal SR (Systematische Rechtssammlung) acts are officially published
-  in German, French, and Italian. English Fedlex texts are courtesy translations.
+  in German, French, and Italian. English Fedlex texts are courtesy translations
+  and are NEVER authoritative.
+- Each retrieved chunk has a strict "is_authoritative" flag (true only for
+  DE/FR/IT) and a "language".
 - Prefer chunks where "is_authoritative": true. Treat chunks where
   "is_authoritative": false as a translation aid only.
-- If only translation chunks are available, you MAY still verify when the wording
-  is unambiguous, but lower your confidence accordingly.
+- The user message also includes a top-level "translation_only" flag. When
+  translation_only=true, NO authoritative chunk was retrieved. You MAY still
+  verify when the translated wording is unambiguous and clearly on-point, but
+  lower confidence accordingly (cap at 0.75) and note the lack of original-
+  language source in your reasoning.
 
 Output rules:
 - Output ONLY valid JSON of shape:
@@ -130,26 +135,22 @@ async def verify_entitlement(
             best_citation=cit,
         )
 
-    # Tag each chunk with is_authoritative. If none are originally
-    # authoritative (e.g. only EN translations are in the corpus today),
-    # promote them as a graceful fallback so the verifier can still run.
-    authoritative_present = any(
-        _is_authoritative_language(cit.sr_number, c.language) for c in chunks
-    )
-    chunk_payload: list[dict[str, Any]] = []
-    for c in chunks:
-        is_auth = (
-            _is_authoritative_language(cit.sr_number, c.language)
-            or not authoritative_present
-        )
-        chunk_payload.append(
-            {
-                "text": c.text,
-                "language": c.language,
-                "score": round(c.score, 3),
-                "is_authoritative": is_auth,
-            }
-        )
+    # Tag each chunk strictly: is_authoritative reflects only the language
+    # provenance, never a fallback promotion. If no DE/FR/IT chunk was
+    # retrieved, set translation_only=true on the envelope so the verifier
+    # caps confidence and notes the missing original-language source. Once
+    # Task #19 ingests DE Fedlex text, the same SRs will start surfacing
+    # is_authoritative=true chunks automatically.
+    chunk_payload: list[dict[str, Any]] = [
+        {
+            "text": c.text,
+            "language": c.language,
+            "score": round(c.score, 3),
+            "is_authoritative": _is_authoritative_language(cit.sr_number, c.language),
+        }
+        for c in chunks
+    ]
+    translation_only = not any(c["is_authoritative"] for c in chunk_payload)
     # The system prompt promises "authoritative chunks first". Sort here so
     # Claude reads the original-language text before any translation aid,
     # ties broken by retrieval score.
@@ -168,9 +169,13 @@ async def verify_entitlement(
         "business_activity": profile.business_activity,
     }
 
+    chunks_envelope = {
+        "translation_only": translation_only,
+        "chunks": chunk_payload,
+    }
     chunks_block = (
         f"{_CHUNKS_OPEN}\n"
-        f"{json.dumps(chunk_payload, indent=2, ensure_ascii=False)}\n"
+        f"{json.dumps(chunks_envelope, indent=2, ensure_ascii=False)}\n"
         f"{_CHUNKS_CLOSE}"
     )
 

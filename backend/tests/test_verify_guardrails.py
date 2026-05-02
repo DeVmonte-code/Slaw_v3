@@ -68,11 +68,13 @@ def _entitlement(citation: Citation) -> Entitlement:
     )
 
 
-def _extract_chunks_block(user_content: str) -> list[dict[str, Any]]:
-    """Pull the JSON chunk array out of the verifier's user-message block."""
+def _extract_chunks_envelope(user_content: str) -> dict[str, Any]:
+    """Pull the JSON envelope (translation_only + chunks) from the user message."""
     start = user_content.index(_CHUNKS_OPEN) + len(_CHUNKS_OPEN)
     end = user_content.index(_CHUNKS_CLOSE)
-    return json.loads(user_content[start:end].strip())
+    payload = json.loads(user_content[start:end].strip())
+    assert isinstance(payload, dict) and "chunks" in payload
+    return payload
 
 
 def test_filter_includes_repealed_date_clause() -> None:
@@ -191,12 +193,71 @@ async def test_de_chunk_marked_authoritative_for_de_provenance(
     cit = _de_citation()
     result = await verify_entitlement(_entitlement(cit), _profile(), [])
 
-    chunks = _extract_chunks_block(captured["content"])
+    envelope = _extract_chunks_envelope(captured["content"])
+    chunks = envelope["chunks"]
+    assert envelope["translation_only"] is False
     assert len(chunks) == 2
     by_lang = {c["language"]: c for c in chunks}
     assert by_lang["de"]["is_authoritative"] is True
     assert by_lang["en"]["is_authoritative"] is False
+    # Authoritative chunk is sent first so Claude reads it before the
+    # translation aid.
+    assert chunks[0]["language"] == "de"
 
     # best_citation surfaces the top chunk's effective_date and similarity score.
     assert result.best_citation.effective_date == date(1995, 1, 1)
     assert result.best_citation.score == pytest.approx(0.91)
+
+
+@pytest.mark.asyncio
+async def test_translation_only_keeps_en_non_authoritative(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """(v) EN-only retrieval flags translation_only=true; EN stays non-authoritative.
+
+    Required for Task #19 hand-off: when the DE Fedlex pipeline lands and
+    DE chunks start being retrieved, the same SR will silently flip
+    translation_only=false and is_authoritative=true on the new DE chunk.
+    """
+    en_only = RetrievedChunk(
+        text="English Fedlex translation only.",
+        score=0.82,
+        language="en",
+        effective_date=date(1912, 1, 1),
+    )
+    monkeypatch.setattr(
+        verify_mod, "retrieve_for_citation", lambda *a, **k: [en_only]
+    )
+
+    captured: dict[str, str] = {}
+
+    async def _fake_call_claude(user_content: str) -> tuple[str, dict[str, int]]:
+        captured["content"] = user_content
+        body = json.dumps(
+            {
+                "supports": True,
+                "confidence": 0.7,
+                "reasoning": "translation only — wording clear",
+                "best_quote": "Translation supports the claim.",
+            }
+        )
+        return body, {"input_tokens": 40, "output_tokens": 15}
+
+    monkeypatch.setattr(verify_mod, "_call_claude", _fake_call_claude)
+
+    cit = Citation(
+        sr_number="220",
+        article="270a",
+        language="en",
+        quote_under_15_words="Quote in English.",
+    )
+    result = await verify_entitlement(_entitlement(cit), _profile(), [])
+
+    envelope = _extract_chunks_envelope(captured["content"])
+    assert envelope["translation_only"] is True
+    assert len(envelope["chunks"]) == 1
+    assert envelope["chunks"][0]["language"] == "en"
+    assert envelope["chunks"][0]["is_authoritative"] is False
+    # Verifier still ran (didn't short-circuit) and surfaced top chunk metadata.
+    assert result.best_citation.score == pytest.approx(0.82)
+    assert result.best_citation.effective_date == date(1912, 1, 1)
