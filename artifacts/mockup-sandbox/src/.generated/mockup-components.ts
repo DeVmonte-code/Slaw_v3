@@ -5,5 +5,9 @@ export const modules: ModuleMap = {
   "./components/mockups/profile-wizard/Current.tsx": () => import("../components/mockups/profile-wizard/Current.tsx"),
   "./components/mockups/profile-wizard/DocumentIntake.tsx": () => import("../components/mockups/profile-wizard/DocumentIntake.tsx"),
   "./components/mockups/profile-wizard/LifeSnapshotTiles.tsx": () => import("../components/mockups/profile-wizard/LifeSnapshotTiles.tsx"),
-  "./components/mockups/profile-wizard/SteppedWizard.tsx": () => import("../components/mockups/profile-wizard/SteppedWizard.tsx")
+  "./components/mockups/profile-wizard/SteppedWizard.tsx": () => import("../components/mockups/profile-wizard/SteppedWizard.tsx"),
+  "./components/mockups/scan-results/CategoryCards.tsx": () => import("../components/mockups/scan-results/CategoryCards.tsx"),
+  "./components/mockups/scan-results/DocumentSummary.tsx": () => import("../components/mockups/scan-results/DocumentSummary.tsx"),
+  "./components/mockups/scan-results/PrioritizedList.tsx": () => import("../components/mockups/scan-results/PrioritizedList.tsx"),
+  "./components/mockups/scan-results/TimelineDeadlines.tsx": () => import("../components/mockups/scan-results/TimelineDeadlines.tsx")
 };
