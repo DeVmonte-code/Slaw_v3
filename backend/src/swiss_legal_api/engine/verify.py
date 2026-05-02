@@ -226,6 +226,7 @@ async def verify_entitlement(
         {
             "source_doc": d.source_doc,
             "chapter": d.chapter,
+            "section": d.section,
             "score": round(d.score, 3),
             "text": d.text,
         }
@@ -315,6 +316,7 @@ Respond with JSON only."""
             SupportingDoctrine(
                 source_doc=d.source_doc,
                 chapter=d.chapter,
+                section=d.section,
                 # Pydantic field is bounded [0, 1]; the curriculum retriever
                 # already enforces score_threshold>=0, so clamp paranoia.
                 score=max(0.0, min(1.0, d.score)),

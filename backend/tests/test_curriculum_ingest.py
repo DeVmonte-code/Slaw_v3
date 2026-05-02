@@ -173,6 +173,7 @@ def _qdrant_point(
     score: float = 0.71,
     source_doc: str = "co_articles_1_183",
     chapter: str | None = "Chapter 2: Errors",
+    section: str | None = "§ 12 — Error of fact",
     page: int = 12,
 ) -> Any:
     return SimpleNamespace(
@@ -181,6 +182,7 @@ def _qdrant_point(
             "text": text,
             "source_doc": source_doc,
             "chapter": chapter,
+            "section": section,
             "page": page,
         },
     )
@@ -195,7 +197,7 @@ def test_retrieve_supporting_context_short_circuits_when_qdrant_unset(
     def _boom(*_a: Any, **_k: Any) -> Any:
         raise AssertionError("must not be called when qdrant_url is empty")
 
-    monkeypatch.setattr(retrieval_mod, "embed_passage", _boom)
+    monkeypatch.setattr(retrieval_mod, "embed_query", _boom)
     monkeypatch.setattr(retrieval_mod, "_client", _boom)
 
     assert retrieve_supporting_context("anything", topic_tags=["contracts"]) == []
@@ -207,7 +209,7 @@ def test_retrieve_supporting_context_applies_topic_tag_filter(
     """``topic_tags=[...]`` -> a MatchAny filter on ``topic_tags`` is sent."""
     monkeypatch.setattr(retrieval_mod.settings, "qdrant_url", "https://qdrant.example")
     monkeypatch.setattr(retrieval_mod.settings, "curriculum_collection", "co_curriculum")
-    monkeypatch.setattr(retrieval_mod, "embed_passage", lambda _t: [0.0] * 384)
+    monkeypatch.setattr(retrieval_mod, "embed_query", lambda _t: [0.0] * 384)
 
     stub = _StubQdrant(points=[_qdrant_point()])
     monkeypatch.setattr(retrieval_mod, "_client", lambda: stub)
@@ -223,6 +225,7 @@ def test_retrieve_supporting_context_applies_topic_tag_filter(
     assert isinstance(out[0], SupportingChunk)
     assert out[0].source_doc == "co_articles_1_183"
     assert out[0].chapter == "Chapter 2: Errors"
+    assert out[0].section == "§ 12 — Error of fact"
     assert out[0].page == 12
     assert out[0].score == pytest.approx(0.71)
 
@@ -247,7 +250,7 @@ def test_retrieve_supporting_context_no_filter_when_no_tags(
     chunks that simply have no tags)."""
     monkeypatch.setattr(retrieval_mod.settings, "qdrant_url", "https://qdrant.example")
     monkeypatch.setattr(retrieval_mod.settings, "curriculum_collection", "co_curriculum")
-    monkeypatch.setattr(retrieval_mod, "embed_passage", lambda _t: [0.0] * 384)
+    monkeypatch.setattr(retrieval_mod, "embed_query", lambda _t: [0.0] * 384)
     stub = _StubQdrant(points=[])
     monkeypatch.setattr(retrieval_mod, "_client", lambda: stub)
 
@@ -263,7 +266,7 @@ def test_retrieve_supporting_context_soft_fails_when_collection_missing(
     """Missing collection -> Qdrant raises -> [] + warning, never propagates."""
     monkeypatch.setattr(retrieval_mod.settings, "qdrant_url", "https://qdrant.example")
     monkeypatch.setattr(retrieval_mod.settings, "curriculum_collection", "co_curriculum")
-    monkeypatch.setattr(retrieval_mod, "embed_passage", lambda _t: [0.0] * 384)
+    monkeypatch.setattr(retrieval_mod, "embed_query", lambda _t: [0.0] * 384)
 
     stub = _StubQdrant(raise_exc=RuntimeError("collection 'co_curriculum' not found"))
     monkeypatch.setattr(retrieval_mod, "_client", lambda: stub)

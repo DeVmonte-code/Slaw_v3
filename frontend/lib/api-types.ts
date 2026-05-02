@@ -335,6 +335,11 @@ export interface components {
              */
             chapter?: string | null;
             /**
+             * Section
+             * @description Optional finer-grained section label inside a chapter (e.g. '§ 12 — Error of fact'). Sourced from the sidecar's section_index. Falls back to None when not supplied.
+             */
+            section?: string | null;
+            /**
              * Score
              * @description Cosine similarity of the supporting chunk (advisory only).
              */

@@ -119,13 +119,16 @@ def ingest_pdf(pdf_path: Path) -> list[CurriculumChunk]:
     sidecar = _load_sidecar(pdf_path)
     pages = extract_pdf_pages(pdf_path)
     chapter_index = _build_chapter_index(sidecar.get("chapter_index"))
-    expanded = _expand_chapter_index(chapter_index, len(pages))
+    section_index = _build_chapter_index(sidecar.get("section_index"))
+    expanded_chapters = _expand_chapter_index(chapter_index, len(pages))
+    expanded_sections = _expand_chapter_index(section_index, len(pages))
     return chunk_pages(
         source_doc=pdf_path.stem,
         pages=pages,
         language=str(sidecar.get("language", "en")),
         topic_tags=tuple(sidecar.get("topic_tags") or ()),
-        chapter_index=expanded,
+        chapter_index=expanded_chapters,
+        section_index=expanded_sections,
     )
 
 
@@ -165,6 +168,7 @@ def _upsert_chunks(
                     "page": c.page,
                     "chunk_index": c.chunk_index,
                     "chapter": c.chapter,
+                    "section": c.section,
                     "language": c.language,
                     # Qdrant's KEYWORD index supports list fields natively
                     # so MatchAny topic-tag filters work on the array.
@@ -200,8 +204,12 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
 
-    if not settings.qdrant_url or not settings.qdrant_api_key:
-        print("QDRANT_URL and QDRANT_API_KEY required", file=sys.stderr)
+    # QDRANT_URL is required (we have to know where to write); QDRANT_API_KEY
+    # is optional so the seeder works against unauthenticated/local Qdrant
+    # (e.g. `docker run qdrant/qdrant` on a developer's laptop) — the
+    # client treats api_key=None as "no auth header".
+    if not settings.qdrant_url:
+        print("QDRANT_URL required", file=sys.stderr)
         return 1
 
     if args.source_dir:

@@ -36,6 +36,14 @@ class SupportingDoctrine(BaseModel):
             "supply a chapter index."
         ),
     )
+    section: str | None = Field(
+        default=None,
+        description=(
+            "Optional finer-grained section label inside a chapter "
+            "(e.g. '§ 12 — Error of fact'). Sourced from the sidecar's "
+            "section_index. Falls back to None when not supplied."
+        ),
+    )
     score: float = Field(
         ..., ge=0, le=1,
         description="Cosine similarity of the supporting chunk (advisory only).",

@@ -31,9 +31,12 @@ class CurriculumChunk:
     """One indexed chunk of a doctrinal source.
 
     Identity tuple is ``(source_doc, page, chunk_index)``; everything else
-    is payload that travels with the vector. ``chapter`` is optional —
-    contributors who maintain a page→chapter sidecar populate it; otherwise
-    it's None and the UI falls back to "page N".
+    is payload that travels with the vector. Both ``chapter`` and
+    ``section`` are optional doctrinal locators — contributors who
+    maintain page→chapter / page→section sidecars populate them. The
+    ``section`` is the finer-grained unit (e.g. "§ 12 — Error of fact"
+    inside a chapter on errors); when absent the UI falls back to chapter,
+    and finally to "page N".
     """
 
     source_doc: str
@@ -42,6 +45,7 @@ class CurriculumChunk:
     text: str
     language: str = "en"
     chapter: str | None = None
+    section: str | None = None
     topic_tags: tuple[str, ...] = field(default_factory=tuple)
 
 
@@ -107,6 +111,7 @@ def chunk_pages(
     language: str = "en",
     topic_tags: tuple[str, ...] = (),
     chapter_index: dict[int, str] | None = None,
+    section_index: dict[int, str] | None = None,
     max_words: int = DEFAULT_MAX_WORDS,
     overlap_words: int = DEFAULT_OVERLAP_WORDS,
 ) -> list[CurriculumChunk]:
@@ -130,6 +135,7 @@ def chunk_pages(
 
     chunks: list[CurriculumChunk] = []
     chapter_index = chapter_index or {}
+    section_index = section_index or {}
 
     for page_offset, raw_page in enumerate(pages):
         # 1-indexed page number — matches what users see in a PDF reader.
@@ -139,11 +145,13 @@ def chunk_pages(
             continue
 
         chapter = chapter_index.get(page_number)
+        section = section_index.get(page_number)
         page_state = _PageChunkState(
             source_doc=source_doc,
             page_number=page_number,
             language=language,
             chapter=chapter,
+            section=section,
             topic_tags=tuple(topic_tags),
             overlap_words=overlap_words,
             sink=chunks,
@@ -182,6 +190,7 @@ class _PageChunkState:
     page_number: int
     language: str
     chapter: str | None
+    section: str | None
     topic_tags: tuple[str, ...]
     overlap_words: int
     sink: list[CurriculumChunk]
@@ -197,6 +206,7 @@ class _PageChunkState:
             text=text,
             language=self.language,
             chapter=self.chapter,
+            section=self.section,
             topic_tags=self.topic_tags,
         )
 

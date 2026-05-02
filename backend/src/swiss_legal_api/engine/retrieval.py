@@ -36,6 +36,7 @@ class SupportingChunk:
     score: float
     source_doc: str
     chapter: str | None = None
+    section: str | None = None
     page: int | None = None
 
 
@@ -285,6 +286,11 @@ def retrieve_supporting_context(
                 chapter=(
                     str(payload["chapter"])
                     if payload.get("chapter")
+                    else None
+                ),
+                section=(
+                    str(payload["section"])
+                    if payload.get("section")
                     else None
                 ),
                 page=(
