@@ -1,5 +1,5 @@
 "use client";
-import React, { useState, FormEvent, ReactNode } from "react";
+import React, { useState, useEffect, FormEvent, ReactNode } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { ChevronLeft, ChevronRight, CheckCircle2 } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -65,6 +65,28 @@ export function SteppedWizard() {
   // The user_id is a per-browser UUID stored in localStorage; auth is
   // intentionally out of scope for v1.
   const [notifyEnabled, setNotifyEnabled] = useState(true);
+  // Unread alert count for the "View alerts (N new)" badge on the
+  // final step. Fetched once on mount; we don't poll because the
+  // sweep runs nightly and the wizard is short-lived.
+  const [unreadCount, setUnreadCount] = useState<number>(0);
+  useEffect(() => {
+    const userId = getOrCreateUserId();
+    if (!userId) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const r = await api.GET("/users/{user_id}/alerts", {
+          params: { path: { user_id: userId }, query: { unread_only: true } },
+        });
+        if (!cancelled && r.data) setUnreadCount(r.data.alerts.length);
+      } catch {
+        // Non-fatal: badge stays at 0.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const update = <K extends keyof ContextProfile>(key: K, value: ContextProfile[K]) => {
     setProfile((prev) => ({ ...prev, [key]: value }));
@@ -782,6 +804,14 @@ export function SteppedWizard() {
                 className="text-[var(--slaw-primary-strong)] hover:underline"
               >
                 View alerts
+                {unreadCount > 0 && (
+                  <span
+                    className="ml-1.5 inline-flex items-center justify-center rounded-full bg-[var(--slaw-primary)] px-1.5 py-0.5 text-[10px] font-semibold leading-none text-white"
+                    aria-label={`${unreadCount} new`}
+                  >
+                    {unreadCount} new
+                  </span>
+                )}
               </Link>
             </div>
           )}

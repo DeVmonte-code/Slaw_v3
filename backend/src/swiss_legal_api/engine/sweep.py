@@ -38,6 +38,7 @@ from .. import storage
 from ..config import settings
 from ..schemas import (
     Alert,
+    AlertKind,
     AlertPayload,
     Benefit,
     BenefitReport,
@@ -100,7 +101,7 @@ def _make_alert(
     *,
     user_id: str,
     scan_at: str,
-    kind: str,
+    kind: AlertKind,
     benefit: Benefit,
     previous_value: tuple[float, float] | None = None,
     changed_citations: list[str] | None = None,
@@ -125,7 +126,7 @@ def _make_alert(
     return Alert(
         alert_id=str(aid),
         user_id=user_id,
-        kind=kind,  # type: ignore[arg-type]
+        kind=kind,
         entitlement_id=benefit.entitlement_id,
         created_at=scan_at,
         read_at=None,

@@ -9,3 +9,6 @@ dist
 build
 *.egg-info
 openapi.json
+data/sweep.db
+data/sweep.db-shm
+data/sweep.db-wal
