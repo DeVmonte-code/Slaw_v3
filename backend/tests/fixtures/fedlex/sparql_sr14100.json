@@ -1,0 +1,15 @@
+{
+  "head": { "link": [], "vars": ["act", "eif", "nolonger", "lang", "expr"] },
+  "results": {
+    "distinct": false,
+    "ordered": true,
+    "bindings": [
+      {
+        "act": { "type": "uri", "value": "https://fedlex.data.admin.ch/eli/cc/2016/404" },
+        "eif": { "type": "typed-literal", "datatype": "http://www.w3.org/2001/XMLSchema#date", "value": "2018-01-01" },
+        "lang": { "type": "uri", "value": "http://publications.europa.eu/resource/authority/language/DEU" },
+        "expr": { "type": "uri", "value": "https://fedlex.data.admin.ch/eli/cc/2016/404/de" }
+      }
+    ]
+  }
+}

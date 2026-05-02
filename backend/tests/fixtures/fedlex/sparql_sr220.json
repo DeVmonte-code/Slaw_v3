@@ -1,0 +1,39 @@
+{
+  "head": { "link": [], "vars": ["act", "eif", "nolonger", "lang", "expr"] },
+  "results": {
+    "distinct": false,
+    "ordered": true,
+    "bindings": [
+      {
+        "act": { "type": "uri", "value": "https://fedlex.data.admin.ch/eli/cc/27/317_321_377" },
+        "eif": { "type": "typed-literal", "datatype": "http://www.w3.org/2001/XMLSchema#date", "value": "1912-01-01" },
+        "lang": { "type": "uri", "value": "http://publications.europa.eu/resource/authority/language/DEU" },
+        "expr": { "type": "uri", "value": "https://fedlex.data.admin.ch/eli/cc/27/317_321_377/de" }
+      },
+      {
+        "act": { "type": "uri", "value": "https://fedlex.data.admin.ch/eli/cc/27/317_321_377" },
+        "eif": { "type": "typed-literal", "datatype": "http://www.w3.org/2001/XMLSchema#date", "value": "1912-01-01" },
+        "lang": { "type": "uri", "value": "http://publications.europa.eu/resource/authority/language/FRA" },
+        "expr": { "type": "uri", "value": "https://fedlex.data.admin.ch/eli/cc/27/317_321_377/fr" }
+      },
+      {
+        "act": { "type": "uri", "value": "https://fedlex.data.admin.ch/eli/cc/27/317_321_377" },
+        "eif": { "type": "typed-literal", "datatype": "http://www.w3.org/2001/XMLSchema#date", "value": "1912-01-01" },
+        "lang": { "type": "uri", "value": "http://publications.europa.eu/resource/authority/language/ENG" },
+        "expr": { "type": "uri", "value": "https://fedlex.data.admin.ch/eli/cc/27/317_321_377/en" }
+      },
+      {
+        "act": { "type": "uri", "value": "https://fedlex.data.admin.ch/eli/cc/27/317_321_377" },
+        "eif": { "type": "typed-literal", "datatype": "http://www.w3.org/2001/XMLSchema#date", "value": "1912-01-01" },
+        "lang": { "type": "uri", "value": "http://publications.europa.eu/resource/authority/language/ITA" },
+        "expr": { "type": "uri", "value": "https://fedlex.data.admin.ch/eli/cc/27/317_321_377/it" }
+      },
+      {
+        "act": { "type": "uri", "value": "https://fedlex.data.admin.ch/eli/cc/27/317_321_377" },
+        "eif": { "type": "typed-literal", "datatype": "http://www.w3.org/2001/XMLSchema#date", "value": "1912-01-01" },
+        "lang": { "type": "uri", "value": "http://publications.europa.eu/resource/authority/language/ROH" },
+        "expr": { "type": "uri", "value": "https://fedlex.data.admin.ch/eli/cc/27/317_321_377/rm" }
+      }
+    ]
+  }
+}

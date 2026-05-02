@@ -125,6 +125,74 @@ Notable log lines emitted by the engine:
 only `{"detail": "Internal error"}` to the client — never `str(exc)` (which can leak
 Anthropic API keys, request bodies, etc.).
 
+## Refreshing the corpus from Fedlex
+
+The 36-row hand-pasted seed (`seed/law_articles.json`) was the bootstrap; the
+production corpus is now built from the federal SPARQL endpoint at
+`data.fedlex.admin.ch`. The pipeline lives in
+`src/swiss_legal_api/ingest/fedlex.py` and runs as a stand-alone CLI:
+
+```bash
+cd backend
+python -m swiss_legal_api.ingest.fedlex \
+  --sr 220,642.11,141.0,142.20,837.0,831.40 \
+  --languages de,fr,it,en
+# writes seed/law_articles.fedlex.json (sorted by SR / article / paragraph / language)
+```
+
+What it does, per SR number:
+
+1. **SPARQL** the act URI, `dateEntryInForce`, optional `dateNoLongerInForce`
+   and the per-language realisation URIs via the JOLux predicate
+   `historicalLegalId`.
+2. **Download** the consolidated Akoma Ntoso XML for each language present on
+   the act from the Fedlex filestore. Fedlex serves several revisions of each
+   consolidation behind the suffix `…-xml-N.xml` and the SPA HTML shell for
+   non-existent N values, so the client probes `N=10..1` and keeps the highest
+   that returns real `application/xml`.
+3. **Parse** each `<article eId="art_X">` into one record per
+   `<paragraph eId="art_X/para_Y">`. Articles without explicit paragraph
+   children emit a single record with `paragraph="1"`. The `<num>` element
+   (and any `<authorialNote>` it nests) is stripped so amendment commentary
+   never bleeds into the embedding text.
+4. **Emit** sorted JSON with the columns the seeder expects:
+   `eli_uri, sr_number, article, paragraph, language, text, canton,
+   effective_date, repealed_date`.
+
+The seeder picks `seed/law_articles.fedlex.json` automatically when present
+and falls back to the manual file otherwise:
+
+```bash
+python -m swiss_legal_api.seeding.seed_qdrant
+# or pin a source explicitly:
+python -m swiss_legal_api.seeding.seed_qdrant --source seed/law_articles.fedlex.json
+```
+
+Point IDs are derived as
+`uuid5(NAMESPACE, "{eli_uri}|{article}|{paragraph}|{language}")` so re-running
+the seeder over a refreshed snapshot upserts in place rather than churning
+the collection. Manual entries (no `eli_uri`) live in the `manual:` ID
+namespace so a future Fedlex-derived row for the same article cannot
+collide with the bootstrap row it replaces.
+
+### Snapshot date fallback
+
+Fedlex publishes a 1 January consolidation per act per year, but not every
+act gets a fresh consolidation every year. The CLI defaults to today's
+`{YYYY}0101` and walks one year backwards down to the act's
+`dateEntryInForce` if the requested date has no XML manifestation, logging
+`fedlex_xml_fallback sr=… requested=… using=…` whenever it has to drop
+back. A handful of acts (notably **SR 141.0 / Bürgerrechtsgesetz** as of
+this writing) do not publish a downloadable AN-XML at any date — those
+emit `fedlex_xml_missing sr=…` and silently skip; the seeder then keeps
+serving those articles from the manual `seed/law_articles.json` bootstrap.
+
+### Tests
+
+Tests for the parser and the snapshot determinism live in
+`tests/test_fedlex_ingest.py`; they stub Fedlex via `respx` so they run
+offline against the recorded fixtures under `tests/fixtures/fedlex/`.
+
 ## Source Languages
 
 Fedlex publishes a downloadable English consolidated text for **SR 220** (Code of
