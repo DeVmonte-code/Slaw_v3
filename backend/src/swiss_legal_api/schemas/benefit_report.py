@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pydantic import BaseModel, Field
 
+from .agent_provenance import AgentProvenance
 from .citation import Citation
 from .entitlement import EstimatedValue
 
@@ -66,6 +67,19 @@ class Benefit(BaseModel):
     # set the field continue to round-trip unchanged. Empty list is the
     # expected state when the curriculum collection has no PDFs seeded.
     supporting_doctrine: list[SupportingDoctrine] = Field(default_factory=list)
+    # Defaulted to None so legacy persisted reports still validate when
+    # rehydrated. Newly produced Benefits always carry provenance from
+    # the verifier (Task #25); reports written before the audit landed
+    # round-trip with a None and surface the "unverified by agent"
+    # badge in the UI.
+    agent_provenance: AgentProvenance | None = Field(
+        default=None,
+        description=(
+            "Provenance of the Claude call that produced this benefit's "
+            "verification. agent_backed=False on every legacy "
+            "messages.create call site (Task #26 will flip these)."
+        ),
+    )
     disclaimer: str = (
         "Not a substitute for advice from a Swiss attorney "
         "registered with a cantonal bar."

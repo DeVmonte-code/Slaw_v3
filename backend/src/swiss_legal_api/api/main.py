@@ -5,13 +5,14 @@ import sys
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, Header, HTTPException
 from fastapi import Path as PathParam
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from .. import scheduler as sweep_scheduler
 from .. import storage
+from ..audits import agent_backed_summary
 from ..catalog import load_catalog
 from ..config import settings
 from ..engine.retrieval import _client as qdrant_client
@@ -396,3 +397,57 @@ def mark_alert_read(
     if not storage.alert_exists(user_id, alert_id):
         raise HTTPException(status_code=404, detail="alert not found")
     storage.mark_alert_read(user_id, alert_id)
+
+
+# ============================================================================
+# Admin audits (Task #25)
+# ============================================================================
+# The agent-backed audit walks persisted Benefit.agent_provenance and
+# answers "what fraction of our shipped analyses were produced by a
+# managed agent (sessions.events with ≥1 tool use) vs a plain
+# messages.create call?". The endpoint is the HTTP face of the same
+# query the CLI runs (``python -m swiss_legal_api.audits agent_backed``).
+
+
+def _check_admin_token(token: str | None) -> None:
+    """Gate /admin/* endpoints behind a shared secret.
+
+    Behaviour matrix:
+    * ``settings.admin_audit_token`` set → require exact match.
+    * Token unset + production → 403 (refuse to publish an open audit
+      endpoint by accident).
+    * Token unset + non-production → allow (dev / CI convenience).
+    """
+    expected = settings.admin_audit_token
+    if expected:
+        if not token or token != expected:
+            raise HTTPException(status_code=403, detail="forbidden")
+        return
+    if settings.is_production():
+        raise HTTPException(
+            status_code=403,
+            detail=(
+                "admin endpoint disabled: ADMIN_AUDIT_TOKEN not set in "
+                "production"
+            ),
+        )
+
+
+@app.get("/admin/audits/agent-backed")
+def admin_audit_agent_backed(
+    x_admin_token: str | None = Header(default=None),
+) -> dict[str, object]:
+    """Aggregate provenance over every persisted scan in the database.
+
+    Counts every ``Benefit.agent_provenance`` across every persisted
+    ``BenefitReport``, not just the latest report per user — so a
+    user with 12 historical scans contributes all 12 reports' worth
+    of analyses. Returns the same dict shape as
+    :func:`swiss_legal_api.audits.agent_backed_summary` so the CLI and
+    the endpoint stay in lockstep. The Task #25 baseline expects
+    ``agent_backed_pct=0.0`` (every call site still uses
+    ``messages.create``); Task #26 will flip the call sites and the
+    same query will start reporting ``agent_backed > 0``.
+    """
+    _check_admin_token(x_admin_token)
+    return agent_backed_summary()

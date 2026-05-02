@@ -12,7 +12,13 @@ from anthropic import APIConnectionError, APITimeoutError, AsyncAnthropic, RateL
 from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 
 from ..config import settings
-from ..schemas import Citation, ContextProfile, Entitlement, SupportingDoctrine
+from ..schemas import (
+    AgentProvenance,
+    Citation,
+    ContextProfile,
+    Entitlement,
+    SupportingDoctrine,
+)
 from .retrieval import retrieve_for_citation, retrieve_supporting_context
 
 logger = logging.getLogger(__name__)
@@ -95,22 +101,53 @@ def _is_authoritative_language(sr_number: str, lang: str) -> bool:
     retry=retry_if_exception_type((RateLimitError, APIConnectionError, APITimeoutError)),
     reraise=True,
 )
-async def _call_claude(user_content: str) -> tuple[str, dict[str, int]]:
+async def _call_claude(user_content: str) -> tuple[str, AgentProvenance]:
+    """Run one Claude inference and return (text, provenance).
+
+    Provenance is the audit contract for Task #25: every Claude call in
+    the codebase emits a structured ``claude_call`` log line and returns
+    an :class:`AgentProvenance`. Today's path is always
+    ``call_kind="messages.create"`` and ``agent_backed=False`` — Task #26
+    will flip the call sites to ``sessions.events`` and the same
+    contract will start surfacing tool-use evidence.
+    """
+    started = time.perf_counter()
     resp = await _anthropic.messages.create(
         model=settings.claude_model,
         max_tokens=600,
         system=SYSTEM,
         messages=[{"role": "user", "content": user_content}],
     )
+    latency_ms = int((time.perf_counter() - started) * 1000)
     text = "".join(b.text for b in resp.content if b.type == "text")
-    usage: dict[str, int] = {}
     u = getattr(resp, "usage", None)
-    if u is not None:
-        usage = {
-            "input_tokens": int(getattr(u, "input_tokens", 0) or 0),
-            "output_tokens": int(getattr(u, "output_tokens", 0) or 0),
-        }
-    return text, usage
+    input_tokens = int(getattr(u, "input_tokens", 0) or 0) if u is not None else 0
+    output_tokens = int(getattr(u, "output_tokens", 0) or 0) if u is not None else 0
+    prov = AgentProvenance(
+        call_kind="messages.create",
+        agent_backed=False,
+        model=settings.claude_model,
+        latency_ms=latency_ms,
+        input_tokens=input_tokens,
+        output_tokens=output_tokens,
+    )
+    # One stable structured line per Claude call. The audit endpoint and
+    # CLI parse persisted Benefit.agent_provenance, but ``/chat`` and any
+    # future non-persisted call site still leave an audit trail here.
+    logger.info(
+        "claude_call call_kind=%s agent_backed=%s model=%s "
+        "latency_ms=%d input_tokens=%d output_tokens=%d "
+        "tool_use_count=%d mcp_tool_use_count=%d",
+        prov.call_kind,
+        str(prov.agent_backed).lower(),
+        prov.model,
+        prov.latency_ms,
+        prov.input_tokens,
+        prov.output_tokens,
+        prov.tool_use_count,
+        prov.mcp_tool_use_count,
+    )
+    return text, prov
 
 
 @dataclass
@@ -124,6 +161,20 @@ class VerifyResult:
     # ``verify_entitlement`` from ``retrieve_supporting_context`` when
     # the curriculum collection has matching chunks above threshold.
     supporting_doctrine: list[SupportingDoctrine] = field(default_factory=list)
+    # Provenance is REQUIRED for every VerifyResult — the regression
+    # test in tests/test_agent_provenance.py asserts this so a future
+    # refactor cannot silently drop the audit trail. The short-circuit
+    # paths (no chunks, bad JSON) still build a synthetic provenance
+    # with call_kind="messages.create" and zero latency so the contract
+    # holds without faking a Claude call that never happened.
+    agent_provenance: AgentProvenance = field(
+        default_factory=lambda: AgentProvenance(
+            call_kind="messages.create",
+            agent_backed=False,
+            model=settings.claude_model,
+            latency_ms=0,
+        )
+    )
 
 
 async def verify_entitlement(
@@ -260,15 +311,15 @@ Retrieved legal text (authoritative chunks first):
 
 Respond with JSON only."""
 
-    started = time.perf_counter()
-    text, usage = await _call_claude(user_content)
-    latency_ms = int((time.perf_counter() - started) * 1000)
+    text, provenance = await _call_claude(user_content)
     logger.info(
-        "claude_verify entitlement_id=%s latency_ms=%d input_tokens=%d output_tokens=%d",
+        "claude_verify entitlement_id=%s latency_ms=%d input_tokens=%d "
+        "output_tokens=%d agent_backed=%s",
         entitlement.id,
-        latency_ms,
-        usage.get("input_tokens", 0),
-        usage.get("output_tokens", 0),
+        provenance.latency_ms,
+        provenance.input_tokens,
+        provenance.output_tokens,
+        str(provenance.agent_backed).lower(),
     )
 
     m = _JSON_RE.search(text)
@@ -286,6 +337,7 @@ Respond with JSON only."""
             confidence=0.0,
             reasoning="LLM output was not valid JSON",
             best_citation=cit,
+            agent_provenance=provenance,
         )
 
     quote = " ".join(str(parsed.get("best_quote", "")).strip().split()[:14])
@@ -323,4 +375,5 @@ Respond with JSON only."""
             )
             for d in doctrine_chunks
         ],
+        agent_provenance=provenance,
     )

@@ -44,6 +44,7 @@ from swiss_legal_api.engine.verify import (
     verify_entitlement,
 )
 from swiss_legal_api.schemas import (
+    AgentProvenance,
     Benefit,
     Citation,
     ContextProfile,
@@ -55,6 +56,17 @@ from swiss_legal_api.seeding.curriculum_chunker import (
     chunk_pages,
 )
 from swiss_legal_api.seeding.seed_curriculum import _stable_id
+
+
+def _fake_provenance() -> AgentProvenance:
+    return AgentProvenance(
+        call_kind="messages.create",
+        agent_backed=False,
+        model="claude-fake",
+        latency_ms=1,
+        input_tokens=50,
+        output_tokens=20,
+    )
 
 # ---------------------------------------------------------------------------
 # Chunker determinism + ID stability
@@ -360,7 +372,7 @@ async def test_verifier_envelope_includes_supporting_doctrine(
 
     captured: dict[str, str] = {}
 
-    async def _fake_call_claude(content: str) -> tuple[str, dict[str, int]]:
+    async def _fake_call_claude(content: str) -> tuple[str, AgentProvenance]:
         captured["content"] = content
         body = json.dumps(
             {
@@ -370,7 +382,7 @@ async def test_verifier_envelope_includes_supporting_doctrine(
                 "best_quote": "Der Vertrag kommt durch übereinstimmende Willensäusserung.",
             }
         )
-        return body, {"input_tokens": 60, "output_tokens": 25}
+        return body, _fake_provenance()
 
     monkeypatch.setattr(verify_mod, "_call_claude", _fake_call_claude)
 
@@ -422,7 +434,7 @@ async def test_verifier_works_when_curriculum_empty(
 
     captured: dict[str, str] = {}
 
-    async def _fake_call_claude(content: str) -> tuple[str, dict[str, int]]:
+    async def _fake_call_claude(content: str) -> tuple[str, AgentProvenance]:
         captured["content"] = content
         return (
             json.dumps(
@@ -433,7 +445,7 @@ async def test_verifier_works_when_curriculum_empty(
                     "best_quote": "Test quote.",
                 }
             ),
-            {"input_tokens": 50, "output_tokens": 20},
+            _fake_provenance(),
         )
 
     monkeypatch.setattr(verify_mod, "_call_claude", _fake_call_claude)
@@ -466,7 +478,7 @@ async def test_verifier_soft_fails_on_doctrine_lookup_exception(
 
     monkeypatch.setattr(verify_mod, "retrieve_supporting_context", _boom)
 
-    async def _fake_call_claude(_content: str) -> tuple[str, dict[str, int]]:
+    async def _fake_call_claude(_content: str) -> tuple[str, AgentProvenance]:
         return (
             json.dumps(
                 {
@@ -476,7 +488,7 @@ async def test_verifier_soft_fails_on_doctrine_lookup_exception(
                     "best_quote": "Test quote.",
                 }
             ),
-            {"input_tokens": 50, "output_tokens": 20},
+            _fake_provenance(),
         )
 
     monkeypatch.setattr(verify_mod, "_call_claude", _fake_call_claude)

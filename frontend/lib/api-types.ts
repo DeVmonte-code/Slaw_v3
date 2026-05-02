@@ -186,10 +186,127 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/audits/agent-backed": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Admin Audit Agent Backed
+         * @description Aggregate provenance over every persisted scan.
+         *
+         *     Returns the same dict shape as
+         *     :func:`swiss_legal_api.audits.agent_backed_summary` so the CLI and
+         *     the endpoint stay in lockstep. The Task #25 baseline expects
+         *     ``agent_backed_pct=0.0`` (every call site still uses
+         *     ``messages.create``); Task #26 will flip the call sites and the
+         *     same query will start reporting ``agent_backed > 0``.
+         */
+        get: operations["admin_audit_agent_backed_admin_audits_agent_backed_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /**
+         * AgentProvenance
+         * @description Structured provenance record attached to every Claude call output.
+         *
+         *     Persisted with each verified ``Benefit`` (so historical scans can be
+         *     audited) and emitted as a single-line ``claude_call`` log event (so
+         *     even non-persisted call sites — ``/chat`` — leave an audit trail).
+         *
+         *     ``agent_backed`` is the headline signal: it is True iff the call was
+         *     routed through the managed-agents API *and* the resulting session
+         *     actually emitted at least one ``agent.tool_use`` or
+         *     ``agent.mcp_tool_use`` event. A ``sessions.events`` call that never
+         *     used a tool is still ``agent_backed=False`` — that's the whole point
+         *     of the audit.
+         */
+        AgentProvenance: {
+            /**
+             * Call Kind
+             * @description Which Anthropic surface produced this output. 'messages.create' is the legacy completion path; 'sessions.events' is the managed-agents path.
+             * @enum {string}
+             */
+            call_kind: "messages.create" | "sessions.events";
+            /**
+             * Agent Backed
+             * @description True iff call_kind=='sessions.events' AND the session emitted ≥1 agent.tool_use or agent.mcp_tool_use event.
+             */
+            agent_backed: boolean;
+            /**
+             * Model
+             * @description Claude model identifier used for the call.
+             */
+            model: string;
+            /**
+             * Latency Ms
+             * @description Wall-clock latency of the call.
+             */
+            latency_ms: number;
+            /**
+             * Input Tokens
+             * @default 0
+             */
+            input_tokens: number;
+            /**
+             * Output Tokens
+             * @default 0
+             */
+            output_tokens: number;
+            /**
+             * Agent Id
+             * @description Managed agent ID (None on the messages.create path).
+             */
+            agent_id?: string | null;
+            /**
+             * Agent Version
+             * @description Pinned agent version, if any.
+             */
+            agent_version?: number | null;
+            /**
+             * Session Id
+             * @description Managed-agents session ID, if any.
+             */
+            session_id?: string | null;
+            /**
+             * Environment Id
+             * @description Managed-agents environment ID, if any.
+             */
+            environment_id?: string | null;
+            /**
+             * Tools Offered
+             * @description Tool / toolset names declared on the agent at session creation. Empty on the messages.create path.
+             */
+            tools_offered?: string[];
+            /**
+             * Tool Use Count
+             * @description Number of agent.tool_use events observed in the stream.
+             * @default 0
+             */
+            tool_use_count: number;
+            /**
+             * Mcp Tool Use Count
+             * @description Number of agent.mcp_tool_use events observed in the stream.
+             * @default 0
+             */
+            mcp_tool_use_count: number;
+            /**
+             * Mcp Servers Invoked
+             * @description Names of MCP servers whose tools were actually invoked.
+             */
+            mcp_servers_invoked?: string[];
+        };
         /**
          * Alert
          * @description One row of the ``alerts`` table.
@@ -277,6 +394,8 @@ export interface components {
             llm_reasoning: string;
             /** Supporting Doctrine */
             supporting_doctrine?: components["schemas"]["SupportingDoctrine"][];
+            /** @description Provenance of the Claude call that produced this benefit's verification. agent_backed=False on every legacy messages.create call site (Task #26 will flip these). */
+            agent_provenance?: components["schemas"]["AgentProvenance"] | null;
             /**
              * Disclaimer
              * @default Not a substitute for advice from a Swiss attorney registered with a cantonal bar.
@@ -837,6 +956,39 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    admin_audit_agent_backed_admin_audits_agent_backed_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-admin-token"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
             };
             /** @description Validation Error */
             422: {

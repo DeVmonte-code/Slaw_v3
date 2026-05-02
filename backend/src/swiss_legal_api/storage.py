@@ -248,6 +248,27 @@ def latest_scan(user_id: str) -> BenefitReport | None:
     return BenefitReport.model_validate_json(row["report_json"])
 
 
+def iter_all_scans() -> Iterator[BenefitReport]:
+    """Yield every persisted ``BenefitReport`` across all users.
+
+    Used by the agent-backed audit (Task #25) so the aggregate counts
+    EVERY shipped analysis, not just the latest report per user — a
+    user who ran 12 scans must contribute 12 reports' worth of
+    benefits, otherwise ``agent_backed_pct`` is silently distorted.
+
+    Streams via ``cursor.fetchone()`` so a large history doesn't
+    materialise the full result set in memory.
+    """
+    cur = _get_conn().execute(
+        "SELECT report_json FROM scan_results ORDER BY scan_at ASC"
+    )
+    while True:
+        row = cur.fetchone()
+        if row is None:
+            return
+        yield BenefitReport.model_validate_json(row["report_json"])
+
+
 def prune_scans(user_id: str, keep: int) -> int:
     """Delete all but the ``keep`` most-recent scans for ``user_id``.
 

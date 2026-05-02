@@ -36,9 +36,23 @@ export function BenefitCard({ benefit: b }: { benefit: Benefit }) {
           </span>
           <h2 className="mt-1 text-xl font-semibold text-gray-900">{b.title}</h2>
         </div>
-        <span className={`rounded-full px-3 py-1 text-sm font-semibold ${confidenceColor(b.confidence)}`}>
-          {Math.round(b.confidence * 100)}% confidence
-        </span>
+        <div className="flex flex-col items-end gap-1">
+          <span className={`rounded-full px-3 py-1 text-sm font-semibold ${confidenceColor(b.confidence)}`}>
+            {Math.round(b.confidence * 100)}% confidence
+          </span>
+          {!b.agent_provenance?.agent_backed && (
+            <span
+              title={
+                b.agent_provenance
+                  ? `Verified via ${b.agent_provenance.call_kind}; no managed-agent tool use observed.`
+                  : "No provenance recorded for this analysis."
+              }
+              className="rounded-full border border-amber-300 bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-800"
+            >
+              Unverified by agent
+            </span>
+          )}
+        </div>
       </div>
 
       <div className="mt-3 flex items-center gap-4 text-sm text-gray-600">

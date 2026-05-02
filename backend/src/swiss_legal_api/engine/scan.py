@@ -154,6 +154,7 @@ async def run_benefit_scan(
                 time_limit_days=e.time_limit_days,
                 llm_reasoning=v.reasoning,
                 supporting_doctrine=v.supporting_doctrine,
+                agent_provenance=v.agent_provenance,
             )
         )
 

@@ -53,6 +53,14 @@ class Settings(BaseSettings):
     # up only deltas. Configurable so tests can use a tmpdir.
     fedlex_previous_snapshot_path: str = "data/law_articles.fedlex.previous.json"
 
+    # ----- Agent-backed audit (Task #25) ---------------------------------
+    # Shared-secret gate on ``GET /admin/audits/agent-backed``. When set,
+    # the endpoint requires ``X-Admin-Token`` to match. When unset, the
+    # endpoint is open in non-production environments and 403's in
+    # production so a deploy can never accidentally publish an open
+    # audit endpoint.
+    admin_audit_token: str = ""
+
     def cors_origins_list(self) -> list[str]:
         raw = self.cors_allow_origins or self.frontend_origin
         if not raw.strip():
