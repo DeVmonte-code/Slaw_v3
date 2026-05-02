@@ -19,6 +19,18 @@ from .embedder import embed_passage
 # existing point ID, so keep it constant across releases.
 _ID_NAMESPACE = uuid.UUID("c0a801f4-5e2c-4f9f-9d6a-7f0b4d1e8a30")
 
+# Sentinel string written into the bootstrap seed when an article was known
+# to require a verbatim Fedlex pull but hadn't been backfilled yet. We must
+# never embed this into Qdrant — it would pollute retrieval with a literal
+# "__PENDING_FEDLEX_VERBATIM__" passage and silently degrade citation
+# quality. The seeder filters it out *and* hard-fails if any sneaks past.
+_PLACEHOLDER_SENTINEL = "__PENDING_FEDLEX_VERBATIM__"
+
+
+def _is_placeholder(record: dict[str, Any]) -> bool:
+    text = record.get("text")
+    return isinstance(text, str) and _PLACEHOLDER_SENTINEL in text
+
 
 def _normalize_date(value: Any) -> str | None:
     """Coerce an effective/repealed date to RFC3339 datetime at midnight UTC.
@@ -112,22 +124,48 @@ def _load_articles(explicit: str | None) -> tuple[list[dict[str, Any]], list[Pat
     Returns (records, source_paths) so the CLI can log which files actually
     contributed.
     """
+    def _drop_placeholders(
+        records: list[dict[str, Any]], origin: str
+    ) -> list[dict[str, Any]]:
+        # Defensive: even an explicit --source could be the bootstrap manual
+        # file, which historically carries placeholder rows for articles
+        # awaiting Fedlex backfill. We strip them here so the seeder never
+        # embeds the sentinel; main() additionally hard-fails if the filter
+        # ever misses one (defense in depth).
+        kept: list[dict[str, Any]] = []
+        dropped = 0
+        for r in records:
+            if _is_placeholder(r):
+                dropped += 1
+                continue
+            kept.append(r)
+        if dropped:
+            print(
+                f"Skipped {dropped} placeholder rows from {origin} "
+                f"(awaiting Fedlex backfill)"
+            )
+        return kept
+
     if explicit:
-        return json.loads(Path(explicit).read_text()), [Path(explicit)]
+        records = json.loads(Path(explicit).read_text())
+        return _drop_placeholders(records, str(Path(explicit))), [Path(explicit)]
 
     seed_dir = Path(__file__).resolve().parents[3] / "seed"
     fedlex = seed_dir / "law_articles.fedlex.json"
     manual = seed_dir / "law_articles.json"
 
     if not fedlex.exists():
-        return json.loads(manual.read_text()), [manual]
+        records = json.loads(manual.read_text())
+        return _drop_placeholders(records, str(manual)), [manual]
 
     fedlex_records: list[dict[str, Any]] = json.loads(fedlex.read_text())
+    fedlex_records = _drop_placeholders(fedlex_records, str(fedlex))
     if not manual.exists():
         return fedlex_records, [fedlex]
 
     covered = {_coverage_key(r) for r in fedlex_records}
     manual_records: list[dict[str, Any]] = json.loads(manual.read_text())
+    manual_records = _drop_placeholders(manual_records, str(manual))
     fallback = [r for r in manual_records if _coverage_key(r) not in covered]
     return fedlex_records + fallback, [fedlex, manual]
 
@@ -245,6 +283,15 @@ def main(argv: list[str] | None = None) -> int:
 
     points: list[qmodels.PointStruct] = []
     for i, a in enumerate(articles, start=1):
+        # Defense in depth: _load_articles already filters placeholder rows,
+        # but if a future code path bypasses that, fail loud rather than
+        # embed sentinel text into Qdrant.
+        if _is_placeholder(a):
+            raise ValueError(
+                f"{sources_repr} entry #{i} ({a.get('sr_number')} "
+                f"Art. {a.get('article')}) carries the "
+                f"{_PLACEHOLDER_SENTINEL} sentinel; refusing to embed."
+            )
         # Default to federal jurisdiction if seed entry omits canton.
         payload: dict[str, Any] = {**a, "canton": a.get("canton", "CH")}
         payload["effective_date"] = _normalize_date(payload.get("effective_date"))

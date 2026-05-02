@@ -535,7 +535,35 @@ def main(argv: list[str] | None = None) -> int:
         snapshot_date=args.snapshot_date,
     )
     n = write_snapshot(records, out_path)
-    print(f"Wrote {n} article records to {out_path}")
+
+    # Per-SR/language summary so the operator can see at a glance which acts
+    # actually contributed and which were silently empty (e.g. SR 141.0 with
+    # no AN-XML manifestation in Fedlex). Articles are deduped per SR.
+    by_sr: dict[str, set[str]] = {}
+    by_lang: dict[str, int] = {}
+    by_sr_lang: dict[tuple[str, str], int] = {}
+    for r in records:
+        by_sr.setdefault(r.sr_number, set()).add(r.article)
+        by_lang[r.language] = by_lang.get(r.language, 0) + 1
+        key = (r.sr_number, r.language)
+        by_sr_lang[key] = by_sr_lang.get(key, 0) + 1
+    print(
+        f"Ingested {n} articles across {len(by_sr)} SRs, "
+        f"{len(by_lang)} languages -> {out_path}"
+    )
+    for sr in sr_numbers:
+        articles = by_sr.get(sr, set())
+        if not articles:
+            print(f"  SR {sr}: 0 records (no XML manifestation found)")
+            continue
+        lang_breakdown = ", ".join(
+            f"{lang}={by_sr_lang.get((sr, lang), 0)}"
+            for lang in languages
+            if by_sr_lang.get((sr, lang), 0)
+        )
+        print(
+            f"  SR {sr}: {len(articles)} distinct articles ({lang_breakdown})"
+        )
     return 0
 
 

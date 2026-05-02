@@ -102,6 +102,78 @@ def test_load_articles_fedlex_only_when_manual_missing(tmp_path, monkeypatch):
     assert sources == [fedlex]
 
 
+def test_load_articles_strips_placeholder_sentinels(tmp_path, monkeypatch, capsys):
+    """Manual-only path: placeholder rows must be filtered before embedding
+    so the literal __PENDING_FEDLEX_VERBATIM__ sentinel never enters Qdrant
+    and pollutes retrieval.
+    """
+    seed_dir = tmp_path / "seed"
+    seed_dir.mkdir()
+    manual = seed_dir / "law_articles.json"
+    real_row = _make("220", "1", text="Real legal text.")
+    placeholder = _make("141.0", "9", text="__PENDING_FEDLEX_VERBATIM__")
+    _write(manual, [real_row, placeholder])
+    fake_module = seed_dir.parent / "src" / "_pkg" / "_mod" / "seed_qdrant.py"
+    fake_module.parent.mkdir(parents=True, exist_ok=True)
+    fake_module.touch()
+    monkeypatch.setattr(seed_qdrant, "__file__", str(fake_module))
+
+    records, _ = seed_qdrant._load_articles(None)
+    assert len(records) == 1
+    assert records[0]["sr_number"] == "220"
+    out = capsys.readouterr().out
+    assert "Skipped 1 placeholder rows" in out
+
+
+def test_load_articles_strips_placeholders_from_merge_fallback(
+    tmp_path, monkeypatch, capsys
+):
+    """Critical correctness case: when Fedlex is missing an act and the
+    manual row for that act still carries the sentinel, the merge must not
+    reintroduce the placeholder into the corpus."""
+    seed_dir = tmp_path / "seed"
+    seed_dir.mkdir()
+    fedlex = seed_dir / "law_articles.fedlex.json"
+    manual = seed_dir / "law_articles.json"
+    _write(fedlex, [_make("220", "1", text="fedlex 220 art1")])
+    _write(
+        manual,
+        [
+            # Same key as Fedlex - must drop regardless.
+            _make("220", "1", text="manual 220 art1"),
+            # Key Fedlex doesn't cover, but value is still a placeholder -
+            # must NOT be reintroduced via fallback.
+            _make("141.0", "9", text="__PENDING_FEDLEX_VERBATIM__"),
+            # Key Fedlex doesn't cover and has real text - must survive.
+            _make("141.0", "11", text="Real manual fallback text"),
+        ],
+    )
+    fake_module = seed_dir.parent / "src" / "_pkg" / "_mod" / "seed_qdrant.py"
+    fake_module.parent.mkdir(parents=True, exist_ok=True)
+    fake_module.touch()
+    monkeypatch.setattr(seed_qdrant, "__file__", str(fake_module))
+
+    records, _ = seed_qdrant._load_articles(None)
+    texts = {r["text"] for r in records}
+    assert "__PENDING_FEDLEX_VERBATIM__" not in texts
+    assert "fedlex 220 art1" in texts
+    assert "Real manual fallback text" in texts
+    out = capsys.readouterr().out
+    assert "Skipped 1 placeholder rows" in out
+
+
+def test_is_placeholder_detects_sentinel_substring():
+    assert seed_qdrant._is_placeholder({"text": "__PENDING_FEDLEX_VERBATIM__"})
+    # Substring match - protects against future seed templates that wrap
+    # the sentinel in surrounding prose.
+    assert seed_qdrant._is_placeholder(
+        {"text": "TODO: __PENDING_FEDLEX_VERBATIM__ (backfill before 2026-01-01)"}
+    )
+    assert not seed_qdrant._is_placeholder({"text": "Real legal article text"})
+    assert not seed_qdrant._is_placeholder({})
+    assert not seed_qdrant._is_placeholder({"text": None})
+
+
 def test_coverage_key_distinguishes_paragraph_and_language():
     """Two rows that share (sr, article) but differ in paragraph or language
     must get distinct coverage keys — otherwise the merge would silently

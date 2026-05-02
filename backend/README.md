@@ -185,7 +185,12 @@ act gets a fresh consolidation every year. The CLI defaults to today's
 back. A handful of acts (notably **SR 141.0 / Bürgerrechtsgesetz** as of
 this writing) do not publish a downloadable AN-XML at any date — those
 emit `fedlex_xml_missing sr=…` and silently skip; the seeder then keeps
-serving those articles from the manual `seed/law_articles.json` bootstrap.
+serving those articles from the manual `seed/law_articles.json` bootstrap
+**only for rows that contain real legal text**. The seeder filters out
+any row whose text is the `__PENDING_FEDLEX_VERBATIM__` sentinel and
+also hard-fails if a sentinel ever reaches the embedding loop, so a
+half-backfilled bootstrap can never pollute Qdrant with placeholder
+text.
 
 ### Tests
 
