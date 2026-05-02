@@ -481,6 +481,13 @@ async def test_audit_filters_since_and_entitlement_id_with_drilldown(
     assert by_job["total_benefits"] == 1
     assert by_job["filter"]["job_id"] == "2026-04-15T00:00:00Z"
 
+    # ``since`` is parsed as a real datetime, so the same instant
+    # expressed in a different ISO-8601 variant must match.
+    same_instant_offset = agent_backed_summary(
+        since="2026-04-10T00:00:00+00:00"
+    )
+    assert same_instant_offset["total_benefits"] == windowed["total_benefits"]
+
     drill = agent_backed_summary(
         entitlement_id="test_ent_prov", include_records=True
     )

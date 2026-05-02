@@ -20,6 +20,7 @@ from __future__ import annotations
 import logging
 from collections import Counter
 from collections.abc import Iterator
+from datetime import UTC, datetime
 from typing import Any
 
 from .. import storage
@@ -43,13 +44,19 @@ def _iter_records(
     sqlite store keeps the report as JSON — a dedicated index is not
     yet justified at the current scale.
 
-    ``since`` is an ISO-8601 string (lexicographically comparable for
-    the ``YYYY-MM-DDTHH:MM:SSZ`` shape we persist). Reports with
-    ``generated_at < since`` are skipped.
+    ``since`` is parsed as an ISO-8601 instant (``datetime`` semantics,
+    not lexicographic string comparison) so callers can pass any
+    well-formed variant — ``2026-04-01T00:00:00Z``,
+    ``2026-04-01T00:00:00+00:00``, with or without microseconds — and
+    boundary semantics stay correct. Reports whose ``generated_at`` is
+    strictly before the parsed ``since`` are skipped.
     """
+    since_dt = _parse_iso_utc(since) if since is not None else None
     for report in storage.iter_all_scans():
-        if since is not None and report.generated_at < since:
-            continue
+        if since_dt is not None:
+            report_dt = _parse_iso_utc(report.generated_at)
+            if report_dt is None or report_dt < since_dt:
+                continue
         # ``job_id`` is the persisted scan-run identifier — each
         # ``BenefitReport`` row is keyed by ``(user_id, generated_at)``,
         # so the report's ``generated_at`` IS the job_id auditors use
@@ -69,6 +76,24 @@ def _iter_records(
                     else None
                 ),
             }
+
+
+def _parse_iso_utc(value: str) -> datetime | None:
+    """Parse an ISO-8601 timestamp, normalising to a UTC-aware datetime.
+
+    Returns ``None`` for malformed input so the caller can decide
+    whether to skip the row (lenient) or surface the error. We
+    normalise naive datetimes to UTC because every persisted
+    ``generated_at`` is written in UTC.
+    """
+    s = value.replace("Z", "+00:00") if value.endswith("Z") else value
+    try:
+        dt = datetime.fromisoformat(s)
+    except ValueError:
+        return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=UTC)
+    return dt
 
 
 def _aggregate(records: list[dict[str, Any]]) -> dict[str, Any]:
