@@ -544,6 +544,37 @@ async def test_chat_response_envelope_carries_provenance(monkeypatch) -> None:
         assert body["agent_provenance"]["model"] == "claude-fake"
 
 
+def test_audit_cli_smoke_prints_summary_json() -> None:
+    """Smoke-test the CLI entrypoint: it must exit 0 and print parseable
+    JSON whose shape matches the library and HTTP surface, so cron jobs
+    can grep/jq the output reliably.
+    """
+    import io
+    from contextlib import redirect_stdout
+
+    from swiss_legal_api.audits.__main__ import main
+
+    buf = io.StringIO()
+    with redirect_stdout(buf):
+        rc = main(["agent_backed"])
+    assert rc == 0
+    payload = json.loads(buf.getvalue())
+    for key in (
+        "total_benefits",
+        "agent_backed",
+        "agent_backed_pct",
+        "by_call_kind",
+        "by_model",
+        "filter",
+    ):
+        assert key in payload
+    assert payload["filter"] == {
+        "since": None,
+        "entitlement_id": None,
+        "job_id": None,
+    }
+
+
 def test_audit_aggregation_counts_sessions_events_with_tool_use_as_agent_backed() -> None:
     """End-to-end aggregation test for the Task #26 traffic shape.
 
