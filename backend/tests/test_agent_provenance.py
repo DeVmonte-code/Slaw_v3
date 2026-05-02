@@ -391,23 +391,28 @@ def test_managed_agents_provenance_invariant() -> None:
     )
     assert _is_consistent(consistent_session_with_tool)
 
-    inconsistent = AgentProvenance(
-        call_kind="messages.create",
-        agent_backed=True,  # impossible: no managed-agent session ran
-        model="m",
-        latency_ms=0,
-    )
-    assert not _is_consistent(inconsistent)
-
-    inconsistent_no_tools = AgentProvenance(
-        call_kind="sessions.events",
-        agent_backed=True,
-        model="m",
-        latency_ms=0,
-        tool_use_count=0,
-        mcp_tool_use_count=0,
-    )
-    assert not _is_consistent(inconsistent_no_tools)
+    # Inconsistent records are rejected at construction time by the
+    # schema validator (see test_agent_backed_is_derived_truth_enforced
+    # _by_validator). Here we re-assert the helper's truth function
+    # matches the validator on consistent inputs, so Task #26 cannot
+    # accidentally weaken the contract.
+    import pydantic
+    with pytest.raises(pydantic.ValidationError):
+        AgentProvenance(
+            call_kind="messages.create",
+            agent_backed=True,
+            model="m",
+            latency_ms=0,
+        )
+    with pytest.raises(pydantic.ValidationError):
+        AgentProvenance(
+            call_kind="sessions.events",
+            agent_backed=True,
+            model="m",
+            latency_ms=0,
+            tool_use_count=0,
+            mcp_tool_use_count=0,
+        )
 
 
 def _is_consistent(p: AgentProvenance) -> bool:
@@ -469,7 +474,12 @@ async def test_audit_filters_since_and_entitlement_id_with_drilldown(
     assert windowed["filter"] == {
         "since": "2026-04-10T00:00:00Z",
         "entitlement_id": None,
+        "job_id": None,
     }
+
+    by_job = agent_backed_summary(job_id="2026-04-15T00:00:00Z")
+    assert by_job["total_benefits"] == 1
+    assert by_job["filter"]["job_id"] == "2026-04-15T00:00:00Z"
 
     drill = agent_backed_summary(
         entitlement_id="test_ent_prov", include_records=True
@@ -532,6 +542,61 @@ async def test_chat_response_envelope_carries_provenance(monkeypatch) -> None:
         assert body["agent_provenance"]["call_kind"] == "messages.create"
         assert body["agent_provenance"]["agent_backed"] is False
         assert body["agent_provenance"]["model"] == "claude-fake"
+
+
+def test_agent_backed_is_derived_truth_enforced_by_validator() -> None:
+    """A caller cannot lie about being agent-backed.
+
+    The schema validator must reject any AgentProvenance whose
+    ``agent_backed`` field disagrees with the derived truth function
+    ``call_kind=='sessions.events' AND tool_use_count+mcp_tool_use_count>0``.
+    """
+    import pydantic
+
+    # messages.create can NEVER be agent_backed=True
+    with pytest.raises(pydantic.ValidationError):
+        AgentProvenance(
+            call_kind="messages.create",
+            agent_backed=True,
+            model="x",
+            latency_ms=1,
+        )
+
+    # sessions.events with zero tool uses is NOT agent_backed
+    with pytest.raises(pydantic.ValidationError):
+        AgentProvenance(
+            call_kind="sessions.events",
+            agent_backed=True,
+            model="x",
+            latency_ms=1,
+            tool_use_count=0,
+            mcp_tool_use_count=0,
+        )
+
+    # sessions.events with ≥1 tool use that claims NOT agent_backed
+    with pytest.raises(pydantic.ValidationError):
+        AgentProvenance(
+            call_kind="sessions.events",
+            agent_backed=False,
+            model="x",
+            latency_ms=1,
+            tool_use_count=1,
+        )
+
+    # consistent records are accepted
+    AgentProvenance(
+        call_kind="sessions.events",
+        agent_backed=True,
+        model="x",
+        latency_ms=1,
+        tool_use_count=2,
+    )
+    AgentProvenance(
+        call_kind="messages.create",
+        agent_backed=False,
+        model="x",
+        latency_ms=1,
+    )
 
 
 def test_claude_call_log_carries_full_provenance_contract() -> None:

@@ -1,3 +1,4 @@
+import { useState } from "react";
 import type { Benefit } from "@/lib/api-client";
 import { AskFollowUp } from "./AskFollowUp";
 
@@ -27,6 +28,7 @@ const ACTION_LABELS: Record<string, string> = {
 };
 
 export function BenefitCard({ benefit: b }: { benefit: Benefit }) {
+  const [agentBadgeDismissed, setAgentBadgeDismissed] = useState(false);
   return (
     <article className="rounded-lg border bg-white p-6 shadow-sm">
       <div className="flex items-start justify-between gap-4">
@@ -40,16 +42,24 @@ export function BenefitCard({ benefit: b }: { benefit: Benefit }) {
           <span className={`rounded-full px-3 py-1 text-sm font-semibold ${confidenceColor(b.confidence)}`}>
             {Math.round(b.confidence * 100)}% confidence
           </span>
-          {!b.agent_provenance?.agent_backed && (
+          {!b.agent_provenance?.agent_backed && !agentBadgeDismissed && (
             <span
               title={
                 b.agent_provenance
                   ? `Verified via ${b.agent_provenance.call_kind}; no managed-agent tool use observed.`
                   : "No provenance recorded for this analysis."
               }
-              className="rounded-full border border-amber-300 bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-800"
+              className="inline-flex items-center gap-1 rounded-full border border-amber-300 bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-800"
             >
               Unverified by agent
+              <button
+                type="button"
+                aria-label="Dismiss unverified-by-agent notice"
+                onClick={() => setAgentBadgeDismissed(true)}
+                className="ml-1 rounded-full px-1 leading-none text-amber-700 hover:bg-amber-100 hover:text-amber-900"
+              >
+                ×
+              </button>
             </span>
           )}
         </div>

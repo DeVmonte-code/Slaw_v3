@@ -459,6 +459,14 @@ def admin_audit_agent_backed(
             "agent-backed?'."
         ),
     ),
+    job_id: str | None = Query(
+        default=None,
+        description=(
+            "Restrict to a single scan run. job_id is the report's "
+            "generated_at ISO timestamp (each persisted BenefitReport "
+            "is keyed by (user_id, generated_at))."
+        ),
+    ),
     details: bool = Query(
         default=False,
         description=(
@@ -472,13 +480,15 @@ def admin_audit_agent_backed(
 
     Counts every ``Benefit.agent_provenance`` across every persisted
     ``BenefitReport``, not just the latest report per user. Filters
-    (``since``, ``entitlement_id``) and the ``details`` drill-down
-    mode mirror the CLI's flags (``--since``, ``--entitlement-id``,
-    ``--details``) so the HTTP and cron interfaces cannot drift.
+    (``since``, ``entitlement_id``, ``job_id``) and the ``details``
+    drill-down mode mirror the CLI's flags (``--since``,
+    ``--entitlement-id``, ``--job-id``, ``--details``) so the HTTP
+    and cron interfaces cannot drift.
     """
     _check_admin_token(x_admin_token)
     return agent_backed_summary(
         since=since,
         entitlement_id=entitlement_id,
+        job_id=job_id,
         include_records=details,
     )

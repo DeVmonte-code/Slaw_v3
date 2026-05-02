@@ -33,6 +33,15 @@ def main(argv: list[str] | None = None) -> int:
         help="Restrict to a single entitlement (drill-down mode).",
     )
     p.add_argument(
+        "--job-id",
+        default=None,
+        help=(
+            "Restrict to a single scan run. The job_id is the "
+            "report's generated_at ISO timestamp — each persisted "
+            "BenefitReport row is keyed by (user_id, generated_at)."
+        ),
+    )
+    p.add_argument(
         "--details",
         action="store_true",
         help=(
@@ -47,6 +56,7 @@ def main(argv: list[str] | None = None) -> int:
                 agent_backed_summary(
                     since=args.since,
                     entitlement_id=args.entitlement_id,
+                    job_id=args.job_id,
                     include_records=args.details,
                 ),
                 indent=2,

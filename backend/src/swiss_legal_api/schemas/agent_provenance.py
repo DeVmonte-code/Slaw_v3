@@ -19,7 +19,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 CallKind = Literal["messages.create", "sessions.events"]
 
@@ -98,6 +98,38 @@ class AgentProvenance(BaseModel):
         default_factory=list,
         description="Names of MCP servers whose tools were actually invoked.",
     )
+
+    @model_validator(mode="after")
+    def _enforce_agent_backed_is_derived(self) -> AgentProvenance:
+        """``agent_backed`` is not free-form; it is DERIVED truth.
+
+        The audit's whole point is "you cannot lie about being
+        agent-backed". So we enforce, at the schema level, that
+        ``agent_backed`` equals the truth function the auditors apply
+        downstream:
+
+            agent_backed ⇔ (call_kind == "sessions.events"
+                            ∧ tool_use_count + mcp_tool_use_count > 0)
+
+        A ``sessions.events`` call that never invoked a tool is NOT
+        agent-backed, and a ``messages.create`` call can never be
+        agent-backed regardless of what the caller passes. Any caller
+        that constructs a mismatched record gets a ``ValidationError``
+        before the value can be persisted or logged.
+        """
+        expected = (
+            self.call_kind == "sessions.events"
+            and (self.tool_use_count + self.mcp_tool_use_count) > 0
+        )
+        if self.agent_backed != expected:
+            raise ValueError(
+                "agent_backed is derived truth: expected "
+                f"{expected} for call_kind={self.call_kind!r} "
+                f"tool_use_count={self.tool_use_count} "
+                f"mcp_tool_use_count={self.mcp_tool_use_count}, "
+                f"got {self.agent_backed}"
+            )
+        return self
 
     def to_log_fields(self, *, site: str) -> str:
         """Render the full provenance as a single ``key=value`` log line.

@@ -32,6 +32,7 @@ def _iter_records(
     *,
     since: str | None = None,
     entitlement_id: str | None = None,
+    job_id: str | None = None,
 ) -> Iterator[dict[str, Any]]:
     """Yield one record per persisted Benefit matching the filters.
 
@@ -48,6 +49,12 @@ def _iter_records(
     """
     for report in storage.iter_all_scans():
         if since is not None and report.generated_at < since:
+            continue
+        # ``job_id`` is the persisted scan-run identifier — each
+        # ``BenefitReport`` row is keyed by ``(user_id, generated_at)``,
+        # so the report's ``generated_at`` IS the job_id auditors use
+        # to drill down to a single scan run.
+        if job_id is not None and report.generated_at != job_id:
             continue
         for b in report.benefits:
             if entitlement_id is not None and b.entitlement_id != entitlement_id:
@@ -101,6 +108,7 @@ def agent_backed_summary(
     *,
     since: str | None = None,
     entitlement_id: str | None = None,
+    job_id: str | None = None,
     include_records: bool = False,
 ) -> dict[str, Any]:
     """Aggregate counts + per-call-kind / per-model breakdowns.
@@ -114,15 +122,24 @@ def agent_backed_summary(
       after this instant are counted.
     * ``entitlement_id`` — restrict to a single entitlement (the
       "drill-down for one verification" mode).
+    * ``job_id`` — restrict to a single scan run. Each persisted
+      ``BenefitReport`` is keyed by ``(user_id, generated_at)``, so
+      ``job_id`` is the report's ``generated_at`` ISO timestamp.
     * ``include_records`` — when True, the response carries the full
       per-verification provenance list under ``records``. Costs O(N)
       bytes; off by default so the headline call stays cheap.
     """
     records = list(
-        _iter_records(since=since, entitlement_id=entitlement_id)
+        _iter_records(
+            since=since, entitlement_id=entitlement_id, job_id=job_id
+        )
     )
     out = _aggregate(records)
-    out["filter"] = {"since": since, "entitlement_id": entitlement_id}
+    out["filter"] = {
+        "since": since,
+        "entitlement_id": entitlement_id,
+        "job_id": job_id,
+    }
     if include_records:
         out["records"] = records
     return out
