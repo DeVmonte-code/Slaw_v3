@@ -310,6 +310,11 @@ python -m swiss_legal_api.ingest.cantonal --canton ZH,BE,GE
 # have network access to the cantonal portals.
 python -m swiss_legal_api.ingest.cantonal --use-starter-specs
 
+# Production / CI: fail hard (exit 2) on any discovery failure instead
+# of degrading to starter specs. Use this in pipelines that must never
+# accidentally seed a reduced corpus when a canton's portal is down.
+python -m swiss_legal_api.ingest.cantonal --strict-discovery
+
 # The seeder auto-merges that file alongside fedlex+manual on the next reseed.
 python -m swiss_legal_api.seeding.seed_qdrant
 ```

@@ -95,6 +95,14 @@ def main(argv: list[str] | None = None) -> int:
         "curated starter spec list (one act per canton). Useful when the "
         "canton's index is unreachable.",
     )
+    parser.add_argument(
+        "--strict-discovery",
+        action="store_true",
+        help="Fail hard (exit code 2) on any discovery failure instead of "
+        "falling back to the inline starter specs. Recommended for "
+        "production seed runs so reduced-corpus ingestion is impossible "
+        "to miss.",
+    )
     args = parser.parse_args(argv)
 
     logging.basicConfig(
@@ -129,6 +137,16 @@ def main(argv: list[str] | None = None) -> int:
                 specs = adapter.discover_specs()
                 print(f"{canton}: discovered {len(specs)} in-force act(s)")
             except Exception as exc:
+                if args.strict_discovery:
+                    # Production seed runs MUST fail hard so a partial
+                    # canton outage can never produce a silently
+                    # reduced corpus. Exit 2 distinguishes this from
+                    # argparse's exit 1 (unknown canton).
+                    logger.error(
+                        "%s: discovery failed (%s) and --strict-discovery "
+                        "is set — aborting", canton, exc,
+                    )
+                    return 2
                 # Discovery failure must not silently shrink the corpus.
                 # Fall back to starter specs and surface the failure so
                 # the operator knows the catalogue surface needs
