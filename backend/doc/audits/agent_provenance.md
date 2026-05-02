@@ -61,8 +61,14 @@ trail (no `Benefit` row exists to inspect later).
 
 ## Audit consumers
 
-* `GET /admin/audits/agent-backed` (gated by `ADMIN_AUDIT_TOKEN` when
-  set, 403 in production when unset). Query params:
+* `GET /admin/audits/agent-backed` — gated by `ADMIN_AUDIT_TOKEN`,
+  the canonical admin auth mechanism for every `/admin/*` route in
+  this codebase (no other admin auth scheme exists; future admin
+  endpoints SHOULD reuse `_check_admin_token` rather than introduce
+  a parallel gate). Behaviour: token set → require exact match on
+  `X-Admin-Token`; token unset + production → 403 (fail-closed so an
+  open audit endpoint cannot ship by accident); token unset +
+  non-production → allow (dev/CI convenience). Query params:
   - `since=<iso8601>` — only reports generated at or after this instant
   - `entitlement_id=<id>` — drill down to a single verification
   - `details=true` — include per-verification `records` payload

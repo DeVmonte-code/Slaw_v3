@@ -81,3 +81,9 @@ dist
 build
 *.egg-info
 openapi.json
+
+# Local runtime artifacts (Task #25 reviewer hygiene)
+backend/data/sweep.db
+backend/data/sweep.db-shm
+backend/data/sweep.db-wal
+frontend/tsconfig.tsbuildinfo
