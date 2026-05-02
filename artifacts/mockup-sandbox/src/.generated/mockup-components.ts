@@ -9,5 +9,9 @@ export const modules: ModuleMap = {
   "./components/mockups/scan-results/CategoryCards.tsx": () => import("../components/mockups/scan-results/CategoryCards.tsx"),
   "./components/mockups/scan-results/DocumentSummary.tsx": () => import("../components/mockups/scan-results/DocumentSummary.tsx"),
   "./components/mockups/scan-results/PrioritizedList.tsx": () => import("../components/mockups/scan-results/PrioritizedList.tsx"),
-  "./components/mockups/scan-results/TimelineDeadlines.tsx": () => import("../components/mockups/scan-results/TimelineDeadlines.tsx")
+  "./components/mockups/scan-results/TimelineDeadlines.tsx": () => import("../components/mockups/scan-results/TimelineDeadlines.tsx"),
+  "./components/mockups/wizard-explorations/AdvisorDeck.tsx": () => import("../components/mockups/wizard-explorations/AdvisorDeck.tsx"),
+  "./components/mockups/wizard-explorations/LifeMap.tsx": () => import("../components/mockups/wizard-explorations/LifeMap.tsx"),
+  "./components/mockups/wizard-explorations/SmartInterview.tsx": () => import("../components/mockups/wizard-explorations/SmartInterview.tsx"),
+  "./components/mockups/wizard-explorations/UploadFirst.tsx": () => import("../components/mockups/wizard-explorations/UploadFirst.tsx")
 };

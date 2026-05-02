@@ -1,0 +1,40 @@
+Phase ordering with explicit dependencies
+The prompt is 9 phases, structured exactly the way you asked:
+
+P1 DIAGNOSTIC (blocking, runs first) — read-only inventory of current state. Confirms permit fields are absent, entitlement count is 15, all 6 expected new SR articles are missing. If any precondition is wrong, stops there. Output determines whether the sprint should proceed at all.
+P2 SCHEMA EXTENSION and P3 LAW CORPUS — touch different files, can run in parallel after P1.
+P4 RETROFIT EXISTING ENTITLEMENTS, P5 NEW ENTITLEMENTS, P6 FIXTURES, P8 VALIDATOR — all depend only on P2 and can run in any order after it.
+P7 EXPAND TESTS depends on P4+P5+P6.
+P9 SMOKE + DOCS is the final gate.
+
+The dependency arrows are drawn explicitly at the top so the Replit Agent can't accidentally bundle.
+Branch strategy
+Everything goes on feat/permit-status, one commit per phase, format feat(permits): P{N} — {summary}. Eight commits total. Agent is forbidden from merging to main — that's your call after review.
+What's deliberately strict
+
+No fabricated law text. New articles in law_articles.json use the literal string __PENDING_FEDLEX_VERBATIM__. The blocker-1 fix (replace paraphrased Fedlex text with verbatim) sweeps these in a separate PR. I will not let the Agent write plausible English summaries — it would compound the legal-fidelity problem we already flagged.
+15-word quote_under_15_words strings on the 3 new entitlements are paraphrases, but explicitly marked in README under "Pending verbatim citations" so they get fixed in the blocker-1 sweep. This is the smallest principled compromise: the 15-word slot has to contain something for the schema to validate, but it's flagged as provisional.
+No new operator in the trigger DSL. Everything is expressible with the 12 existing operators. Adding operators is the kind of scope creep that breaks v3.
+years_in_switzerland is supplied by the user/frontend, not auto-derived from permit_start_year. This keeps the trigger DSL pure data and avoids needing computed fields in Pydantic. The frontend wizard will compute it.
+
+Three persona fixtures
+
+luis_profile.json (existing, now annotated nationality_status="swiss") — baseline regression test.
+b_permit_eu_employee.json — EU-EFTA national, B permit, VD canton, Quellensteuer subject, single, no kids. Should hit quellensteuer_subsequent_assessment but NOT naturalisation_eligibility (B permit) and NOT childcare_cost_deduction (Quellensteuer + no kids).
+c_permit_third_country.json — third-country national, C permit, GE canton, 11 years residence, married with one kid, ordinary assessment. Should hit naturalisation_eligibility, family_reunification_right, and childcare_cost_deduction.
+
+The smoke test asserts all three fixtures' invariants in P9. If any drift, the script fails loud.
+P8 validator — the catch I'd insist on
+This is the part I'd push hardest for in any production legal system. scripts/validate_catalog.py walks every trigger expression in entitlements.json, extracts every field path it references (e.g. housing_status, permit_type, nationality_status), and verifies each one is a real field on the Pydantic ContextProfile model. Without this, a typo like nationaliy_status or permit_typ would silently always evaluate null != value → false, the entitlement would silently never trigger, and no test would fail because the fixture also has the typo. P8 catches those typos at CI time.
+How to use
+
+Open the file REPLIT_AGENT_MEGAPROMPT_OPTION_C_PERMITS.md.
+Copy everything between --- BEGIN PROMPT --- and --- END PROMPT ---.
+Open Replit Agent in a session pointed at your Slaw_v3 repo.
+Paste, run. Walk through each phase, type continue after each STOP. Confirm the diagnostic in P1 before proceeding.
+After P9 finishes, run locally: ./scripts/smoke.sh (with your secrets set). Three invariants: PASS lines and exit 0 = sprint done.
+Review git log main..feat/permit-status (should be 8 commits), then merge to main yourself.
+
+What this doesn't fix yet
+The "Out of scope for this sprint" section at the end is explicit about it: cantonal variations, F/N/S asylum-specific entitlements, G permit cross-border tax treaties, Lex Koller real estate, Sozialhilfe interactions, and the deferred Ci/G/L permits. Those are v2. The README ends with that list so the limitations are visible to anyone who reads the project later.
+When you've run this and the branch is green, the next natural step is the blocker-1 sweep (replace all paraphrased Fedlex text — old and new — with verbatim translations). Want me to draft that prompt next, or do you want to merge this one first and see how it lands?

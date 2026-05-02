@@ -1,0 +1,32 @@
+uploads = []
+outputs = []
+
+[[generated]]
+id = "rdBt2-lnKEbSmBR4CVmpU"
+uri = "file://artifacts/mockup-sandbox/public/images/life-map-switzerland.png"
+type = "image"
+title = "Swiss map illustration"
+
+[[generated]]
+id = "3aH6j-uKfTU65nU0HV0ft"
+uri = "file://artifacts/mockup-sandbox/public/images/life-map-home.png"
+type = "image"
+title = "Swiss home illustration"
+
+[[generated]]
+id = "gmqPMSaiSzYJdhHbfqdDV"
+uri = "file://artifacts/mockup-sandbox/public/images/life-map-family.png"
+type = "image"
+title = "Family illustration"
+
+[[generated]]
+id = "H2UlkQ20G9CbM6daV9A5f"
+uri = "file://artifacts/mockup-sandbox/public/images/life-map-work.png"
+type = "image"
+title = "Train and office illustration"
+
+[[generated]]
+id = "IHWxbAzCR3qjxyLFsAGC2"
+uri = "file://artifacts/mockup-sandbox/public/images/life-map-income.png"
+type = "image"
+title = "Piggy bank illustration"
