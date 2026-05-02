@@ -48,51 +48,105 @@ curl -X POST http://localhost:8000/scan \
   -d @fixtures/luis_profile.json
 ```
 
-## Dropped Articles
+## Health Endpoints
 
-Fedlex publishes English consolidated translations only for **SR 220** (Code of
-Obligations). The other federal acts we previously paraphrased (SR 642.11 / DBG,
-SR 831.40 / BVG, SR 837.0 / AVIG) exist on Fedlex only in DE, FR, IT and RM.
-Because the seed corpus must contain verbatim English text, the following
-articles were dropped from `seed/law_articles.json`:
+| Path      | Purpose                                             |
+| --------- | --------------------------------------------------- |
+| `/health` | Cheap liveness — proves the process is up.          |
+| `/readyz` | Deep readiness — pings Qdrant; 503 if unreachable.  |
 
-| SR number | Act | Article | Reason |
-|-----------|-----|---------|--------|
-| 642.11 | Direct Federal Tax Act (DBG) | 9 | No EN translation on Fedlex |
-| 642.11 | Direct Federal Tax Act (DBG) | 26 | No EN translation on Fedlex |
-| 642.11 | Direct Federal Tax Act (DBG) | 33 | No EN translation on Fedlex |
-| 642.11 | Direct Federal Tax Act (DBG) | 33a | No EN translation on Fedlex |
-| 831.40 | Occupational Pensions Act (BVG) | 82 | No EN translation on Fedlex |
-| 837.0 | Unemployment Insurance Act (AVIG) | 8 | No EN translation on Fedlex |
-| 837.0 | Unemployment Insurance Act (AVIG) | 9 | No EN translation on Fedlex |
+`/readyz` is what a load balancer should poll. `/health` is for the process supervisor.
 
-Entitlements that depended on a dropped article were rewired to a still-present
-SR 220 article so the test floor of 15 entitlements is preserved. Where no
-substantive Code-of-Obligations match exists, the rewired citation is the
-closest related private-law provision and should be treated as **INFO-only**
-until a verbatim EN source is published. Affected entitlements:
+## Configuration
 
-| Entitlement ID | Original citation | Rewired citation | Notes |
-|----------------|-------------------|------------------|-------|
-| `childcare_cost_deduction` | DBG art. 33 | CO art. 329f | Maternity-leave employee right (proxy) |
-| `commuting_cost_deduction` | DBG art. 26 | CO art. 327a | Reimbursement of necessary work expenses |
-| `professional_training_deduction` | DBG art. 33a | CO art. 327a | Reimbursement of necessary work expenses |
-| `third_pillar_deduction` | BVG art. 82 | CO art. 331 | Employer occupational-pension contributions |
-| `marriage_taxation_neutralization` | DBG art. 9 | CO art. 18 | INFO-only; no CO equivalent |
-| `unemployment_insurance_entitlement` | AVIG art. 8 | CO art. 335 | Termination of employment relationship |
-| `moving_canton_tax_adjustment` | DBG art. 9 | CO art. 1 | INFO-only; no CO equivalent |
-| `rd_business_deduction_hint` | DBG art. 26 | CO art. 327a | Off-premises work expenses |
+All settings are read from the environment (see `.env.example`).
 
-To restore proper tax / social-security citations, an English source for
-SR 642.11, SR 831.40 and SR 837.0 must be added (e.g. an authoritative
-non-Fedlex translation) and the affected entitlements re-pointed.
+| Variable               | Default                                | Notes                                                                                          |
+| ---------------------- | -------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| `ANTHROPIC_API_KEY`    | (empty)                                | Required for live `/scan` and `/chat`.                                                         |
+| `CLAUDE_MODEL`         | `claude-opus-4-7`                      | Override per environment if needed.                                                            |
+| `QDRANT_URL`           | (empty)                                | Required at startup (lifespan pings it).                                                       |
+| `QDRANT_API_KEY`       | (empty)                                | Required for Qdrant Cloud.                                                                     |
+| `QDRANT_COLLECTION`    | `swiss_law`                            |                                                                                                |
+| `EMBEDDING_MODEL`      | `intfloat/multilingual-e5-small`       | Pre-warmed at startup.                                                                         |
+| `SCAN_CONCURRENCY`     | `3`                                    | Anthropic semaphore.                                                                           |
+| `LOG_LEVEL`            | `INFO`                                 | `DEBUG` / `INFO` / `WARNING` / `ERROR`.                                                        |
+| `FRONTEND_ORIGIN`      | (empty)                                | Single CORS origin to allow. Mutually exclusive with `CORS_ALLOW_ORIGINS`.                     |
+| `CORS_ALLOW_ORIGINS`   | (empty)                                | Comma-separated CORS origins. Wins over `FRONTEND_ORIGIN` if both set.                         |
+| `APP_ENV`              | `development`                          | Set to `production` (or `prod`) to make CORS origins mandatory — startup fails if neither origin var is set. |
 
-## Law Article Sources
+### CORS
 
-All law text in `seed/law_articles.json` is sourced verbatim from the Fedlex
-English consolidated translation:
+If neither `FRONTEND_ORIGIN` nor `CORS_ALLOW_ORIGINS` is set in development
+(`APP_ENV=development`, the default), the API falls back to `allow_origins=["*"]` and
+emits a single `WARNING` log line at startup. In production (`APP_ENV=production`),
+the same misconfiguration **refuses to start** — startup raises `RuntimeError` rather
+than silently fail open.
 
-- **SR 220** (Code of Obligations / CO): https://www.fedlex.admin.ch/eli/cc/27/317_321_377/en
+```bash
+# Single origin (most common)
+export FRONTEND_ORIGIN=https://app.example.ch
+
+# Multiple origins (e.g. staging + production)
+export CORS_ALLOW_ORIGINS=https://app.example.ch,https://staging.example.ch
+```
+
+## Logging
+
+Structured single-line JSON-ish logs go to stdout (timestamp, level, logger, message).
+Notable log lines emitted by the engine:
+
+- `scan_complete profile_hash=… triggered=N verified=M suppressed=K duration_ms=…`
+- `claude_verify entitlement_id=… latency_ms=… input_tokens=… output_tokens=…`
+- `verify_entitlement failed for entitlement_id=… exc_type=…` (was previously silent)
+
+500 responses on `/scan` and `/chat` always log the full exception server-side and return
+only `{"detail": "Internal error"}` to the client — never `str(exc)` (which can leak
+Anthropic API keys, request bodies, etc.).
+
+## Source Languages
+
+Fedlex publishes a downloadable English consolidated text for **SR 220** (Code of
+Obligations) only. The other three laws referenced by the seed corpus are not available
+in English, only in DE / FR / IT. Per the v3 spec's "no paraphrased law text" rule, the
+seed therefore mixes verbatim **EN** for SR 220 and verbatim **DE** for the other three:
+
+| SR        | Title                                               | Source language used | Articles in seed                                       | Fedlex URL                                                                  |
+| --------- | --------------------------------------------------- | -------------------- | ------------------------------------------------------ | --------------------------------------------------------------------------- |
+| `220`     | Code of Obligations (OR / CO)                       | EN                   | 1, 18, 24, 28, 41, 42, 43, 62, 63, 197, 257e, 270a, 271, 321c, 327a, 328, 329f, 331, 335, 335c | https://www.fedlex.admin.ch/eli/cc/27/317_321_377/en                        |
+| `642.11`  | Direct Federal Tax Act (DBG / LIFD)                 | DE                   | 9, 26, 27, 33 Abs 1, 33 Abs 3, 35, 36 Abs 2, 212        | https://www.fedlex.admin.ch/eli/cc/1991/1184_1184_1184/de                   |
+| `831.40`  | Occupational Pensions Act (BVG / LPP)               | DE                   | 1                                                       | https://www.fedlex.admin.ch/eli/cc/1983/797_797_797/de                      |
+| `837.0`   | Unemployment Insurance Act (AVIG / LACI)            | DE                   | 8                                                       | https://www.fedlex.admin.ch/eli/cc/1982/2184_2184_2184/de                   |
+
+Each entry in `seed/law_articles.json` declares its source language in its `language`
+field, and each `quote_under_15_words` slice in `seed/entitlements.json` is a literal
+copy from the corresponding article in the same language. The verification prompt
+(`engine/verify.py`) explicitly states that retrieved DE text is treated as authoritative
+alongside EN — Claude reasons natively in both languages.
+
+### Verification
+
+Before relying on this corpus for any production legal advice, spot-check each `text`
+field against the Fedlex URL above for its `sr_number`. The DE entries were captured
+from Fedlex consolidated text but Fedlex amends the consolidated versions when the laws
+are revised, so the seed should be re-checked at every release cut.
+
+### Dropped Articles
+
+None. Every entitlement in `seed/entitlements.json` resolves to an article in
+`seed/law_articles.json` after the EN+DE rewrite. If a future spec change requires an
+article that has no Fedlex EN translation **and** is not reproducible verbatim in DE,
+list it here with the reason and remove the dependent entitlement.
+
+## Trigger DSL
+
+The trigger DSL (`schemas/trigger_dsl.py`) is a Pydantic v2 tagged union dispatched
+through a callable `Discriminator`. Each variant carries a `kind: Literal[…]` field for
+OpenAPI clarity. Existing JSON like `{"eq": [...]}` parses unchanged — the discriminator
+infers the tag from the operator key when `kind` is missing — so seed and fixture data
+do not need migration. All variants set `extra="forbid"` so payloads that smuggle two
+operators in one node (e.g. `{"eq": [...], "gt": [...]}`) fail loudly instead of
+silently dropping the unmatched branch.
 
 ## Legal Disclaimer
 

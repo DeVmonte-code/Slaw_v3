@@ -46,7 +46,7 @@
     "article": "43",
     "paragraph": "1",
     "language": "en",
-    "text": "The court determines the form and extent of the compensation provided for damage incurred, with due regard to the circumstances and the degree of culpability."
+    "text": "The court determines the form and scale of compensation provided for loss or damage suffered, with due regard to the circumstances and the degree of culpability."
   },
   {
     "sr_number": "220",
@@ -138,5 +138,75 @@
     "paragraph": "1",
     "language": "en",
     "text": "The employment relationship may be terminated at one month’s notice during the first year of service, at two months’ notice in the second to ninth years of service and at three months’ notice thereafter, all such notice to expire at the end of a calendar month."
+  },
+  {
+    "sr_number": "642.11",
+    "article": "9",
+    "paragraph": "1",
+    "language": "de",
+    "text": "Das Einkommen der Ehegatten, die in rechtlich und tatsächlich ungetrennter Ehe leben, wird ohne Rücksicht auf den Güterstand zusammengerechnet."
+  },
+  {
+    "sr_number": "642.11",
+    "article": "26",
+    "paragraph": "1",
+    "language": "de",
+    "text": "Als Berufskosten werden abgezogen: a. die notwendigen Kosten für Fahrten zwischen Wohn- und Arbeitsstätte bis zu einem Maximalbetrag von 3200 Franken; b. die notwendigen Mehrkosten für Verpflegung ausserhalb der Wohnstätte und bei Schichtarbeit; c. die übrigen für die Ausübung des Berufes erforderlichen Kosten; Artikel 33 Absatz 1 Buchstabe j bleibt vorbehalten; d. die mit dem Beruf zusammenhängenden Weiterbildungs- und Umschulungskosten."
+  },
+  {
+    "sr_number": "642.11",
+    "article": "33",
+    "paragraph": "1",
+    "language": "de",
+    "text": "Von den Einkünften werden abgezogen: e. die Einlagen, Prämien und Beiträge zum Erwerb von vertraglichen Ansprüchen aus anerkannten Formen der gebundenen Selbstvorsorge; der Bundesrat legt in Zusammenarbeit mit den Kantonen die anerkannten Vorsorgeformen und die Höhe der abzugsfähigen Beiträge fest; j. die Kosten der berufsorientierten Aus- und Weiterbildung, einschliesslich der Umschulungskosten, bis zum Gesamtbetrag von 12 900 Franken, sofern ein erster Abschluss auf der Sekundarstufe II vorliegt oder das 20. Lebensjahr vollendet ist."
+  },
+  {
+    "sr_number": "642.11",
+    "article": "33",
+    "paragraph": "3",
+    "language": "de",
+    "text": "Von den Einkünften abgezogen werden ferner die nachgewiesenen Kosten, jedoch höchstens 25 500 Franken, für die Drittbetreuung jedes Kindes, das das 14. Altersjahr noch nicht vollendet hat und mit der steuerpflichtigen Person, die für seinen Unterhalt sorgt, im gleichen Haushalt lebt, soweit diese Kosten in direktem kausalem Zusammenhang mit der Erwerbstätigkeit, Ausbildung oder Erwerbsunfähigkeit der steuerpflichtigen Person stehen."
+  },
+  {
+    "sr_number": "642.11",
+    "article": "27",
+    "paragraph": "1",
+    "language": "de",
+    "text": "Bei selbständiger Erwerbstätigkeit werden die geschäfts- oder berufsmässig begründeten Kosten abgezogen."
+  },
+  {
+    "sr_number": "642.11",
+    "article": "36",
+    "paragraph": "2",
+    "language": "de",
+    "text": "Für Ehegatten, die in rechtlich und tatsächlich ungetrennter Ehe leben, sowie für verwitwete, gerichtlich oder tatsächlich getrennt lebende, geschiedene und ledige steuerpflichtige Personen, die mit Kindern oder unterstützungsbedürftigen Personen im gleichen Haushalt zusammenleben und deren Unterhalt zur Hauptsache bestreiten, beträgt die jährliche Steuer den nach Absatz 1 berechneten Betrag, vermindert um die Steuer auf Grund des Tarifs nach Absatz 1 für das maximal anwendbare steuerbare Einkommen, multipliziert mit dem Verhältnis zwischen dem effektiv steuerbaren Einkommen und dem maximal anwendbaren steuerbaren Einkommen."
+  },
+  {
+    "sr_number": "642.11",
+    "article": "35",
+    "paragraph": "1",
+    "language": "de",
+    "text": "Vom Einkommen werden abgezogen: a. 6700 Franken für jedes minderjährige oder in der beruflichen oder schulischen Ausbildung stehende Kind, für dessen Unterhalt die steuerpflichtige Person sorgt; werden die Eltern getrennt besteuert, so wird der Kinderabzug hälftig aufgeteilt, wenn ein Kind unter der gemeinsamen elterlichen Sorge steht und keine Unterhaltsbeiträge nach Artikel 33 Absatz 1 Buchstabe c für das Kind geltend gemacht werden; b. 6700 Franken für jede erwerbsunfähige oder beschränkt erwerbsfähige Person, an deren Unterhalt die steuerpflichtige Person mindestens in der Höhe des Abzuges beiträgt."
+  },
+  {
+    "sr_number": "642.11",
+    "article": "212",
+    "paragraph": "1",
+    "language": "de",
+    "text": "Bei der direkten Bundessteuer werden die Folgen eines Wohnsitzwechsels innerhalb der Schweiz so berücksichtigt, dass die Steuerpflicht für die ganze Steuerperiode in jenem Kanton besteht, in dem die steuerpflichtige Person am Ende der Steuerperiode ihren Wohnsitz hat."
+  },
+  {
+    "sr_number": "831.40",
+    "article": "1",
+    "paragraph": "1",
+    "language": "de",
+    "text": "Die berufliche Vorsorge umfasst alle Massnahmen auf kollektiver Basis, die den älteren Menschen, den Hinterbliebenen und Invaliden beim Eintreten eines Versicherungsfalles (Alter, Tod oder Invalidität) zusammen mit den Leistungen der eidgenössischen Alters-, Hinterlassenen- und Invalidenversicherung (AHV/IV) die Fortsetzung der gewohnten Lebenshaltung in angemessener Weise erlauben."
+  },
+  {
+    "sr_number": "837.0",
+    "article": "8",
+    "paragraph": "1",
+    "language": "de",
+    "text": "Der Versicherte hat Anspruch auf Arbeitslosenentschädigung, wenn er: a. ganz oder teilweise arbeitslos ist (Art. 10); b. einen anrechenbaren Arbeitsausfall erlitten hat (Art. 11); c. in der Schweiz wohnt (Art. 12); d. die obligatorische Schulzeit zurückgelegt und das Referenzalter nach Artikel 21 Absatz 1 AHVG noch nicht erreicht hat; e. die Beitragszeit erfüllt hat oder von der Erfüllung der Beitragszeit befreit ist (Art. 13 und 14); f. vermittlungsfähig ist (Art. 15) und g. die Kontrollvorschriften erfüllt (Art. 17)."
   }
 ]

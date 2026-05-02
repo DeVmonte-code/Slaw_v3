@@ -19,31 +19,12 @@
     ],
     "trigger": {
       "all": [
-        {
-          "eq": [
-            "housing_status",
-            "tenant"
-          ]
-        },
-        {
-          "lte": [
-            "rental_start_year",
-            2022
-          ]
-        },
-        {
-          "eq": [
-            "lease_reference_rate_tracked",
-            true
-          ]
-        }
+        {"eq": ["housing_status", "tenant"]},
+        {"lte": ["rental_start_year", 2022]},
+        {"eq": ["lease_reference_rate_tracked", true]}
       ]
     },
-    "estimated_value_chf": {
-      "min": 500,
-      "max": 3000,
-      "per": "year"
-    },
+    "estimated_value_chf": {"min": 500, "max": 3000, "per": "year"},
     "required_action": "claim_letter_to_landlord",
     "time_limit_days": 30,
     "confidence_floor": 0.6
@@ -68,25 +49,11 @@
     ],
     "trigger": {
       "all": [
-        {
-          "eq": [
-            "housing_status",
-            "tenant"
-          ]
-        },
-        {
-          "gte": [
-            "rent_chf_monthly",
-            1
-          ]
-        }
+        {"eq": ["housing_status", "tenant"]},
+        {"gte": ["rent_chf_monthly", 1]}
       ]
     },
-    "estimated_value_chf": {
-      "min": 50,
-      "max": 300,
-      "per": "year"
-    },
+    "estimated_value_chf": {"min": 50, "max": 300, "per": "year"},
     "required_action": "claim_letter_to_landlord",
     "time_limit_days": null,
     "confidence_floor": 0.6
@@ -111,28 +78,11 @@
     ],
     "trigger": {
       "all": [
-        {
-          "in": [
-            "employment_status",
-            [
-              "employee_full_time",
-              "employee_part_time"
-            ]
-          ]
-        },
-        {
-          "gte": [
-            "weekly_hours",
-            35
-          ]
-        }
+        {"in": ["employment_status", ["employee_full_time", "employee_part_time"]]},
+        {"gte": ["weekly_hours", 35]}
       ]
     },
-    "estimated_value_chf": {
-      "min": 0,
-      "max": 5000,
-      "per": "year"
-    },
+    "estimated_value_chf": {"min": 0, "max": 5000, "per": "year"},
     "required_action": "employer_request",
     "time_limit_days": null,
     "confidence_floor": 0.6
@@ -157,22 +107,10 @@
     ],
     "trigger": {
       "all": [
-        {
-          "in": [
-            "employment_status",
-            [
-              "employee_full_time",
-              "employee_part_time"
-            ]
-          ]
-        }
+        {"in": ["employment_status", ["employee_full_time", "employee_part_time"]]}
       ]
     },
-    "estimated_value_chf": {
-      "min": 500,
-      "max": 5000,
-      "per": "year"
-    },
+    "estimated_value_chf": {"min": 500, "max": 5000, "per": "year"},
     "required_action": "employer_request",
     "time_limit_days": 1825,
     "confidence_floor": 0.6
@@ -197,28 +135,11 @@
     ],
     "trigger": {
       "all": [
-        {
-          "in": [
-            "employment_status",
-            [
-              "employee_full_time",
-              "employee_part_time"
-            ]
-          ]
-        },
-        {
-          "lte": [
-            "employment_start_year",
-            2020
-          ]
-        }
+        {"in": ["employment_status", ["employee_full_time", "employee_part_time"]]},
+        {"lte": ["employment_start_year", 2020]}
       ]
     },
-    "estimated_value_chf": {
-      "min": 1000,
-      "max": 3000,
-      "per": "one_time"
-    },
+    "estimated_value_chf": {"min": 1000, "max": 3000, "per": "one_time"},
     "required_action": "employer_request",
     "time_limit_days": null,
     "confidence_floor": 0.6
@@ -233,35 +154,21 @@
     "jurisdiction": "CH",
     "source_citations": [
       {
-        "sr_number": "220",
-        "article": "329f",
-        "paragraph": "1",
+        "sr_number": "642.11",
+        "article": "33",
+        "paragraph": "3",
         "canton": "CH",
-        "language": "en",
-        "quote_under_15_words": "After having given birth, a female employee is entitled to maternity leave"
+        "language": "de",
+        "quote_under_15_words": "höchstens 25 500 Franken, für die Drittbetreuung jedes Kindes"
       }
     ],
     "trigger": {
       "all": [
-        {
-          "gte": [
-            "children_count",
-            1
-          ]
-        },
-        {
-          "gte": [
-            "childcare_cost_chf_yearly",
-            1
-          ]
-        }
+        {"gte": ["children_count", 1]},
+        {"gte": ["childcare_cost_chf_yearly", 1]}
       ]
     },
-    "estimated_value_chf": {
-      "min": 2000,
-      "max": 10250,
-      "per": "year"
-    },
+    "estimated_value_chf": {"min": 2000, "max": 10250, "per": "year"},
     "required_action": "tax_declaration_field",
     "time_limit_days": null,
     "confidence_floor": 0.6
@@ -276,39 +183,21 @@
     "jurisdiction": "CH",
     "source_citations": [
       {
-        "sr_number": "220",
-        "article": "327a",
+        "sr_number": "642.11",
+        "article": "26",
         "paragraph": "1",
         "canton": "CH",
-        "language": "en",
-        "quote_under_15_words": "The employer must reimburse the employee for all expenses necessarily incurred"
+        "language": "de",
+        "quote_under_15_words": "die notwendigen Kosten für Fahrten zwischen Wohn- und Arbeitsstätte bis zu einem Maximalbetrag"
       }
     ],
     "trigger": {
       "all": [
-        {
-          "in": [
-            "employment_status",
-            [
-              "employee_full_time",
-              "employee_part_time",
-              "self_employed"
-            ]
-          ]
-        },
-        {
-          "gte": [
-            "commute_km_daily",
-            1
-          ]
-        }
+        {"in": ["employment_status", ["employee_full_time", "employee_part_time", "self_employed"]]},
+        {"gte": ["commute_km_daily", 1]}
       ]
     },
-    "estimated_value_chf": {
-      "min": 300,
-      "max": 3000,
-      "per": "year"
-    },
+    "estimated_value_chf": {"min": 300, "max": 3000, "per": "year"},
     "required_action": "tax_declaration_field",
     "time_limit_days": null,
     "confidence_floor": 0.6
@@ -323,33 +212,20 @@
     "jurisdiction": "CH",
     "source_citations": [
       {
-        "sr_number": "220",
-        "article": "327a",
+        "sr_number": "642.11",
+        "article": "33",
         "paragraph": "1",
         "canton": "CH",
-        "language": "en",
-        "quote_under_15_words": "for all expenses necessarily incurred in the performance of the work"
+        "language": "de",
+        "quote_under_15_words": "die Kosten der berufsorientierten Aus- und Weiterbildung, einschliesslich der Umschulungskosten"
       }
     ],
     "trigger": {
       "all": [
-        {
-          "in": [
-            "employment_status",
-            [
-              "employee_full_time",
-              "employee_part_time",
-              "self_employed"
-            ]
-          ]
-        }
+        {"in": ["employment_status", ["employee_full_time", "employee_part_time", "self_employed"]]}
       ]
     },
-    "estimated_value_chf": {
-      "min": 500,
-      "max": 12000,
-      "per": "year"
-    },
+    "estimated_value_chf": {"min": 500, "max": 12000, "per": "year"},
     "required_action": "tax_declaration_field",
     "time_limit_days": null,
     "confidence_floor": 0.6
@@ -364,35 +240,21 @@
     "jurisdiction": "CH",
     "source_citations": [
       {
-        "sr_number": "220",
-        "article": "331",
+        "sr_number": "642.11",
+        "article": "33",
         "paragraph": "1",
         "canton": "CH",
-        "language": "en",
-        "quote_under_15_words": "the employer must transfer these contributions to a foundation, a cooperative or a public"
+        "language": "de",
+        "quote_under_15_words": "Einlagen, Prämien und Beiträge zum Erwerb von vertraglichen Ansprüchen aus anerkannten Formen"
       }
     ],
     "trigger": {
       "all": [
-        {
-          "eq": [
-            "has_third_pillar",
-            true
-          ]
-        },
-        {
-          "gte": [
-            "third_pillar_chf_this_year",
-            1
-          ]
-        }
+        {"eq": ["has_third_pillar", true]},
+        {"gte": ["third_pillar_chf_this_year", 1]}
       ]
     },
-    "estimated_value_chf": {
-      "min": 6000,
-      "max": 7056,
-      "per": "year"
-    },
+    "estimated_value_chf": {"min": 6000, "max": 7056, "per": "year"},
     "required_action": "tax_declaration_field",
     "time_limit_days": null,
     "confidence_floor": 0.6
@@ -400,32 +262,23 @@
   {
     "id": "marriage_taxation_neutralization",
     "title": {
-      "de": "Ehegattenbesteuerung Ausgleich",
-      "en": "Married Couple Taxation Neutralization"
+      "de": "Verheiratetentarif (Ehegattenbesteuerung)",
+      "en": "Married-Couple Tariff (Joint Taxation)"
     },
     "category": "tax_deduction",
     "jurisdiction": "CH",
     "source_citations": [
       {
-        "sr_number": "220",
-        "article": "18",
-        "paragraph": "1",
+        "sr_number": "642.11",
+        "article": "36",
+        "paragraph": "2",
         "canton": "CH",
-        "language": "en",
-        "quote_under_15_words": "the true and common intention of the parties must be ascertained"
+        "language": "de",
+        "quote_under_15_words": "Für Ehegatten, die in rechtlich und tatsächlich ungetrennter Ehe leben"
       }
     ],
-    "trigger": {
-      "eq": [
-        "marital_status",
-        "married"
-      ]
-    },
-    "estimated_value_chf": {
-      "min": 0,
-      "max": 5000,
-      "per": "year"
-    },
+    "trigger": {"eq": ["marital_status", "married"]},
+    "estimated_value_chf": {"min": 0, "max": 5000, "per": "year"},
     "required_action": "tax_declaration_field",
     "time_limit_days": null,
     "confidence_floor": 0.6
@@ -440,29 +293,20 @@
     "jurisdiction": "CH",
     "source_citations": [
       {
-        "sr_number": "220",
-        "article": "335",
+        "sr_number": "837.0",
+        "article": "8",
         "paragraph": "1",
         "canton": "CH",
-        "language": "en",
-        "quote_under_15_words": "An employment relationship for an unlimited period may be terminated by either party."
+        "language": "de",
+        "quote_under_15_words": "Der Versicherte hat Anspruch auf Arbeitslosenentschädigung, wenn er ganz oder teilweise arbeitslos ist"
       }
     ],
     "trigger": {
       "all": [
-        {
-          "eq": [
-            "employment_status",
-            "unemployed"
-          ]
-        }
+        {"eq": ["employment_status", "unemployed"]}
       ]
     },
-    "estimated_value_chf": {
-      "min": 12000,
-      "max": 70000,
-      "per": "year"
-    },
+    "estimated_value_chf": {"min": 12000, "max": 70000, "per": "year"},
     "required_action": "federal_application",
     "time_limit_days": 30,
     "confidence_floor": 0.6
@@ -477,25 +321,18 @@
     "jurisdiction": "CH",
     "source_citations": [
       {
-        "sr_number": "220",
-        "article": "1",
+        "sr_number": "642.11",
+        "article": "212",
         "paragraph": "1",
         "canton": "CH",
-        "language": "en",
-        "quote_under_15_words": "The conclusion of a contract requires a mutual expression of intent by the parties."
+        "language": "de",
+        "quote_under_15_words": "Folgen eines Wohnsitzwechsels innerhalb der Schweiz so berücksichtigt, dass die Steuerpflicht"
       }
     ],
     "trigger": {
-      "event_within_years": [
-        "moved_canton",
-        2
-      ]
+      "event_within_years": ["moved_canton", 2]
     },
-    "estimated_value_chf": {
-      "min": 0,
-      "max": 3000,
-      "per": "year"
-    },
+    "estimated_value_chf": {"min": 0, "max": 3000, "per": "year"},
     "required_action": "tax_declaration_field",
     "time_limit_days": null,
     "confidence_floor": 0.6
@@ -518,14 +355,8 @@
         "quote_under_15_words": "An error is fundamental in the following cases in particular"
       }
     ],
-    "trigger": {
-      "all": []
-    },
-    "estimated_value_chf": {
-      "min": 0,
-      "max": 50000,
-      "per": "one_time"
-    },
+    "trigger": {"all": []},
+    "estimated_value_chf": {"min": 0, "max": 50000, "per": "one_time"},
     "required_action": "consultation_with_lawyer",
     "time_limit_days": 365,
     "confidence_floor": 0.5
@@ -540,40 +371,21 @@
     "jurisdiction": "CH",
     "source_citations": [
       {
-        "sr_number": "220",
-        "article": "327a",
+        "sr_number": "642.11",
+        "article": "27",
         "paragraph": "1",
         "canton": "CH",
-        "language": "en",
-        "quote_under_15_words": "in the case of work done off the employer’s premises"
+        "language": "de",
+        "quote_under_15_words": "Bei selbständiger Erwerbstätigkeit werden die geschäfts- oder berufsmässig begründeten Kosten abgezogen"
       }
     ],
     "trigger": {
       "all": [
-        {
-          "in": [
-            "business_activity",
-            [
-              "freelance",
-              "sole_proprietor",
-              "gmbh",
-              "ag"
-            ]
-          ]
-        },
-        {
-          "gte": [
-            "rd_spend_chf_this_year",
-            1
-          ]
-        }
+        {"in": ["business_activity", ["freelance", "sole_proprietor", "gmbh", "ag"]]},
+        {"gte": ["rd_spend_chf_this_year", 1]}
       ]
     },
-    "estimated_value_chf": {
-      "min": 1000,
-      "max": 50000,
-      "per": "year"
-    },
+    "estimated_value_chf": {"min": 1000, "max": 50000, "per": "year"},
     "required_action": "tax_declaration_field",
     "time_limit_days": null,
     "confidence_floor": 0.6
@@ -596,14 +408,8 @@
         "quote_under_15_words": "Any person who unlawfully causes damage to another, whether wilfully or negligently"
       }
     ],
-    "trigger": {
-      "all": []
-    },
-    "estimated_value_chf": {
-      "min": 0,
-      "max": 100000,
-      "per": "one_time"
-    },
+    "trigger": {"all": []},
+    "estimated_value_chf": {"min": 0, "max": 100000, "per": "one_time"},
     "required_action": "consultation_with_lawyer",
     "time_limit_days": 3650,
     "confidence_floor": 0.5

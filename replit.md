@@ -36,6 +36,16 @@ A Proactive Rights Discovery service for Swiss residents.
 - `QDRANT_COLLECTION` (default: `swiss_law`)
 - `EMBEDDING_MODEL` (default: `intfloat/multilingual-e5-small`)
 - `SCAN_CONCURRENCY` (default: `3`)
+- `LOG_LEVEL` (default: `INFO`) — JSON-format logs to stdout
+- `FRONTEND_ORIGIN` / `CORS_ALLOW_ORIGINS` — CORS origins; defaults to `*` in dev with WARNING
+- `APP_ENV` (default: `development`) — set to `production` to make CORS origins mandatory at startup
+
+## Observability
+
+- `GET /readyz` — deep health (pings Qdrant; returns 503 on failure)
+- `GET /health` — liveness only
+- Structured JSON logs include `scan_complete` (profile_hash, triggered/verified/suppressed counts, duration_ms) and `claude_verify` (entitlement_id, latency_ms, token usage)
+- 500 responses always return `{"detail": "Internal error"}` — full exception logged server-side
 
 ## Seed Data
 
@@ -47,8 +57,13 @@ cd backend && PYTHONPATH=src python3 -m swiss_legal_api.seeding.seed_qdrant
 ## Running Tests (offline)
 
 ```
-cd backend && PYTHONPATH=src pytest tests/test_schemas.py tests/test_trigger.py -v
+cd backend && python -m pytest tests/ -v
 ```
+
+Live-secrets-gated tests in `test_api.py::test_scan_endpoint_live`,
+`test_scan.py`, and `test_retrieval.py` self-skip when `ANTHROPIC_API_KEY` /
+`QDRANT_URL` are not the real production values. The other 23 tests run
+offline using respx + monkeypatched Qdrant retrieval.
 
 ## Key Files
 
@@ -57,7 +72,9 @@ cd backend && PYTHONPATH=src pytest tests/test_schemas.py tests/test_trigger.py 
 - `backend/src/swiss_legal_api/engine/trigger.py` — Trigger DSL evaluator
 - `backend/src/swiss_legal_api/engine/verify.py` — Claude-based verifier
 - `backend/seed/entitlements.json` — Entitlement catalog (15 entitlements)
-- `backend/seed/law_articles.json` — Swiss law articles for Qdrant
+- `backend/seed/law_articles.json` — Swiss law articles for Qdrant (verbatim EN for SR 220, verbatim DE for SR 642.11 / 831.40 / 837.0)
+- `backend/tests/test_scan_mocked.py` — End-to-end scan test using respx + monkeypatched retrieval (runs offline)
+- `backend/tests/conftest.py` — Test env defaults (placeholder ANTHROPIC_API_KEY for offline mocked tests)
 - `frontend/app/page.tsx` — Profile wizard form
 - `frontend/app/results/page.tsx` — Results page with benefit cards
 - `frontend/lib/api-types.ts` — Auto-generated from backend OpenAPI

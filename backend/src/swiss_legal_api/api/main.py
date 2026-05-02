@@ -63,6 +63,11 @@ if _origins:
         allow_headers=["*"],
     )
     logger.info("CORS locked to origins: %s", _origins)
+elif settings.is_production():
+    raise RuntimeError(
+        "CORS misconfiguration: APP_ENV=production but neither FRONTEND_ORIGIN "
+        "nor CORS_ALLOW_ORIGINS is set. Refusing to start with allow_origins=['*']."
+    )
 else:
     app.add_middleware(
         CORSMiddleware,
@@ -71,8 +76,9 @@ else:
         allow_headers=["*"],
     )
     logger.warning(
-        "CORS allow_origins=['*'] — DEV ONLY. "
-        "Set FRONTEND_ORIGIN or CORS_ALLOW_ORIGINS before deploying."
+        "CORS allow_origins=['*'] — DEV ONLY (APP_ENV=%s). "
+        "Set FRONTEND_ORIGIN or CORS_ALLOW_ORIGINS before deploying.",
+        settings.app_env,
     )
 
 

@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import re
+import time
 from dataclasses import dataclass
 from typing import Any
 
@@ -12,6 +14,8 @@ from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_ex
 from ..config import settings
 from ..schemas import Citation, ContextProfile, Entitlement
 from .retrieval import retrieve_for_citation
+
+logger = logging.getLogger(__name__)
 
 _JSON_RE = re.compile(r"\{.*\}", re.DOTALL)
 
@@ -23,6 +27,8 @@ Rules:
   {"supports": bool, "confidence": number 0..1, "reasoning": string,
   "best_quote": string (<= 15 words)}.
 - Use the retrieved article text as the authoritative source.
+- The retrieved text may be in German (DE) or English (EN); both are authoritative
+  Fedlex translations. Reason directly from the text in either language.
 - If the article does not support the entitlement for this user context,
   set supports=false and explain why.
 - Do not hallucinate article text. If the retrieved text does not clearly
@@ -38,14 +44,22 @@ _anthropic = AsyncAnthropic(api_key=settings.anthropic_api_key)
     retry=retry_if_exception_type((RateLimitError, APIConnectionError, APITimeoutError)),
     reraise=True,
 )
-async def _call_claude(user_content: str) -> str:
+async def _call_claude(user_content: str) -> tuple[str, dict[str, int]]:
     resp = await _anthropic.messages.create(
         model=settings.claude_model,
         max_tokens=600,
         system=SYSTEM,
         messages=[{"role": "user", "content": user_content}],
     )
-    return "".join(b.text for b in resp.content if b.type == "text")
+    text = "".join(b.text for b in resp.content if b.type == "text")
+    usage: dict[str, int] = {}
+    u = getattr(resp, "usage", None)
+    if u is not None:
+        usage = {
+            "input_tokens": int(getattr(u, "input_tokens", 0) or 0),
+            "output_tokens": int(getattr(u, "output_tokens", 0) or 0),
+        }
+    return text, usage
 
 
 @dataclass
@@ -94,12 +108,27 @@ Retrieved legal text:
 
 Respond with JSON only."""
 
-    text = await _call_claude(user_content)
+    started = time.perf_counter()
+    text, usage = await _call_claude(user_content)
+    latency_ms = int((time.perf_counter() - started) * 1000)
+    logger.info(
+        "claude_verify entitlement_id=%s latency_ms=%d input_tokens=%d output_tokens=%d",
+        entitlement.id,
+        latency_ms,
+        usage.get("input_tokens", 0),
+        usage.get("output_tokens", 0),
+    )
+
     m = _JSON_RE.search(text)
     raw = m.group(0) if m else text
     try:
         parsed = json.loads(raw)
     except json.JSONDecodeError:
+        logger.warning(
+            "claude_verify_bad_json entitlement_id=%s raw_len=%d",
+            entitlement.id,
+            len(text),
+        )
         return VerifyResult(
             supports=False,
             confidence=0.0,

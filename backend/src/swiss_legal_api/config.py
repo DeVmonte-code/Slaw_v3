@@ -17,12 +17,16 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
     cors_allow_origins: str = ""
     frontend_origin: str = ""
+    app_env: str = "development"
 
     def cors_origins_list(self) -> list[str]:
         raw = self.cors_allow_origins or self.frontend_origin
         if not raw.strip():
             return []
         return [o.strip() for o in raw.split(",") if o.strip()]
+
+    def is_production(self) -> bool:
+        return self.app_env.lower() in {"production", "prod"}
 
 
 settings = Settings()
