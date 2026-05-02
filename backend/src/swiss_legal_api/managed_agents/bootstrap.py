@@ -20,6 +20,7 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import os
 import sys
 from pathlib import Path
 from typing import Any
@@ -39,8 +40,9 @@ Mandate:
   that supports or rejects the user's claim.
 - Use the swiss-law-retrieval-mcp tools (`qdrant_search`,
   `fetch_article_by_sr`, `list_citations`) for every retrieval.
-- Use swiss-contract-tools-mcp (`verify_entitlement`,
-  `run_benefit_scan`) for analysis. Use swiss-user-context-mcp
+- Use swiss-contract-tools-mcp (`verify_entitlement`, `benefit_scan`,
+  `analyze_tort`, `evaluate_trigger`, `classify_diff`,
+  `score_confidence`) for analysis. Use swiss-user-context-mcp
   (`read_user_docs`, `update_user_profile`) only when the user message
   explicitly references a user_id.
 
@@ -157,10 +159,50 @@ def _environment_payload() -> dict[str, Any]:
 
 
 def _vault_payload() -> dict[str, Any]:
+    """Build the vault payload, including any MCP auth credentials.
+
+    Each MCP server's bearer token (when present) is registered as a
+    named credential the agent can attach to outbound MCP requests.
+    The token VALUE itself is read from the environment and never
+    logged or echoed in --dry-run output (the script prints the
+    credential *name* + the env var that supplied it).
+
+    Recognised env vars (each optional):
+
+    - ``MCP_SWISS_LAW_AUTH_TOKEN``      → ``swiss-law-retrieval-mcp/bearer``
+    - ``MCP_CONTRACT_TOOLS_AUTH_TOKEN`` → ``swiss-contract-tools-mcp/bearer``
+    - ``MCP_USER_CONTEXT_AUTH_TOKEN``   → ``swiss-user-context-mcp/bearer``
+    """
+    creds: list[dict[str, Any]] = []
+    for env_key, server in (
+        ("MCP_SWISS_LAW_AUTH_TOKEN", "swiss-law-retrieval-mcp"),
+        ("MCP_CONTRACT_TOOLS_AUTH_TOKEN", "swiss-contract-tools-mcp"),
+        ("MCP_USER_CONTEXT_AUTH_TOKEN", "swiss-user-context-mcp"),
+    ):
+        token = os.environ.get(env_key)
+        if not token:
+            continue
+        creds.append(
+            {
+                "name": f"{server}/bearer",
+                "type": "bearer_token",
+                "value": token,
+                "scope": {"mcp_server": server},
+            }
+        )
     return {
         "name": "swiss-legal-mcp-vault",
-        "credentials": [],
+        "credentials": creds,
     }
+
+
+def _vault_payload_safe_for_logging() -> dict[str, Any]:
+    """Same as :func:`_vault_payload` but redacts credential values."""
+    payload = _vault_payload()
+    payload["credentials"] = [
+        {**c, "value": "***REDACTED***"} for c in payload["credentials"]
+    ]
+    return payload
 
 
 def _headers() -> dict[str, str]:
@@ -218,9 +260,16 @@ def bootstrap(*, dry_run: bool = False) -> dict[str, str]:
     vault_body = _vault_payload()
 
     if dry_run:
+        # Never echo raw credentials into stdout/CI logs — use the
+        # redacted variant instead so reviewers can see which
+        # credentials WILL be uploaded without leaking the values.
         print(
             json.dumps(
-                {"agent": agent_body, "environment": env_body, "vault": vault_body},
+                {
+                    "agent": agent_body,
+                    "environment": env_body,
+                    "vault": _vault_payload_safe_for_logging(),
+                },
                 indent=2,
             )
         )

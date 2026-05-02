@@ -161,6 +161,123 @@ async def _call_claude(
     return text, prov
 
 
+async def _verify_via_managed_agent(
+    entitlement: Entitlement,
+    profile: ContextProfile,
+    triggered_evidence: list[dict[str, Any]],
+) -> VerifyResult:
+    """Delegate verification to the managed agent.
+
+    The agent receives ONLY the entitlement id, profile fields, and
+    triggered evidence — never a pre-fetched chunk envelope. It must
+    invoke MCP tools (``list_citations`` → ``qdrant_search`` /
+    ``fetch_article_by_sr`` → ``verify_entitlement``) to do the work,
+    which is what makes ``agent_backed=True`` meaningful.
+    """
+    # Lazy import: keep cold-start of the messages.create path free of
+    # the SSE-streaming machinery.
+
+    cit = entitlement.source_citations[0]
+    safe_fields = {
+        "canton": profile.canton,
+        "employment_status": profile.employment_status,
+        "housing_status": profile.housing_status,
+        "household_size": profile.household_size,
+        "children_count": profile.children_count,
+        "marital_status": profile.marital_status,
+        "income_band_chf": profile.income_band_chf,
+        "business_activity": profile.business_activity,
+    }
+    user_content = (
+        "TASK: verify one entitlement.\n\n"
+        f"entitlement_id: {entitlement.id}\n"
+        f"title: {entitlement.title.en}\n"
+        f"category: {entitlement.category}\n"
+        f"jurisdiction: {entitlement.jurisdiction}\n\n"
+        "user_profile (structured fields, JSON):\n"
+        f"{json.dumps(safe_fields, indent=2)}\n\n"
+        "triggered_evidence (JSON):\n"
+        f"{json.dumps(triggered_evidence, indent=2)}\n\n"
+        "PROCEDURE (mandatory):\n"
+        "1) Call swiss-contract-tools-mcp.verify_entitlement with the\n"
+        f"   entitlement_id={entitlement.id!r} and the user_profile dict\n"
+        "   above. The MCP tool runs the canonical retrieval + analysis\n"
+        "   pipeline and returns supports / confidence / reasoning /\n"
+        "   best_citation.\n"
+        "2) If you need to inspect raw chunks before deciding, call\n"
+        "   swiss-law-retrieval-mcp.qdrant_search or fetch_article_by_sr.\n"
+        "3) Return ONLY the final JSON object as your last message:\n"
+        '   {"supports": bool, "confidence": 0..1, "reasoning": str,\n'
+        '    "best_quote": str (<=15 words)}.'
+    )
+    text, provenance = await _call_claude(
+        user_content, site=f"engine.verify:{entitlement.id}"
+    )
+    logger.info(
+        "claude_verify entitlement_id=%s latency_ms=%d input_tokens=%d "
+        "output_tokens=%d agent_backed=%s mcp_tools=%d tools=%d",
+        entitlement.id,
+        provenance.latency_ms,
+        provenance.input_tokens,
+        provenance.output_tokens,
+        str(provenance.agent_backed).lower(),
+        provenance.mcp_tool_use_count or 0,
+        provenance.tool_use_count or 0,
+    )
+    # Hard gate: in managed mode an answer that did NOT invoke any
+    # MCP tool means the agent skipped retrieval and answered from
+    # parametric memory. Refuse — the architectural inversion of
+    # Task #26 only holds if every managed verdict is grounded in an
+    # MCP tool call.
+    if (provenance.mcp_tool_use_count or 0) == 0:
+        logger.warning(
+            "managed_verify_no_mcp_tools entitlement_id=%s session=%s "
+            "(refusing — agent did not invoke any MCP tool)",
+            entitlement.id,
+            provenance.session_id,
+        )
+        return VerifyResult(
+            supports=False,
+            confidence=0.0,
+            reasoning=(
+                "Managed agent returned a verdict without invoking any "
+                "MCP tool; refusing to trust an ungrounded answer."
+            ),
+            best_citation=cit,
+            agent_provenance=provenance,
+        )
+    m = _JSON_RE.search(text)
+    raw = m.group(0) if m else text
+    try:
+        parsed = json.loads(raw)
+    except json.JSONDecodeError:
+        logger.warning(
+            "claude_verify_bad_json entitlement_id=%s raw_len=%d (managed)",
+            entitlement.id,
+            len(text),
+        )
+        return VerifyResult(
+            supports=False,
+            confidence=0.0,
+            reasoning="LLM output was not valid JSON",
+            best_citation=cit,
+            agent_provenance=provenance,
+        )
+    quote = " ".join(str(parsed.get("best_quote", "")).strip().split()[:14])
+    confidence = max(0.0, min(1.0, float(parsed.get("confidence", 0.0))))
+    return VerifyResult(
+        supports=bool(parsed.get("supports", False)),
+        confidence=confidence,
+        reasoning=str(parsed.get("reasoning", "")),
+        best_citation=cit.model_copy(
+            update={
+                "quote_under_15_words": quote or cit.quote_under_15_words,
+            }
+        ),
+        agent_provenance=provenance,
+    )
+
+
 @dataclass
 class VerifyResult:
     supports: bool
@@ -193,6 +310,32 @@ async def verify_entitlement(
     profile: ContextProfile,
     triggered_evidence: list[dict[str, Any]],
 ) -> VerifyResult:
+    """Public verifier entry. Branches on ``settings.use_managed_agents``.
+
+    The MCP server's ``verify_entitlement`` tool MUST NOT call this
+    function — it would recurse forever when the managed flag is on.
+    The MCP wrapper imports :func:`_verify_local` directly instead, and
+    the SSOT test asserts that identity so a future refactor cannot
+    silently re-introduce the recursion path.
+    """
+    if settings.use_managed_agents:
+        return await _verify_via_managed_agent(
+            entitlement, profile, triggered_evidence
+        )
+    return await _verify_local(entitlement, profile, triggered_evidence)
+
+
+async def _verify_local(
+    entitlement: Entitlement,
+    profile: ContextProfile,
+    triggered_evidence: list[dict[str, Any]],
+) -> VerifyResult:
+    """In-process verifier — retrieves chunks and calls Claude directly.
+
+    This is the SAME implementation that powers the legacy
+    ``messages.create`` path AND the MCP ``verify_entitlement`` tool
+    (the latter to avoid recursion when the managed flag is on).
+    """
     cit = entitlement.source_citations[0]
     chunks = await asyncio.to_thread(
         retrieve_for_citation,

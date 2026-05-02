@@ -146,6 +146,76 @@ async def test_terminated_session_raises_managed_agents_error() -> None:
         )
 
 
+async def test_managed_verify_refuses_when_no_mcp_tool_invoked(
+    monkeypatch,
+) -> None:
+    """Hard gate: the architectural inversion of Task #26 only holds
+    if every managed verdict is grounded in an MCP tool call.
+
+    When the agent emits ``session.status_idle`` with zero
+    ``agent.mcp_tool_use`` events, ``_verify_via_managed_agent`` must
+    refuse with ``supports=False`` rather than parrot the agent's
+    ungrounded answer.
+    """
+    from swiss_legal_api.catalog import load_catalog
+    from swiss_legal_api.engine import verify as verify_mod
+    from swiss_legal_api.schemas import ContextProfile
+
+    monkeypatch.setattr(settings, "use_managed_agents", True)
+    monkeypatch.setattr(settings, "managed_agent_id", "agent_1")
+    monkeypatch.setattr(settings, "managed_environment_id", "env_1")
+    monkeypatch.setattr(settings, "mcp_swiss_law_url", "https://x")
+    monkeypatch.setattr(settings, "mcp_contract_tools_url", "https://x")
+    monkeypatch.setattr(settings, "mcp_user_context_url", "https://x")
+
+    transport = _make_transport(
+        [
+            # Agent answers without ever calling an MCP tool.
+            {
+                "type": "agent.message",
+                "content": [
+                    {
+                        "type": "text",
+                        "text": '{"supports": true, "confidence": 0.9, '
+                        '"reasoning": "i just know", "best_quote": "trust me"}',
+                    }
+                ],
+            },
+            {"type": "session.status_idle"},
+        ]
+    )
+
+    async def fake_run_session(
+        user_message: str, *, site: str = "engine.verify", transport=None
+    ):
+        return await agent_runner.run_session(
+            user_message, site=site, transport=transport_real
+        )
+
+    transport_real = transport
+    monkeypatch.setattr(
+        verify_mod,
+        "_call_claude",
+        lambda content, *, site="engine.verify": agent_runner.run_session(
+            content, site=site, transport=transport_real
+        ),
+    )
+
+    ent = load_catalog()[0]
+    profile = ContextProfile(
+        canton="ZH",
+        employment_status="employee_full_time",
+        housing_status="tenant",
+        household_size=1,
+        children_count=0,
+        marital_status="single",
+        income_band_chf="50_80k",
+    )
+    result = await verify_mod._verify_via_managed_agent(ent, profile, [])
+    assert result.supports is False
+    assert "MCP tool" in result.reasoning
+
+
 async def test_stream_opens_before_user_message_is_sent() -> None:
     """Architect-flagged race: POST /events MUST NOT precede GET /stream.
 

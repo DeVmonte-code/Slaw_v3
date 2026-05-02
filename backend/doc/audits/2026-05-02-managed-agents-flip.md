@@ -10,12 +10,22 @@ gated by the new `settings.use_managed_agents` flag. The supporting
 pieces:
 
 - Three MCP servers under `swiss_legal_api/mcp_servers/`
-  (`swiss-law-retrieval-mcp`, `swiss-contract-tools-mcp`,
-  `swiss-user-context-mcp`). Each one is a thin protocol wrapper
-  around shared callables — the SSOT regression test
-  (`tests/test_mcp_single_source_of_truth.py`) asserts identity
-  between the registry's `impl` and the canonical Python function so
-  Config A and Config B can never silently drift.
+  (`swiss-law-retrieval-mcp` — 3 tools; `swiss-contract-tools-mcp` —
+  6 tools: `verify_entitlement`, `benefit_scan`, `analyze_tort`,
+  `evaluate_trigger`, `classify_diff`, `score_confidence`;
+  `swiss-user-context-mcp` — 2 tools). Each tool is a thin protocol
+  wrapper around the canonical engine callable — the SSOT regression
+  test (`tests/test_mcp_single_source_of_truth.py`) asserts both the
+  full required tool surface (by name) and identity between
+  `tool.impl` and the canonical function (no copies, no parallel
+  analyzers) so Config A and Config B cannot drift.
+- Architectural inversion: when `USE_MANAGED_AGENTS=true`,
+  `engine.verify.verify_entitlement` and `api.chat.answer_follow_up`
+  do **NOT** pre-retrieve chunks. They hand the agent only the
+  entitlement_id + profile fields and require it to call the MCP
+  tools for retrieval and analysis. This is what guarantees that
+  `agent_backed=True` actually means the agent did work, not just
+  that the SDK call was renamed.
 - One-shot `python -m swiss_legal_api.managed_agents.bootstrap` that
   provisions the agent (`SwissLegalBenefitScanner`), environment, and
   vault, then writes the resulting IDs back to `backend/.env`.
@@ -53,6 +63,12 @@ the flip is stable across at least one nightly sweep cycle.
    - `MCP_SWISS_LAW_URL`
    - `MCP_CONTRACT_TOOLS_URL`
    - `MCP_USER_CONTEXT_URL`
+   - (Optional, recommended) per-server bearer tokens:
+     `MCP_SWISS_LAW_AUTH_TOKEN`, `MCP_CONTRACT_TOOLS_AUTH_TOKEN`,
+     `MCP_USER_CONTEXT_AUTH_TOKEN` — bootstrap registers each one as
+     a named credential in the vault under
+     `<server-name>/bearer`. Use `--dry-run` to preview the upload;
+     credential values are redacted in stdout.
 2. `python -m swiss_legal_api.managed_agents.bootstrap` — the script
    POSTs the agent + environment + vault and writes
    `MANAGED_AGENT_ID`, `MANAGED_AGENT_VERSION`, `MANAGED_ENVIRONMENT_ID`,

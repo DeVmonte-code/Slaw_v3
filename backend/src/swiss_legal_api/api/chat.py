@@ -80,6 +80,59 @@ async def _call_claude(
 async def answer_follow_up(
     message: str, benefit_id: str | None
 ) -> tuple[str, AgentProvenance]:
+    # Managed-agents mode: skip local pre-retrieval entirely. The agent
+    # must use swiss-law-retrieval-mcp.fetch_article_by_sr (or
+    # qdrant_search) to read the cited article — without that, the
+    # call would not register as agent_backed in the audit. The bare
+    # benefit_id + user message is the smallest payload that lets the
+    # agent decide which MCP tool to invoke.
+    if settings.use_managed_agents:
+        ent = (
+            next((e for e in load_catalog() if e.id == benefit_id), None)
+            if benefit_id
+            else None
+        )
+        cit_hint = (
+            f"\nCited article hint: SR {ent.source_citations[0].sr_number} "
+            f"Art. {ent.source_citations[0].article}"
+            if ent is not None
+            else ""
+        )
+        payload = (
+            "TASK: answer one user follow-up question about a specific "
+            "Swiss legal entitlement.\n\n"
+            f"benefit_id: {benefit_id}{cit_hint}\n\n"
+            "PROCEDURE:\n"
+            "1) If a benefit_id is given, use swiss-law-retrieval-mcp\n"
+            "   (fetch_article_by_sr or qdrant_search) to read the\n"
+            "   cited article BEFORE answering.\n"
+            "2) Cite SR number + article in the answer. Quotes <=15 words.\n"
+            "3) End with the standing FADP disclaimer.\n\n"
+            f"User question: {message}"
+        )
+        text, provenance = await _call_claude(
+            payload, site=f"api.chat:{benefit_id or 'no_benefit'}"
+        )
+        # Hard gate (Task #26): if a benefit_id was given, the agent
+        # MUST have invoked at least one MCP tool — otherwise it
+        # answered from parametric memory and the citation could be
+        # hallucinated. We refuse rather than ship an ungrounded
+        # answer; the operator sees the warning and can decide whether
+        # to roll back the flag or fix the agent's prompt.
+        if benefit_id and (provenance.mcp_tool_use_count or 0) == 0:
+            from ..engine.agent_runner import ManagedAgentsError
+
+            logger.warning(
+                "managed_chat_no_mcp_tools benefit_id=%s session=%s",
+                benefit_id,
+                provenance.session_id,
+            )
+            raise ManagedAgentsError(
+                "managed_chat_no_mcp_tools "
+                f"benefit_id={benefit_id} session_id={provenance.session_id}"
+            )
+        return text, provenance
+
     context = ""
     if benefit_id:
         ent = next((e for e in load_catalog() if e.id == benefit_id), None)
