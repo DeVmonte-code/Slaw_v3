@@ -1,6 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# When USE_EXTERNAL_API=1, smoke.sh skips spinning up its own uvicorn and
+# targets API_BASE_URL (default http://localhost:8000) instead. Useful when
+# a workflow is already serving the API on port 8000.
+USE_EXTERNAL_API="${USE_EXTERNAL_API:-0}"
+API_BASE_URL="${API_BASE_URL:-http://localhost:8000}"
+
 echo "=== Lint + types ==="
 ruff check src tests
 mypy src
@@ -11,20 +17,47 @@ python scripts/validate_catalog.py
 echo "=== Unit tests (offline) ==="
 pytest tests/test_schemas.py tests/test_seed.py tests/test_trigger.py tests/test_invariants.py -v
 
-echo "=== Start API ==="
-uvicorn swiss_legal_api.api.main:app --host 0.0.0.0 --port 8000 &
-SERVER_PID=$!
-trap "kill $SERVER_PID 2>/dev/null || true" EXIT
-sleep 4
+if [ "$USE_EXTERNAL_API" = "1" ]; then
+  echo "=== Reusing external API at $API_BASE_URL ==="
+else
+  echo "=== Start API ==="
+  uvicorn swiss_legal_api.api.main:app --host 0.0.0.0 --port 8000 &
+  SERVER_PID=$!
+  trap "kill $SERVER_PID 2>/dev/null || true" EXIT
+  sleep 4
+fi
 
 echo "=== Health ==="
-curl -sf http://localhost:8000/health
+curl -sf "$API_BASE_URL/health"
+echo
+
+echo "=== Readiness (Qdrant reachable) ==="
+curl -sf "$API_BASE_URL/readyz"
+echo
+
+echo "=== Qdrant corpus sanity (collection exists with > 0 points) ==="
+PYTHONPATH="${PYTHONPATH:-}:src" python - <<'PY'
+import os, sys
+from qdrant_client import QdrantClient
+from swiss_legal_api.config import settings
+
+client = QdrantClient(url=settings.qdrant_url, api_key=settings.qdrant_api_key, timeout=10.0)
+collections = {c.name for c in client.get_collections().collections}
+if settings.qdrant_collection not in collections:
+    print(f"FAIL: collection '{settings.qdrant_collection}' missing. Found: {sorted(collections)}")
+    sys.exit(1)
+count = client.count(collection_name=settings.qdrant_collection, exact=True).count
+print(f"Collection '{settings.qdrant_collection}' has {count} points")
+if count <= 0:
+    print("FAIL: collection is empty — run python -m swiss_legal_api.seeding.seed_qdrant")
+    sys.exit(1)
+PY
 
 echo "=== OpenAPI paths ==="
-curl -sf http://localhost:8000/openapi.json | python -c "import sys, json; d=json.load(sys.stdin); print(list(d['paths'].keys()))"
+curl -sf "$API_BASE_URL/openapi.json" | python -c "import sys, json; d=json.load(sys.stdin); print(list(d['paths'].keys()))"
 
 echo "=== Live scan (Luis profile — Swiss regression baseline) ==="
-RESP=$(curl -sf -X POST http://localhost:8000/scan \
+RESP=$(curl -sf -X POST "$API_BASE_URL/scan" \
   -H "content-type: application/json" \
   -d @fixtures/luis_profile.json \
   --max-time 180)
@@ -45,7 +78,7 @@ print('Luis required IDs present')
 "
 
 echo "=== Live scan (b_permit_eu_employee — Quellensteuer persona) ==="
-RESP=$(curl -sf -X POST http://localhost:8000/scan \
+RESP=$(curl -sf -X POST "$API_BASE_URL/scan" \
   -H "content-type: application/json" \
   -d @fixtures/b_permit_eu_employee.json \
   --max-time 180)
@@ -56,7 +89,7 @@ print(f\"b_permit benefits returned: {len(r['benefits'])}, suppressed: {r['suppr
 "
 
 echo "=== Live scan (c_permit_third_country — naturalisation persona) ==="
-RESP=$(curl -sf -X POST http://localhost:8000/scan \
+RESP=$(curl -sf -X POST "$API_BASE_URL/scan" \
   -H "content-type: application/json" \
   -d @fixtures/c_permit_third_country.json \
   --max-time 180)

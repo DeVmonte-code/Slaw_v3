@@ -50,6 +50,15 @@ uvicorn swiss_legal_api.api.main:app --host 0.0.0.0 --port 8000
 
 After seeding you should see `Seeded N articles into swiss_law` and `curl http://localhost:8000/readyz` should return `{"ok":true,"qdrant":"reachable"}`.
 
+To run the full smoke gate (lint, types, unit tests, live scans of all three personas, plus a Qdrant collection sanity check) against an already-running API — for example the Replit `Start application` workflow — set `USE_EXTERNAL_API=1`:
+
+```bash
+cd backend
+USE_EXTERNAL_API=1 bash scripts/smoke.sh
+```
+
+Without that flag, `smoke.sh` spins up its own uvicorn on port 8000 (which would conflict with the workflow).
+
 Swagger UI: http://localhost:8000/docs
 
 ## End-to-End Test

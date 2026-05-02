@@ -9,7 +9,9 @@ import json
 import sys
 from pathlib import Path
 
-from backend.src.swiss_legal_api.api.main import app
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
+
+from swiss_legal_api.api.main import app  # noqa: E402
 
 
 def main() -> int:
