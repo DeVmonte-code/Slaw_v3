@@ -4,6 +4,12 @@ set -euo pipefail
 # When USE_EXTERNAL_API=1, smoke.sh skips spinning up its own uvicorn and
 # targets API_BASE_URL (default http://localhost:8000) instead. Useful when
 # a workflow is already serving the API on port 8000.
+#
+# Note: the "Qdrant corpus sanity" step below probes Qdrant directly using
+# this shell's QDRANT_URL / QDRANT_API_KEY / QDRANT_COLLECTION env vars,
+# so external mode assumes the smoke runner shares Qdrant config with the
+# remote API. On Replit that's automatic (workflow + shell read the same
+# Secrets); against a truly remote API, export the matching values first.
 USE_EXTERNAL_API="${USE_EXTERNAL_API:-0}"
 API_BASE_URL="${API_BASE_URL:-http://localhost:8000}"
 
