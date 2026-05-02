@@ -1,0 +1,25 @@
+/* Shared design tokens for the Profile Wizard mockup variants.
+ * Mirrors the live Slaw frontend palette so all 5 mockups share the same
+ * visual ground. Each variant lives in its own .tsx file under this folder
+ * and may layer additional styles on top via Tailwind utilities. */
+
+.slaw-wizard {
+  --slaw-primary: #047857;        /* emerald-700 */
+  --slaw-primary-strong: #065f46; /* emerald-800 */
+  --slaw-primary-soft: #ecfdf5;   /* emerald-50  */
+  --slaw-ink: #1f2937;            /* gray-800   */
+  --slaw-ink-soft: #4b5563;       /* gray-600   */
+  --slaw-line: #e5e7eb;           /* gray-200   */
+  --slaw-line-strong: #d1d5db;    /* gray-300   */
+  --slaw-bg: #f9fafb;             /* gray-50    */
+  --slaw-card: #ffffff;
+  --slaw-danger: #b91c1c;         /* red-700    */
+  --slaw-danger-bg: #fef2f2;      /* red-50     */
+  --slaw-radius: 0.5rem;
+  --slaw-radius-lg: 0.75rem;
+  --slaw-shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+  --slaw-shadow-md: 0 4px 12px -2px rgb(15 23 42 / 0.08);
+
+  font-family: 'Inter', ui-sans-serif, system-ui, -apple-system, sans-serif;
+  color: var(--slaw-ink);
+}
