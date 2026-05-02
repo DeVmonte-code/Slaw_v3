@@ -12,8 +12,18 @@ followed by Claude-verified retrieval from a Qdrant vector store seeded with Swi
 
 - Python 3.12
 - [uv](https://github.com/astral-sh/uv) package manager
-- Qdrant Cloud free-tier cluster
-- Anthropic API key
+- A [Qdrant Cloud](https://cloud.qdrant.io/) free-tier cluster (1 GB is plenty for the 36 article corpus)
+- An [Anthropic](https://console.anthropic.com/settings/keys) API key
+
+## Provisioning Qdrant Cloud
+
+1. Sign in to <https://cloud.qdrant.io/> and create a free-tier cluster (any region close to Switzerland, e.g. `eu-central` / Frankfurt).
+2. Once the cluster is `Healthy`, copy its HTTPS URL — it looks like `https://<id>.eu-central.aws.cloud.qdrant.io:6333`. That's `QDRANT_URL`.
+3. Open the cluster's **API keys** tab, click **Create API key**, and copy the value. That's `QDRANT_API_KEY`.
+
+The collection name (`QDRANT_COLLECTION`, default `swiss_law`) is created automatically by the seed script with 384-dim cosine vectors and keyword payload indexes on `sr_number`, `article`, and `language`. No manual cluster setup is needed beyond creating the cluster and the API key.
+
+On Replit, store both values in **Tools → Secrets** (not in `.env`); on local machines, put them in `backend/.env` per the setup below.
 
 ## Setup
 
@@ -27,16 +37,18 @@ uv venv
 source .venv/bin/activate
 uv pip install -e ".[dev]"
 
-# Copy and populate secrets
+# Copy and populate secrets (local development only — Replit uses the Secrets pane)
 cp .env.example .env
 # Edit .env with your ANTHROPIC_API_KEY, QDRANT_URL, QDRANT_API_KEY
 
-# Seed Qdrant
+# Seed Qdrant (one-time per cluster, plus whenever seed/law_articles.json changes)
 python -m swiss_legal_api.seeding.seed_qdrant
 
 # Start the API
 uvicorn swiss_legal_api.api.main:app --host 0.0.0.0 --port 8000
 ```
+
+After seeding you should see `Seeded N articles into swiss_law` and `curl http://localhost:8000/readyz` should return `{"ok":true,"qdrant":"reachable"}`.
 
 Swagger UI: http://localhost:8000/docs
 
@@ -65,7 +77,7 @@ All settings are read from the environment (see `.env.example`).
 | ---------------------- | -------------------------------------- | ---------------------------------------------------------------------------------------------- |
 | `ANTHROPIC_API_KEY`    | (empty)                                | Required for live `/scan` and `/chat`.                                                         |
 | `CLAUDE_MODEL`         | `claude-opus-4-7`                      | Override per environment if needed.                                                            |
-| `QDRANT_URL`           | (empty)                                | Required at startup (lifespan pings it).                                                       |
+| `QDRANT_URL`           | (empty)                                | Required for readiness and live verified scans. Lifespan pings it but only logs a warning if unreachable; `/readyz` returns 503 in that case. |
 | `QDRANT_API_KEY`       | (empty)                                | Required for Qdrant Cloud.                                                                     |
 | `QDRANT_COLLECTION`    | `swiss_law`                            |                                                                                                |
 | `EMBEDDING_MODEL`      | `intfloat/multilingual-e5-small`       | Pre-warmed at startup.                                                                         |
