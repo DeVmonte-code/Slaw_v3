@@ -6,7 +6,13 @@ from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator
 
-SR_RE = re.compile(r"^\d+(\.\d+)?$")
+# Accepts:
+#   * Federal SR numbers: "220", "642.11", "141.0".
+#   * Cantonal compilation IDs encoded as letter-prefixed numbers, e.g.
+#     Geneva "RS A 2 05" -> "A2.05" (spaces dropped, dot-joined). The
+#     ``canton`` field disambiguates so a cantonal "412.31" never
+#     collides with a federal "412.31".
+SR_RE = re.compile(r"^[A-Z]*\d+(\.\d+)?$")
 
 
 class Citation(BaseModel):
@@ -45,7 +51,10 @@ class Citation(BaseModel):
     @classmethod
     def _sr(cls, v: str) -> str:
         if not SR_RE.match(v):
-            raise ValueError("sr_number must match ^\\d+(\\.\\d+)?$")
+            raise ValueError(
+                "sr_number must match ^[A-Z]*\\d+(\\.\\d+)?$ "
+                "(federal SR or letter-prefixed cantonal compilation ID)"
+            )
         return v
 
     @field_validator("quote_under_15_words")

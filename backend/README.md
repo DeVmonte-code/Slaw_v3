@@ -42,6 +42,8 @@ cp .env.example .env
 # Edit .env with your ANTHROPIC_API_KEY, QDRANT_URL, QDRANT_API_KEY
 
 # Seed Qdrant (one-time per cluster, plus whenever seed/law_articles.json changes)
+# Optional: ingest cantonal corpora (ZH/BE/GE) before seeding so they ship in the same upsert.
+python -m swiss_legal_api.ingest.cantonal --canton ZH,BE,GE
 python -m swiss_legal_api.seeding.seed_qdrant
 
 # Start the API
@@ -257,6 +259,66 @@ text.
 Tests for the parser and the snapshot determinism live in
 `tests/test_fedlex_ingest.py`; they stub Fedlex via `respx` so they run
 offline against the recorded fixtures under `tests/fixtures/fedlex/`.
+
+## Cantonal corpora (ZH, BE, GE)
+
+Cantonal Systematic Compilations are scraped per-canton because there is
+no unified SPARQL endpoint analogous to Fedlex. Adapters live under
+`src/swiss_legal_api/ingest/cantonal/` and all return the same record
+shape (`CantonalArticleRecord`) so the CLI and seeder treat them
+uniformly:
+
+- `zurich_ls.py`  — Zurich Loseblattsammlung (ZH-Lex), HTML.
+- `bern_bsg.py`   — Bern BSG / Belex, HTML (PDF entries are logged and
+  skipped — that fallback is a documented follow-up).
+- `geneva_rs.py`  — Geneva RSG, HTML; the OData feed is documented in
+  the module docstring as the official machine-readable surface.
+
+Each record carries a `canton` payload field; retrieval already filters
+on `canton ∈ {profile_canton, "CH"}`, so cantonal rows naturally
+partition without any extra collection. Stable IDs use
+`eli_uri = cantonal:{canton}:{compilation_id}` so a cantonal "412.31"
+never collides with a hypothetical federal "412.31".
+
+Geneva compilation IDs use a letter+number format (e.g. `RS A 2 05`).
+We encode them as `A2.05` (drop spaces, dot before the trailing pair) so
+the loosened `Citation.sr_number` regex (`^[A-Z]*\d+(\.\d+)?$`) accepts
+them. The frontend's citation renderer reverses the encoding for display.
+
+### Bootstrapping cantonal seed
+
+```bash
+# Emits seed/law_articles.cantonal.json (deterministic, additive).
+python -m swiss_legal_api.ingest.cantonal --canton ZH,BE,GE
+# The seeder auto-merges that file alongside fedlex+manual on the next reseed.
+python -m swiss_legal_api.seeding.seed_qdrant
+```
+
+### End-to-end smoke (manual)
+
+`fixtures/bern_tenant_profile.json` is a Bern tenant persona that
+triggers the new `bern_rental_conciliation_free_procedure` entitlement
+(citing BSG 661.11 Art. 11 §3). After running the cantonal ingest +
+seeder above, scanning that fixture should return at least one verified
+benefit:
+
+```bash
+curl -s -X POST localhost:8000/scan \
+  -H 'content-type: application/json' \
+  -d @fixtures/bern_tenant_profile.json | jq '.benefits | length'
+```
+
+This step is intentionally not wired into `smoke.sh` because the
+default smoke run does not seed cantonal corpora — adding it would
+break smoke until the cantonal ingest has been run on the cluster.
+
+### Tests
+
+`tests/test_cantonal_ingest.py` covers article extraction, canton
+tagging, repealed-article detection, and snapshot determinism for all
+three adapters against literal HTML fixtures under
+`tests/fixtures/cantonal/`. Networked `ingest()` calls are stubbed via
+`respx` so the suite runs offline.
 
 ## Source Languages
 

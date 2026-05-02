@@ -153,21 +153,43 @@ def _load_articles(explicit: str | None) -> tuple[list[dict[str, Any]], list[Pat
     seed_dir = Path(__file__).resolve().parents[3] / "seed"
     fedlex = seed_dir / "law_articles.fedlex.json"
     manual = seed_dir / "law_articles.json"
+    # Cantonal snapshot — emitted by
+    # ``python -m swiss_legal_api.ingest.cantonal``. Auto-merged when
+    # present so a single ``seed_qdrant`` run rebuilds federal + cantonal
+    # together. Cantonal rows are *always additive* (never subject to the
+    # fedlex-vs-manual coverage merge) because canton + eli_uri together
+    # guarantee distinct stable IDs from any federal row.
+    cantonal = seed_dir / "law_articles.cantonal.json"
+
+    sources: list[Path] = []
 
     if not fedlex.exists():
-        records = json.loads(manual.read_text())
-        return _drop_placeholders(records, str(manual)), [manual]
+        manual_records = _drop_placeholders(json.loads(manual.read_text()), str(manual))
+        sources.append(manual)
+        records = manual_records
+    else:
+        fedlex_records: list[dict[str, Any]] = _drop_placeholders(
+            json.loads(fedlex.read_text()), str(fedlex)
+        )
+        sources.append(fedlex)
+        if manual.exists():
+            covered = {_coverage_key(r) for r in fedlex_records}
+            manual_records = _drop_placeholders(
+                json.loads(manual.read_text()), str(manual)
+            )
+            fallback = [r for r in manual_records if _coverage_key(r) not in covered]
+            records = fedlex_records + fallback
+            sources.append(manual)
+        else:
+            records = fedlex_records
 
-    fedlex_records: list[dict[str, Any]] = json.loads(fedlex.read_text())
-    fedlex_records = _drop_placeholders(fedlex_records, str(fedlex))
-    if not manual.exists():
-        return fedlex_records, [fedlex]
+    if cantonal.exists():
+        cantonal_records: list[dict[str, Any]] = json.loads(cantonal.read_text())
+        cantonal_records = _drop_placeholders(cantonal_records, str(cantonal))
+        records = records + cantonal_records
+        sources.append(cantonal)
 
-    covered = {_coverage_key(r) for r in fedlex_records}
-    manual_records: list[dict[str, Any]] = json.loads(manual.read_text())
-    manual_records = _drop_placeholders(manual_records, str(manual))
-    fallback = [r for r in manual_records if _coverage_key(r) not in covered]
-    return fedlex_records + fallback, [fedlex, manual]
+    return records, sources
 
 
 def _reconcile_stale_points(

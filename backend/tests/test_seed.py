@@ -30,10 +30,11 @@ def test_law_articles_parse():
 
 def test_entitlements_parse_and_count():
     data = json.loads((_root() / "seed" / "entitlements.json").read_text())
-    # 15 baseline + 3 permit-status sprint additions =
-    # quellensteuer_subsequent_assessment, naturalisation_eligibility,
-    # family_reunification_right.
-    assert len(data) == 18
+    # 15 baseline + 3 permit-status sprint additions
+    # (quellensteuer_subsequent_assessment, naturalisation_eligibility,
+    # family_reunification_right) + 1 cantonal smoke entitlement
+    # (bern_rental_conciliation_free_procedure, task #21).
+    assert len(data) == 19
     ids = set()
     for row in data:
         e = Entitlement.model_validate(row)
@@ -43,12 +44,34 @@ def test_entitlements_parse_and_count():
     assert "quellensteuer_subsequent_assessment" in ids
     assert "naturalisation_eligibility" in ids
     assert "family_reunification_right" in ids
+    assert "bern_rental_conciliation_free_procedure" in ids
 
 
 def test_entitlement_citations_exist_in_corpus():
-    articles = json.loads((_root() / "seed" / "law_articles.json").read_text())
-    available = {(a["sr_number"], a["article"]) for a in articles}
-    entitlements = json.loads((_root() / "seed" / "entitlements.json").read_text())
+    """Every cited (sr_number, article) must exist in *some* seed file.
+
+    Federal citations live in ``seed/law_articles.json`` (manual seed)
+    or ``seed/law_articles.fedlex.json`` (Fedlex snapshot). Cantonal
+    citations live in ``seed/law_articles.cantonal.json`` once the
+    ``swiss_legal_api.ingest.cantonal`` CLI has been run. The seeder's
+    ``_load_articles`` merges all three; we mirror that union here so
+    cantonal entitlements aren't flagged as broken simply because the
+    federal manual seed doesn't carry their articles.
+    """
+    seed_dir = _root() / "seed"
+    available: set[tuple[str, str]] = set()
+    for fname in (
+        "law_articles.json",
+        "law_articles.fedlex.json",
+        "law_articles.cantonal.json",
+    ):
+        path = seed_dir / fname
+        if not path.exists():
+            continue
+        for a in json.loads(path.read_text()):
+            available.add((a["sr_number"], a["article"]))
+
+    entitlements = json.loads((seed_dir / "entitlements.json").read_text())
     for row in entitlements:
         for cit in row["source_citations"]:
             assert (cit["sr_number"], cit["article"]) in available, (

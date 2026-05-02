@@ -1,0 +1,22 @@
+{
+  "canton": "BE",
+  "language": "de",
+  "employment_status": "employee_full_time",
+  "employment_start_year": 2020,
+  "weekly_hours": 40,
+  "housing_status": "tenant",
+  "rental_start_year": 2021,
+  "lease_reference_rate_tracked": false,
+  "rent_chf_monthly": 1850,
+  "household_size": 2,
+  "children_count": 0,
+  "children_ages": [],
+  "marital_status": "single",
+  "income_band_chf": "50_80k",
+  "has_third_pillar": false,
+  "business_activity": "none",
+  "permit_type": "none",
+  "nationality_status": "swiss",
+  "years_in_switzerland": null,
+  "recent_life_events": []
+}

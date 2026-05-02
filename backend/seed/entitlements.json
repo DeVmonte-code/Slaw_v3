@@ -509,5 +509,35 @@
     "required_action": "cantonal_application",
     "time_limit_days": null,
     "confidence_floor": 0.6
+  },
+  {
+    "id": "bern_rental_conciliation_free_procedure",
+    "title": {
+      "de": "Kostenloses Schlichtungsverfahren bei Mietstreitigkeiten (BE)",
+      "fr": "Procédure de conciliation gratuite pour les litiges de bail (BE)",
+      "en": "Free Conciliation Procedure for Rental Disputes (Bern)"
+    },
+    "category": "tenancy_right",
+    "jurisdiction": "BE",
+    "source_citations": [
+      {
+        "sr_number": "661.11",
+        "article": "11",
+        "paragraph": "3",
+        "canton": "BE",
+        "language": "de",
+        "quote_under_15_words": "Das Verfahren ist kostenlos."
+      }
+    ],
+    "trigger": {
+      "all": [
+        {"eq": ["canton", "BE"]},
+        {"eq": ["housing_status", "tenant"]}
+      ]
+    },
+    "estimated_value_chf": {"min": 200, "max": 1500, "per": "one_time"},
+    "required_action": "cantonal_application",
+    "time_limit_days": null,
+    "confidence_floor": 0.6
   }
 ]
