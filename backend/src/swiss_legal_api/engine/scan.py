@@ -7,6 +7,8 @@ import logging
 import math
 import time
 from datetime import UTC, datetime
+from functools import lru_cache
+from pathlib import Path
 from typing import Any
 
 from ..config import settings
@@ -15,6 +17,67 @@ from .trigger import evaluate_trigger
 from .verify import VerifyResult, verify_entitlement
 
 logger = logging.getLogger(__name__)
+
+
+# Mirrored from swiss_legal_api.seeding.seed_qdrant._PLACEHOLDER_SENTINEL.
+# Kept local so the request path doesn't import qdrant_client transitively.
+# If this string ever changes, update both copies (the seeder hard-fails if a
+# sentinel sneaks past, so a drift would surface during the next reindex).
+_PLACEHOLDER_SENTINEL = "__PENDING_FEDLEX_VERBATIM__"
+
+_LAW_ARTICLES_PATH = (
+    Path(__file__).resolve().parents[3] / "seed" / "law_articles.json"
+)
+
+
+@lru_cache(maxsize=1)
+def _pending_corpus_articles() -> frozenset[tuple[str, str]]:
+    """Return ``(sr_number, article)`` keys whose seed text is still the
+    ``__PENDING_FEDLEX_VERBATIM__`` sentinel.
+
+    The seeder filters these rows out before they reach Qdrant, so any
+    entitlement that only cites placeholder articles cannot be verified —
+    retrieval comes back empty and Claude is called against a hard refusal
+    payload (or, worse, against the literal sentinel string if a future
+    seeder bug ever embeds one). Loading the manual seed once and using it
+    as a skip-list lets ``run_benefit_scan`` short-circuit before paying
+    for the embedding query, the Qdrant round-trip, and the Claude call.
+
+    Returns an empty frozenset if the seed file is missing or no row
+    matches — the guard then becomes a no-op, which is exactly what we
+    want once the Fedlex backfill follow-up lands.
+    """
+    try:
+        rows = json.loads(_LAW_ARTICLES_PATH.read_text())
+    except (FileNotFoundError, json.JSONDecodeError):
+        return frozenset()
+    pending: set[tuple[str, str]] = set()
+    for r in rows:
+        text = r.get("text") if isinstance(r, dict) else None
+        # Substring match (not strict equality) intentionally mirrors the
+        # seeder's `_is_placeholder`, so a future seed template that wraps
+        # the sentinel in TODO prose still gets caught by both layers.
+        if isinstance(text, str) and _PLACEHOLDER_SENTINEL in text:
+            sr = str(r.get("sr_number", "") or "")
+            art = str(r.get("article", "") or "")
+            if sr and art:
+                pending.add((sr, art))
+    return frozenset(pending)
+
+
+def _all_citations_pending(
+    entitlement: Entitlement, pending: frozenset[tuple[str, str]]
+) -> bool:
+    """True iff every source citation of ``entitlement`` is in ``pending``.
+
+    We deliberately require *all* citations to be placeholders before
+    skipping: if even one citation has real Fedlex text, the verifier can
+    still produce a meaningful (if narrower) verdict for the user.
+    """
+    cits = entitlement.source_citations
+    if not cits:
+        return False
+    return all((c.sr_number, c.article) in pending for c in cits)
 
 
 async def _verify_one(
@@ -41,11 +104,29 @@ async def run_benefit_scan(
 ) -> BenefitReport:
     started = time.perf_counter()
 
+    pending_articles = _pending_corpus_articles()
     triggered: list[tuple[Entitlement, list[dict[str, Any]]]] = []
+    pending_corpus_backfill = 0
     for e in catalog:
         r = evaluate_trigger(e.trigger, profile)
-        if r.matched:
-            triggered.append((e, r.evidence))
+        if not r.matched:
+            continue
+        if _all_citations_pending(e, pending_articles):
+            # Skip Claude entirely: every cited article is still a
+            # placeholder, so retrieval would either return nothing or
+            # the literal sentinel chunk. Either way the verdict is a
+            # foregone suppression — paying for the call is pure waste.
+            pending_corpus_backfill += 1
+            logger.info(
+                "scan_skip_pending_corpus_backfill entitlement_id=%s "
+                "citations=%s",
+                e.id,
+                ",".join(
+                    f"SR{c.sr_number}/Art{c.article}" for c in e.source_citations
+                ),
+            )
+            continue
+        triggered.append((e, r.evidence))
 
     sem = asyncio.Semaphore(settings.scan_concurrency)
     results = await asyncio.gather(
@@ -87,11 +168,13 @@ async def run_benefit_scan(
 
     duration_ms = int((time.perf_counter() - started) * 1000)
     logger.info(
-        "scan_complete profile_hash=%s triggered=%d verified=%d suppressed=%d duration_ms=%d",
+        "scan_complete profile_hash=%s triggered=%d verified=%d "
+        "suppressed=%d pending_corpus_backfill=%d duration_ms=%d",
         profile_hash,
         len(triggered),
         len(benefits),
         suppressed,
+        pending_corpus_backfill,
         duration_ms,
     )
 
@@ -100,4 +183,5 @@ async def run_benefit_scan(
         profile_hash=profile_hash,
         benefits=benefits,
         suppressed_count=suppressed,
+        pending_corpus_backfill=pending_corpus_backfill,
     )

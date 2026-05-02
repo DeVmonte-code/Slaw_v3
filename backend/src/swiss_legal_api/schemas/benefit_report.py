@@ -77,3 +77,9 @@ class BenefitReport(BaseModel):
     profile_hash: str
     benefits: list[Benefit]
     suppressed_count: int = Field(..., ge=0)
+    # Entitlements whose every cited article is still backed by the
+    # ``__PENDING_FEDLEX_VERBATIM__`` placeholder in seed/law_articles.json.
+    # We skip Claude verification for these (the call cannot succeed against
+    # the sentinel chunk) and surface the count so dashboards can see how
+    # many scans are blocked on the Fedlex backfill follow-up.
+    pending_corpus_backfill: int = Field(default=0, ge=0)
