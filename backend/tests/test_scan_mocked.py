@@ -33,8 +33,9 @@ def _stub_retrieve(
     profile_canton: str = "CH",
     score_threshold: float | None = None,
     today: Any = None,
+    caller_context: str = "",
 ) -> list[retrieval_mod.RetrievedChunk]:
-    del extra_query, profile_canton, score_threshold, today
+    del extra_query, profile_canton, score_threshold, today, caller_context
     return [
         retrieval_mod.RetrievedChunk(
             text=f"[stub] verbatim text for SR {citation.sr_number} Art. {citation.article}",

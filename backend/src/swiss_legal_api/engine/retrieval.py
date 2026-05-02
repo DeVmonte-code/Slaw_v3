@@ -91,12 +91,15 @@ def retrieve_for_citation(
     profile_canton: str = "CH",
     score_threshold: float | None = None,
     today: date | None = None,
+    caller_context: str = "",
 ) -> list[RetrievedChunk]:
     """Return chunks above `score_threshold` that satisfy the guardrails.
 
     Returns [] when nothing passes the threshold (the caller should treat
     this as a hard refusal — the verifier short-circuits without calling
     Claude). The top score and threshold are logged so operators can tune.
+    `caller_context` is appended to the telemetry line (the verifier passes
+    `entitlement_id=...` so a single log row is enough to debug a refusal).
     """
     threshold = (
         score_threshold if score_threshold is not None else settings.score_threshold
@@ -137,24 +140,27 @@ def retrieve_for_citation(
         )
 
     above = [c for c in chunks if c.score >= threshold]
+    ctx = f" {caller_context}" if caller_context else ""
     if not above:
         logger.info(
             "retrieval_below_threshold sr=%s art=%s canton=%s "
-            "top_score=%.3f threshold=%.3f n_pre=%d",
+            "top_score=%.3f threshold=%.3f n_pre=%d%s",
             citation.sr_number,
             citation.article,
             profile_canton,
             top_score,
             threshold,
             len(chunks),
+            ctx,
         )
     else:
         logger.debug(
-            "retrieval_ok sr=%s art=%s canton=%s top_score=%.3f n=%d",
+            "retrieval_ok sr=%s art=%s canton=%s top_score=%.3f n=%d%s",
             citation.sr_number,
             citation.article,
             profile_canton,
             above[0].score,
             len(above),
+            ctx,
         )
     return above

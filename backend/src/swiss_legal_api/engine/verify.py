@@ -98,7 +98,13 @@ async def verify_entitlement(
 ) -> VerifyResult:
     cit = entitlement.source_citations[0]
     chunks = await asyncio.to_thread(
-        retrieve_for_citation, cit, entitlement.title.en, profile.canton
+        retrieve_for_citation,
+        cit,
+        entitlement.title.en,
+        profile.canton,
+        None,
+        None,
+        f"entitlement_id={entitlement.id}",
     )
 
     # Guardrail: refuse without calling Claude when no chunk passed the
@@ -144,6 +150,12 @@ async def verify_entitlement(
                 "is_authoritative": is_auth,
             }
         )
+    # The system prompt promises "authoritative chunks first". Sort here so
+    # Claude reads the original-language text before any translation aid,
+    # ties broken by retrieval score.
+    chunk_payload.sort(
+        key=lambda c: (not c["is_authoritative"], -c["score"]),
+    )
 
     safe_fields = {
         "canton": profile.canton,
