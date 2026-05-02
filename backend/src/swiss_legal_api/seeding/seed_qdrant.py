@@ -3,6 +3,7 @@ from __future__ import annotations
 import contextlib
 import json
 import sys
+from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any
 
@@ -16,9 +17,12 @@ from .embedder import embed_passage
 def _normalize_date(value: Any) -> str | None:
     """Coerce an effective/repealed date to RFC3339 datetime at midnight UTC.
 
-    Accepts 'YYYY-MM-DD' or full ISO datetimes; returns None when the input
-    is None or an empty string. Unknown shapes raise ValueError so the
-    seeder fails loud on bad data.
+    Accepts:
+      * None or empty string → returns None.
+      * 'YYYY-MM-DD' → midnight UTC.
+      * Full ISO datetimes including 'Z' or '+HH:MM' offsets → converted to UTC.
+
+    Unknown shapes raise ValueError so the seeder fails loud on bad data.
     """
     if value is None:
         return None
@@ -28,10 +32,23 @@ def _normalize_date(value: Any) -> str | None:
     if not s:
         return None
     if "T" in s:
-        return s if s.endswith("Z") else s + "Z"
-    # Validates 'YYYY-MM-DD'.
-    if len(s) != 10 or s[4] != "-" or s[7] != "-":
-        raise ValueError(f"date must be 'YYYY-MM-DD' or ISO datetime, got {s!r}")
+        # datetime.fromisoformat understands '+HH:MM' offsets natively;
+        # 'Z' is accepted in Python 3.11+. Convert to UTC, then emit RFC3339.
+        try:
+            dt = datetime.fromisoformat(s.replace("Z", "+00:00"))
+        except ValueError as exc:
+            raise ValueError(f"invalid ISO datetime: {s!r}") from exc
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=UTC)
+        return dt.astimezone(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+    # Validates 'YYYY-MM-DD'. date.fromisoformat() rejects malformed inputs
+    # (wrong length, bad separators, impossible months/days) for us.
+    try:
+        date.fromisoformat(s)
+    except ValueError as exc:
+        raise ValueError(
+            f"date must be 'YYYY-MM-DD' or ISO datetime, got {s!r}"
+        ) from exc
     return f"{s}T00:00:00Z"
 
 

@@ -53,15 +53,25 @@ Output rules:
 _anthropic = AsyncAnthropic(api_key=settings.anthropic_api_key)
 
 
-def _is_authoritative_language(sr_number: str, lang: str) -> bool:
-    """All Swiss federal SR acts are officially published in DE/FR/IT.
+_FEDERAL_AUTH_LANGS = frozenset({"de", "fr", "it"})
 
-    EN Fedlex texts are courtesy translations, never authoritative. The
-    sr_number argument is reserved for future per-SR overrides (e.g. cantonal
-    acts published only in a single language).
+# Per-SR original-language provenance. Federal SR acts (every entry currently
+# in seed/law_articles.json) are officially published in DE/FR/IT, so the map
+# defaults to that set via _AUTH_LANGS_BY_SR.get(sr, _FEDERAL_AUTH_LANGS).
+# Cantonal acts ingested by Task #20 will register their own original-language
+# set here (e.g. Ticino → frozenset({"it"})), and EN remains a translation aid
+# in every case.
+_AUTH_LANGS_BY_SR: dict[str, frozenset[str]] = {}
+
+
+def _is_authoritative_language(sr_number: str, lang: str) -> bool:
+    """Return True iff `lang` is one of the SR's official publication languages.
+
+    Defaults to the federal {de, fr, it} set when the SR has no explicit
+    provenance override. EN is never authoritative (Fedlex EN is a courtesy
+    translation), regardless of SR.
     """
-    del sr_number  # reserved for future per-SR rules
-    return lang in {"de", "fr", "it"}
+    return lang in _AUTH_LANGS_BY_SR.get(sr_number, _FEDERAL_AUTH_LANGS)
 
 
 @retry(
