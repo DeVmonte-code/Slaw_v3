@@ -199,9 +199,10 @@ export interface paths {
          *
          *     Counts every ``Benefit.agent_provenance`` across every persisted
          *     ``BenefitReport``, not just the latest report per user. Filters
-         *     (``since``, ``entitlement_id``) and the ``details`` drill-down
-         *     mode mirror the CLI's flags (``--since``, ``--entitlement-id``,
-         *     ``--details``) so the HTTP and cron interfaces cannot drift.
+         *     (``since``, ``entitlement_id``, ``job_id``) and the ``details``
+         *     drill-down mode mirror the CLI's flags (``--since``,
+         *     ``--entitlement-id``, ``--job-id``, ``--details``) so the HTTP
+         *     and cron interfaces cannot drift.
          */
         get: operations["admin_audit_agent_backed_admin_audits_agent_backed_get"];
         put?: never;
@@ -975,6 +976,8 @@ export interface operations {
                 since?: string | null;
                 /** @description Restrict to a single entitlement — the drill-down mode auditors use to answer 'was THIS verification agent-backed?'. */
                 entitlement_id?: string | null;
+                /** @description Restrict to a single scan run. job_id is the report's generated_at ISO timestamp (each persisted BenefitReport is keyed by (user_id, generated_at)). */
+                job_id?: string | null;
                 /** @description Include the full per-verification provenance list under ``records``. Off by default so the headline call stays cheap. */
                 details?: boolean;
             };

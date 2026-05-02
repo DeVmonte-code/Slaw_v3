@@ -544,6 +544,100 @@ async def test_chat_response_envelope_carries_provenance(monkeypatch) -> None:
         assert body["agent_provenance"]["model"] == "claude-fake"
 
 
+def test_audit_aggregation_counts_sessions_events_with_tool_use_as_agent_backed() -> None:
+    """End-to-end aggregation test for the Task #26 traffic shape.
+
+    Persists a synthetic ``BenefitReport`` whose Benefits carry
+    ``sessions.events`` provenance with ≥1 tool use, and proves the
+    audit aggregator classifies them as ``agent_backed`` and surfaces
+    them under ``by_call_kind['sessions.events']``. This pins the
+    counting path Task #26 will start exercising for real.
+    """
+    from swiss_legal_api.schemas import (
+        Benefit,
+        BenefitReport,
+        Citation,
+        EstimatedValue,
+    )
+    from swiss_legal_api.schemas.benefit_report import EvidenceItem
+
+    storage.upsert_user("u_sessions", _profile(), notify_enabled=True)
+
+    cit = Citation(
+        sr_number="642.11",
+        article="33",
+        language="de",
+        quote_under_15_words="Test quote in German.",
+    )
+    agent_prov = AgentProvenance(
+        call_kind="sessions.events",
+        agent_backed=True,
+        model="claude-managed-agent-vNext",
+        latency_ms=120,
+        input_tokens=100,
+        output_tokens=20,
+        agent_id="agent_abc",
+        agent_version="1.0",
+        session_id="sess_xyz",
+        environment_id="env_123",
+        tools_offered=["doctrine_search"],
+        tool_use_count=2,
+        mcp_tool_use_count=1,
+        mcp_servers_invoked=["legal_kb"],
+    )
+    legacy_prov = AgentProvenance(
+        call_kind="messages.create",
+        agent_backed=False,
+        model="claude-legacy",
+        latency_ms=50,
+    )
+
+    def _benefit(eid: str, prov: AgentProvenance) -> Benefit:
+        return Benefit(
+            entitlement_id=eid,
+            title="t",
+            category="tax_deduction",
+            confidence=0.9,
+            citations=[cit],
+            evidence=[EvidenceItem(field="canton", value="ZH")],
+            estimated_value_chf=EstimatedValue(min=0, max=100, per="year"),
+            required_action="tax_declaration_field",
+            llm_reasoning="r",
+            agent_provenance=prov,
+        )
+
+    report = BenefitReport(
+        generated_at="2026-05-01T00:00:00Z",
+        profile_hash="hash",
+        benefits=[
+            _benefit("ent_a", agent_prov),
+            _benefit("ent_b", agent_prov),
+            _benefit("ent_c", legacy_prov),
+        ],
+        suppressed_count=0,
+    )
+    storage.insert_scan("u_sessions", report)
+
+    summary = agent_backed_summary()
+    assert summary["total_benefits"] == 3
+    assert summary["agent_backed"] == 2
+    assert summary["unverified_by_agent"] == 1
+    assert summary["agent_backed_pct"] == round(2 / 3, 4)
+    assert summary["by_call_kind"]["sessions.events"] == 2
+    assert summary["by_call_kind"]["messages.create"] == 1
+    assert summary["by_model"]["claude-managed-agent-vNext"] == 2
+
+    drill = agent_backed_summary(
+        entitlement_id="ent_a", include_records=True
+    )
+    assert drill["agent_backed"] == 1
+    assert drill["records"][0]["agent_provenance"]["agent_backed"] is True
+    assert drill["records"][0]["agent_provenance"]["tool_use_count"] == 2
+    assert drill["records"][0]["agent_provenance"]["mcp_servers_invoked"] == [
+        "legal_kb"
+    ]
+
+
 def test_agent_backed_is_derived_truth_enforced_by_validator() -> None:
     """A caller cannot lie about being agent-backed.
 
