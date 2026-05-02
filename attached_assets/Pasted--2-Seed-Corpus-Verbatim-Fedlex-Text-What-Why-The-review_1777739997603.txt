@@ -1,0 +1,27 @@
+#2 - Seed Corpus: Verbatim Fedlex Text
+What & Why
+The reviewer's Blocker B1: seed/law_articles.json and the quote_under_15_words strings in seed/entitlements.json are paraphrased English summaries, not the verbatim Fedlex EN text the spec demands. The verification stage feeds these strings to Claude as "the authoritative source", so every benefit report is grounded in fabricated law. README also currently claims the texts are sourced from Fedlex, which is false. Fix: replace every article text with verbatim Fedlex EN, regenerate the quote slices from the real text, and drop+document any article whose EN translation isn't available on Fedlex.
+
+Done looks like
+Every entry in seed/law_articles.json has text matching the verbatim English paragraph from its Fedlex URL (no paraphrasing, no summarization, exact quotation marks and punctuation preserved).
+Every quote_under_15_words in seed/entitlements.json is a literal 15-word-or-fewer slice of the corresponding article's verbatim text — copy-paste, not rewritten.
+Any article that has no Fedlex EN translation available is removed from law_articles.json; any entitlement that depends on a dropped article is also removed (or its legal_basis updated to a still-present article).
+backend/README.md "Dropped Articles" section lists every removed article with a one-line reason ("no EN translation on Fedlex" or similar) — no longer the placeholder text it currently is.
+After the changes, the existing offline tests still pass (pytest tests/test_schemas.py tests/test_seed.py tests/test_trigger.py -v).
+A live POST /scan against the Luis fixture still returns ≥ 5 benefits with citations resolving to articles in the trimmed corpus.
+Out of scope
+Any Python code changes — this task is content-only.
+Adding new entitlements or articles beyond what the spec already requires.
+Translating non-EN-available articles ourselves (the rule is drop, not translate).
+Re-seeding Qdrant against the new corpus on the user's running cluster (caller will do this manually after merge).
+Steps
+Fetch verbatim text — For each article in seed/law_articles.json, open the Fedlex EN URL listed in the README, locate the paragraph by article number, and capture the exact published English text.
+Replace article texts — Update each text field with the verbatim string, preserving the existing id, sr_number, article, and url fields.
+Regenerate short quotes — For every entitlement in seed/entitlements.json, replace quote_under_15_words with a literal ≤15-word slice copied from its referenced article's new verbatim text.
+Drop and document — Remove articles whose EN translation cannot be obtained verbatim; remove or rewire any entitlement whose legal_basis pointed at them; list each removal under ## Dropped Articles in backend/README.md.
+Verify — Run the offline test suite, then run a live /scan against backend/fixtures/luis_profile.json to confirm the trimmed corpus still produces ≥ 5 benefits with valid citations.
+Relevant files
+backend/seed/law_articles.json
+backend/seed/entitlements.json
+backend/README.md
+backend/fixtures/luis_profile.json
