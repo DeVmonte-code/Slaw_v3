@@ -34,6 +34,7 @@ Parser shape (OData feed) — Atom XML with ``ge:Act`` entries:
 """
 from __future__ import annotations
 
+import logging
 import re
 import xml.etree.ElementTree as ET
 from collections.abc import Iterable
@@ -43,6 +44,8 @@ from html.parser import HTMLParser
 import httpx
 
 from .base import CantonalArticleRecord
+
+logger = logging.getLogger(__name__)
 
 CANTON = "GE"
 COMPILATION_LABEL = "RSG (Recueil systématique genevois)"
@@ -313,18 +316,83 @@ def parse_odata_feed(xml_text: str) -> list[_GEArticleSpec]:
     return out
 
 
+# HTML catalogue fallback — used when the OData feed is unreachable.
+# The Geneva chancellery also publishes the RSG index as an HTML page on
+# ge.ch with one ``<a class="rsgentry" data-rsg=… data-status=…
+# data-effective=… data-language=… href=…>`` per act, mirroring the
+# ZH/BE index conventions. We never silently drop discovery — we try
+# OData first, fall back to HTML, and only fall back to the inline
+# starter spec list (in __main__) if both surfaces are unreachable.
+RSG_HTML_INDEX_URL = "https://www.ge.ch/legislation/rsg/"
+
+
+class _RSGHtmlIndexParser(HTMLParser):
+    """Walk the ge.ch HTML RSG catalogue and collect in-force entries."""
+
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self.entries: list[_GEArticleSpec] = []
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        if tag != "a":
+            return
+        attr = {k: (v or "") for k, v in attrs}
+        if "rsgentry" not in attr.get("class", "").split():
+            return
+        if attr.get("data-status", "in_force") != "in_force":
+            return
+        rsg = attr.get("data-rsg", "").strip()
+        href = attr.get("href", "").strip()
+        if not rsg or not href:
+            return
+        self.entries.append(
+            _GEArticleSpec(
+                url=href,
+                compilation_id=rsg,
+                language=attr.get("data-language", "fr") or "fr",
+                effective_date=attr.get("data-effective") or None,
+            )
+        )
+
+
+def parse_html_index(html: str) -> list[_GEArticleSpec]:
+    """Pure parser: ge.ch HTML RSG index -> list of in-force-act specs."""
+    p = _RSGHtmlIndexParser()
+    p.feed(html)
+    p.close()
+    return p.entries
+
+
 def discover_specs(
     *,
     odata_url: str = RSG_ODATA_URL,
+    html_index_url: str = RSG_HTML_INDEX_URL,
     client: httpx.Client | None = None,
 ) -> list[_GEArticleSpec]:
-    """Fetch the RSG OData catalogue and return one spec per in-force act."""
+    """Fetch the RSG catalogue, OData first, HTML index as fallback.
+
+    Per the canton-adapter contract: OData is the official
+    machine-readable surface, HTML index is the resilient backup. We
+    surface the OData failure via :mod:`logging` so operators see when
+    the canton is shedding traffic to the HTML page; the function only
+    raises if BOTH surfaces fail (in which case ``__main__`` falls back
+    to the inline starter spec list).
+    """
     own_client = client is None
     http = client if client is not None else httpx.Client(timeout=30.0)
     try:
-        resp = http.get(odata_url, headers={"Accept": "application/atom+xml"})
+        try:
+            resp = http.get(odata_url, headers={"Accept": "application/atom+xml"})
+            resp.raise_for_status()
+            return parse_odata_feed(resp.text)
+        except (httpx.HTTPError, ET.ParseError) as exc:
+            logger.warning(
+                "rsg_odata_unavailable url=%s err=%s — falling back to HTML index",
+                odata_url, exc,
+            )
+        resp = http.get(html_index_url)
         resp.raise_for_status()
-        return parse_odata_feed(resp.text)
+        return parse_html_index(resp.text)
     finally:
         if own_client:
             http.close()

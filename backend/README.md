@@ -279,7 +279,11 @@ uniformly:
 - `geneva_rs.py`  — Geneva RSG. **OData feed** at
   `https://ge.ch/legislation/rsg/odata/Acts` is the primary surface;
   `parse_odata_feed()` reads the Atom XML and `discover_specs()`
-  fetches it. Per-act bodies still come from the lexfind/ge.ch HTML.
+  fetches it. **HTML index** at `https://www.ge.ch/legislation/rsg/`
+  is the resilient fallback (`parse_html_index()`) — `discover_specs`
+  transparently switches to it on OData failure and logs
+  `rsg_odata_unavailable` so the outage is observable. Per-act bodies
+  always come from the lexfind/ge.ch HTML.
 
 Each record carries a `canton` payload field; retrieval already filters
 on `canton ∈ {profile_canton, "CH"}`, so cantonal rows naturally

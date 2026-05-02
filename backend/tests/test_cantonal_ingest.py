@@ -391,6 +391,46 @@ def test_ge_odata_feed_handles_empty_feed():
     assert geneva_rs.parse_odata_feed(xml) == []
 
 
+def test_ge_html_index_discovers_in_force_acts_only():
+    """The ge.ch HTML RSG index is the OData fallback — same exclusion
+    rule for repealed acts, same spec shape so callers can swap freely.
+    """
+    html = (FIXTURES / "ge_rsg_html_index.html").read_text()
+    specs = geneva_rs.parse_html_index(html)
+    ids = {s.compilation_id for s in specs}
+    assert ids == {"A2.05", "E5.05"}, (
+        "abrogated entries must be excluded; got " + repr(ids)
+    )
+    a205 = next(s for s in specs if s.compilation_id == "A2.05")
+    assert a205.url.startswith("https://www.lexfind.ch/")
+    assert a205.language == "fr"
+
+
+@respx.mock
+def test_ge_discover_specs_falls_back_to_html_when_odata_fails(caplog):
+    """OData 503 -> :func:`discover_specs` transparently uses the HTML
+    index. Operators see a warning so the OData outage is observable."""
+    respx.get(geneva_rs.RSG_ODATA_URL).mock(
+        return_value=httpx.Response(503, text="upstream unavailable")
+    )
+    respx.get(geneva_rs.RSG_HTML_INDEX_URL).mock(
+        return_value=httpx.Response(
+            200,
+            text=(FIXTURES / "ge_rsg_html_index.html").read_text(),
+            headers={"content-type": "text/html; charset=utf-8"},
+        )
+    )
+    client = httpx.Client(timeout=5.0)
+    try:
+        with caplog.at_level("WARNING"):
+            specs = geneva_rs.discover_specs(client=client)
+    finally:
+        client.close()
+    ids = {s.compilation_id for s in specs}
+    assert ids == {"A2.05", "E5.05"}
+    assert any("rsg_odata_unavailable" in r.message for r in caplog.records)
+
+
 # ----- Bern PDF fallback --------------------------------------------------
 
 
