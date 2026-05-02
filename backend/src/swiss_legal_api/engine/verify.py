@@ -53,6 +53,11 @@ Output rules:
 _anthropic = AsyncAnthropic(api_key=settings.anthropic_api_key)
 
 
+# Server-side enforcement of the prompt's translation-only confidence cap.
+# Mirrors the value stated in the SYSTEM prompt above so the policy is
+# guaranteed even if Claude ignores the instruction.
+_TRANSLATION_ONLY_CONFIDENCE_CAP = 0.75
+
 _FEDERAL_AUTH_LANGS = frozenset({"de", "fr", "it"})
 
 # Per-SR original-language provenance. Federal SR acts (every entry currently
@@ -235,9 +240,20 @@ Respond with JSON only."""
 
     quote = " ".join(str(parsed.get("best_quote", "")).strip().split()[:14])
     top = chunks[0]
+    confidence = max(0.0, min(1.0, float(parsed.get("confidence", 0.0))))
+    # Hard cap on translation-only verifications: even if Claude ignores the
+    # prompt instruction, the policy is enforced server-side.
+    if translation_only and confidence > _TRANSLATION_ONLY_CONFIDENCE_CAP:
+        logger.info(
+            "claude_verify_capped entitlement_id=%s raw=%.2f cap=%.2f",
+            entitlement.id,
+            confidence,
+            _TRANSLATION_ONLY_CONFIDENCE_CAP,
+        )
+        confidence = _TRANSLATION_ONLY_CONFIDENCE_CAP
     return VerifyResult(
         supports=bool(parsed.get("supports", False)),
-        confidence=max(0.0, min(1.0, float(parsed.get("confidence", 0.0)))),
+        confidence=confidence,
         reasoning=str(parsed.get("reasoning", "")),
         best_citation=cit.model_copy(
             update={

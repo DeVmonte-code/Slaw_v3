@@ -261,3 +261,47 @@ async def test_translation_only_keeps_en_non_authoritative(
     # Verifier still ran (didn't short-circuit) and surfaced top chunk metadata.
     assert result.best_citation.score == pytest.approx(0.82)
     assert result.best_citation.effective_date == date(1912, 1, 1)
+
+
+@pytest.mark.asyncio
+async def test_translation_only_caps_confidence_server_side(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """(vi) Server-side cap fires when Claude returns >0.75 on translation-only.
+
+    Even if the model ignores the prompt cap, the policy is enforced in code.
+    """
+    en_only = RetrievedChunk(
+        text="English Fedlex translation only.",
+        score=0.82,
+        language="en",
+        effective_date=date(1912, 1, 1),
+    )
+    monkeypatch.setattr(
+        verify_mod, "retrieve_for_citation", lambda *a, **k: [en_only]
+    )
+
+    async def _fake_call_claude(_user: str) -> tuple[str, dict[str, int]]:
+        # Model misbehaves and returns 0.95 despite the prompt cap.
+        body = json.dumps(
+            {
+                "supports": True,
+                "confidence": 0.95,
+                "reasoning": "ignored the cap",
+                "best_quote": "Translation supports the claim.",
+            }
+        )
+        return body, {"input_tokens": 40, "output_tokens": 15}
+
+    monkeypatch.setattr(verify_mod, "_call_claude", _fake_call_claude)
+
+    cit = Citation(
+        sr_number="220",
+        article="270a",
+        language="en",
+        quote_under_15_words="Quote in English.",
+    )
+    result = await verify_entitlement(_entitlement(cit), _profile(), [])
+
+    assert result.supports is True
+    assert result.confidence == pytest.approx(0.75)
