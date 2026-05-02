@@ -41,7 +41,13 @@ async def answer_follow_up(message: str, benefit_id: str | None) -> str:
         ent = next((e for e in load_catalog() if e.id == benefit_id), None)
         if ent:
             chunks = await asyncio.to_thread(
-                retrieve_for_citation, ent.source_citations[0], ent.title.en
+                retrieve_for_citation,
+                ent.source_citations[0],
+                ent.title.en,
+                # No profile context in the chat endpoint — fall back to
+                # federal-only ("CH"). Cantonal follow-up chat would need
+                # the same canton plumbing as /scan.
+                "CH",
             )
             context = (
                 f"Entitlement: {ent.title.en}\n\n"

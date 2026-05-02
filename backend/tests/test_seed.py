@@ -12,7 +12,20 @@ def test_law_articles_parse():
     data = json.loads((_root() / "seed" / "law_articles.json").read_text())
     assert isinstance(data, list) and len(data) >= 20
     for row in data:
-        assert {"sr_number", "article", "language", "text"} <= row.keys()
+        # Anti-hallucination guardrail (Task #18): every chunk must carry the
+        # canton and effective_date fields the retrieval filter relies on.
+        assert {
+            "sr_number", "article", "language", "text",
+            "canton", "effective_date",
+        } <= row.keys(), f"missing required keys in {row}"
+        assert row["canton"] == "CH" or len(row["canton"]) == 2
+        # ISO date 'YYYY-MM-DD' (validated downstream by the seeder).
+        eff = row["effective_date"]
+        assert isinstance(eff, str) and len(eff) >= 10
+        # repealed_date is optional in the JSON shape but, when present,
+        # must be either null or an ISO date string.
+        if "repealed_date" in row and row["repealed_date"] is not None:
+            assert isinstance(row["repealed_date"], str)
 
 
 def test_entitlements_parse_and_count():

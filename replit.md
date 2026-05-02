@@ -36,9 +36,24 @@ A Proactive Rights Discovery service for Swiss residents.
 - `QDRANT_COLLECTION` (default: `swiss_law`)
 - `EMBEDDING_MODEL` (default: `intfloat/multilingual-e5-small`)
 - `SCAN_CONCURRENCY` (default: `3`)
+- `SCORE_THRESHOLD` (default: `0.55`) — Qdrant cosine floor; chunks below are dropped before the verifier and `supports=false` is returned without a Claude call
 - `LOG_LEVEL` (default: `INFO`) — JSON-format logs to stdout
 - `FRONTEND_ORIGIN` / `CORS_ALLOW_ORIGINS` — CORS origins; defaults to `*` in dev with WARNING
 - `APP_ENV` (default: `development`) — set to `production` to make CORS origins mandatory at startup
+
+## Anti-hallucination guardrails (Task #18)
+
+Each Qdrant chunk and `Citation` carries `canton`, `effective_date`, and
+`repealed_date`. Retrieval filters on:
+- `canton ∈ {profile.canton, "CH"}` (federal law applies in every canton)
+- `effective_date <= today` (no not-yet-in-force law)
+- `repealed_date IS NULL OR > today` (no repealed law)
+- cosine similarity `>= SCORE_THRESHOLD` (refuse-on-empty, no Claude call)
+
+The verifier marks DE/FR/IT chunks as `is_authoritative=true` and EN as a
+courtesy-translation aid (graceful fallback to EN when no original-language
+chunk is in the corpus). The `Benefit` returned by `/scan` surfaces the top
+chunk's `effective_date` and `score` on `best_citation`.
 
 ## Observability
 
@@ -72,7 +87,8 @@ offline using respx + monkeypatched Qdrant retrieval.
 - `backend/src/swiss_legal_api/engine/trigger.py` — Trigger DSL evaluator
 - `backend/src/swiss_legal_api/engine/verify.py` — Claude-based verifier
 - `backend/seed/entitlements.json` — Entitlement catalog (15 entitlements)
-- `backend/seed/law_articles.json` — Swiss law articles for Qdrant (verbatim EN for SR 220, verbatim DE for SR 642.11 / 831.40 / 837.0)
+- `backend/seed/law_articles.json` — Swiss law articles for Qdrant (verbatim EN for SR 220, verbatim DE for SR 642.11 / 831.40 / 837.0). Each entry carries `canton`, `effective_date`, and `repealed_date` for the retrieval guardrails.
+- `backend/tests/test_verify_guardrails.py` — Filter-construction + verifier short-circuit tests for Task #18
 - `backend/tests/test_scan_mocked.py` — End-to-end scan test using respx + monkeypatched retrieval (runs offline)
 - `backend/tests/conftest.py` — Test env defaults (placeholder ANTHROPIC_API_KEY for offline mocked tests)
 - `frontend/app/page.tsx` — Profile wizard form

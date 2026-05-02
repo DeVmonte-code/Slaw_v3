@@ -27,11 +27,20 @@ def _luis() -> ContextProfile:
     return ContextProfile.model_validate(json.loads(fixtures.read_text()))
 
 
-def _stub_retrieve(citation: Any, extra_query: str) -> list[retrieval_mod.RetrievedChunk]:
+def _stub_retrieve(
+    citation: Any,
+    extra_query: str,
+    profile_canton: str = "CH",
+    score_threshold: float | None = None,
+    today: Any = None,
+) -> list[retrieval_mod.RetrievedChunk]:
+    del extra_query, profile_canton, score_threshold, today
     return [
         retrieval_mod.RetrievedChunk(
             text=f"[stub] verbatim text for SR {citation.sr_number} Art. {citation.article}",
             score=0.91,
+            language=getattr(citation, "language", "de"),
+            effective_date=None,
         )
     ]
 

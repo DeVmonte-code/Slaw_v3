@@ -151,6 +151,21 @@ export interface components {
             language: "de" | "fr" | "it" | "en";
             /** Quote Under 15 Words */
             quote_under_15_words: string;
+            /**
+             * Effective Date
+             * @description Date the article entered into force (Fedlex 'Inkrafttreten'). Used to filter out not-yet-effective law at retrieval time.
+             */
+            effective_date?: string | null;
+            /**
+             * Repealed Date
+             * @description Date the article was repealed (Fedlex 'Aufhebung'). If null, the article is still in force.
+             */
+            repealed_date?: string | null;
+            /**
+             * Score
+             * @description Qdrant cosine similarity of the chunk that supports this citation. Set on best_citation in BenefitReport, not on seed Citations.
+             */
+            score?: number | null;
         };
         /** ContextProfile */
         ContextProfile: {

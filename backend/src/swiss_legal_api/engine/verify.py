@@ -19,23 +19,44 @@ logger = logging.getLogger(__name__)
 
 _JSON_RE = re.compile(r"\{.*\}", re.DOTALL)
 
+# Markers around the chunk JSON block in the user message. Stable so tests
+# (and operators reading logs) can extract the structured payload.
+_CHUNKS_OPEN = "### RETRIEVED_CHUNKS_JSON ###"
+_CHUNKS_CLOSE = "### END_RETRIEVED_CHUNKS ###"
+
 SYSTEM = """You verify whether a specific Swiss legal article supports a specific claimed
 entitlement for a specific user context.
 
-Rules:
+Authoritative-source policy:
+- Each retrieved chunk has an "is_authoritative" flag and a "language".
+- Swiss federal SR (Systematische Rechtssammlung) acts are officially published
+  in German, French, and Italian. English Fedlex texts are courtesy translations.
+- Prefer chunks where "is_authoritative": true. Treat chunks where
+  "is_authoritative": false as a translation aid only.
+- If only translation chunks are available, you MAY still verify when the wording
+  is unambiguous, but lower your confidence accordingly.
+
+Output rules:
 - Output ONLY valid JSON of shape:
   {"supports": bool, "confidence": number 0..1, "reasoning": string,
   "best_quote": string (<= 15 words)}.
-- Use the retrieved article text as the authoritative source.
-- The retrieved text may be in German (DE) or English (EN); both are authoritative
-  Fedlex translations. Reason directly from the text in either language.
-- If the article does not support the entitlement for this user context,
-  set supports=false and explain why.
-- Do not hallucinate article text. If the retrieved text does not clearly
-  support the claim, prefer supports=false.
+- Use the retrieved chunk text as the only source of legal authority.
+- Do not hallucinate article text. If no chunk clearly supports the claim,
+  set supports=false.
 - confidence reflects strength of textual support, not absolute legal certainty."""
 
 _anthropic = AsyncAnthropic(api_key=settings.anthropic_api_key)
+
+
+def _is_authoritative_language(sr_number: str, lang: str) -> bool:
+    """All Swiss federal SR acts are officially published in DE/FR/IT.
+
+    EN Fedlex texts are courtesy translations, never authoritative. The
+    sr_number argument is reserved for future per-SR overrides (e.g. cantonal
+    acts published only in a single language).
+    """
+    del sr_number  # reserved for future per-SR rules
+    return lang in {"de", "fr", "it"}
 
 
 @retry(
@@ -76,10 +97,53 @@ async def verify_entitlement(
     triggered_evidence: list[dict[str, Any]],
 ) -> VerifyResult:
     cit = entitlement.source_citations[0]
-    chunks = await asyncio.to_thread(retrieve_for_citation, cit, entitlement.title.en)
-    retrieved_text = "\n\n".join(
-        f"[{i+1}] score={c.score:.3f}: {c.text}" for i, c in enumerate(chunks)
-    ) or "NO RESULTS — treat supports as false"
+    chunks = await asyncio.to_thread(
+        retrieve_for_citation, cit, entitlement.title.en, profile.canton
+    )
+
+    # Guardrail: refuse without calling Claude when no chunk passed the
+    # similarity threshold + canton/date filters. Saves tokens AND prevents
+    # the model from hallucinating against irrelevant context.
+    if not chunks:
+        logger.info(
+            "verify_short_circuit entitlement_id=%s reason=no_chunks_above_threshold "
+            "sr=%s art=%s canton=%s",
+            entitlement.id,
+            cit.sr_number,
+            cit.article,
+            profile.canton,
+        )
+        return VerifyResult(
+            supports=False,
+            confidence=0.0,
+            reasoning=(
+                "No retrieved chunk above similarity threshold for "
+                f"SR {cit.sr_number} Art. {cit.article} in canton "
+                f"{profile.canton}; refusing to verify."
+            ),
+            best_citation=cit,
+        )
+
+    # Tag each chunk with is_authoritative. If none are originally
+    # authoritative (e.g. only EN translations are in the corpus today),
+    # promote them as a graceful fallback so the verifier can still run.
+    authoritative_present = any(
+        _is_authoritative_language(cit.sr_number, c.language) for c in chunks
+    )
+    chunk_payload: list[dict[str, Any]] = []
+    for c in chunks:
+        is_auth = (
+            _is_authoritative_language(cit.sr_number, c.language)
+            or not authoritative_present
+        )
+        chunk_payload.append(
+            {
+                "text": c.text,
+                "language": c.language,
+                "score": round(c.score, 3),
+                "is_authoritative": is_auth,
+            }
+        )
 
     safe_fields = {
         "canton": profile.canton,
@@ -92,6 +156,12 @@ async def verify_entitlement(
         "business_activity": profile.business_activity,
     }
 
+    chunks_block = (
+        f"{_CHUNKS_OPEN}\n"
+        f"{json.dumps(chunk_payload, indent=2, ensure_ascii=False)}\n"
+        f"{_CHUNKS_CLOSE}"
+    )
+
     user_content = f"""Entitlement: {entitlement.title.en}
 Claim: This user is entitled to this under SR {cit.sr_number} Art. {cit.article}.
 Category: {entitlement.category}
@@ -103,8 +173,8 @@ User profile (structured fields only):
 Triggering evidence:
 {json.dumps(triggered_evidence, indent=2)}
 
-Retrieved legal text:
-{retrieved_text}
+Retrieved legal text (authoritative chunks first):
+{chunks_block}
 
 Respond with JSON only."""
 
@@ -137,11 +207,16 @@ Respond with JSON only."""
         )
 
     quote = " ".join(str(parsed.get("best_quote", "")).strip().split()[:14])
+    top = chunks[0]
     return VerifyResult(
         supports=bool(parsed.get("supports", False)),
         confidence=max(0.0, min(1.0, float(parsed.get("confidence", 0.0)))),
         reasoning=str(parsed.get("reasoning", "")),
         best_citation=cit.model_copy(
-            update={"quote_under_15_words": quote or cit.quote_under_15_words}
+            update={
+                "quote_under_15_words": quote or cit.quote_under_15_words,
+                "effective_date": top.effective_date or cit.effective_date,
+                "score": top.score,
+            }
         ),
     )

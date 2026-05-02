@@ -13,6 +13,10 @@ class Settings(BaseSettings):
     qdrant_collection: str = "swiss_law"
     embedding_model: str = "intfloat/multilingual-e5-small"
     scan_concurrency: int = 3
+    # Cosine-similarity floor for retrieved Qdrant chunks. Anything below is
+    # dropped before reaching the verifier, which then short-circuits to
+    # supports=false without spending a Claude call.
+    score_threshold: float = 0.55
 
     log_level: str = "INFO"
     cors_allow_origins: str = ""
