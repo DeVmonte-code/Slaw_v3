@@ -180,8 +180,11 @@ export default function AlertsPage() {
 
               {(a.payload.changed_citations ?? []).length > 0 && (
                 <p className="mt-1 text-xs text-amber-800">
-                  Triggered by Fedlex amendment:{" "}
-                  {(a.payload.changed_citations ?? []).join(", ")}
+                  Triggered by Fedlex amendment
+                  {a.payload.fedlex_amendment_date
+                    ? ` (effective ${a.payload.fedlex_amendment_date})`
+                    : ""}
+                  : {(a.payload.changed_citations ?? []).join(", ")}
                 </p>
               )}
 

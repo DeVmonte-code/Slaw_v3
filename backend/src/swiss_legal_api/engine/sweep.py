@@ -85,16 +85,25 @@ def _citations_changed(
 
 
 def _benefit_cites_changed(
-    benefit: Benefit, changed: set[tuple[str, str]]
-) -> list[str]:
-    """Return the human-readable ``SR/Art`` strings of cited articles
-    that appear in ``changed``. Empty list when none match.
+    benefit: Benefit, changed: dict[tuple[str, str], str | None]
+) -> tuple[list[str], str | None]:
+    """Return ``(citations, latest_amendment_date)`` for cited articles
+    appearing in ``changed``.
+
+    The date is the max ``effective_date`` across the matched articles
+    so the alert can render "amended on YYYY-MM-DD". ``None`` when
+    none of the matched articles carry a date (e.g., legacy snapshot).
     """
     out: list[str] = []
+    latest: str | None = None
     for c in benefit.citations:
-        if (c.sr_number, c.article) in changed:
+        key = (c.sr_number, c.article)
+        if key in changed:
             out.append(f"SR{c.sr_number}/Art{c.article}")
-    return sorted(set(out))
+            d = changed[key]
+            if d and (latest is None or d > latest):
+                latest = d
+    return sorted(set(out)), latest
 
 
 def _make_alert(
@@ -105,6 +114,7 @@ def _make_alert(
     benefit: Benefit,
     previous_value: tuple[float, float] | None = None,
     changed_citations: list[str] | None = None,
+    fedlex_amendment_date: str | None = None,
 ) -> Alert:
     aid = uuid.uuid5(
         _ALERT_NAMESPACE, f"{user_id}|{scan_at}|{kind}|{benefit.entitlement_id}"
@@ -122,6 +132,7 @@ def _make_alert(
             previous_value[1] if previous_value else None
         ),
         changed_citations=changed_citations or [],
+        fedlex_amendment_date=fedlex_amendment_date,
     )
     return Alert(
         alert_id=str(aid),
@@ -139,7 +150,7 @@ def classify_diff(
     user_id: str,
     previous: BenefitReport | None,
     current: BenefitReport,
-    changed_articles: set[tuple[str, str]] | None = None,
+    changed_articles: dict[tuple[str, str], str | None] | None = None,
 ) -> list[Alert]:
     """Emit one :class:`Alert` per change between ``previous`` and ``current``.
 
@@ -157,7 +168,7 @@ def classify_diff(
       identical — without it, a Fedlex revision that doesn't change
       the entitlement's quantitative output would be invisible.
     """
-    changed = changed_articles or set()
+    changed: dict[tuple[str, str], str | None] = changed_articles or {}
     curr_by_id = {_benefit_key(b): b for b in current.benefits}
     prev_by_id = (
         {_benefit_key(b): b for b in previous.benefits} if previous else {}
@@ -177,7 +188,7 @@ def classify_diff(
             )
             continue
         prev_b = prev_by_id[eid]
-        cited_changes = _benefit_cites_changed(benefit, changed)
+        cited_changes, amendment_date = _benefit_cites_changed(benefit, changed)
         if (
             _value_changed(prev_b, benefit)
             or _citations_changed(prev_b, benefit)
@@ -194,6 +205,7 @@ def classify_diff(
                         prev_b.estimated_value_chf.max,
                     ),
                     changed_citations=cited_changes,
+                    fedlex_amendment_date=amendment_date,
                 )
             )
 
@@ -219,14 +231,20 @@ def _hash_text(s: str) -> str:
     return hashlib.sha256(s.encode("utf-8")).hexdigest()
 
 
-def _index_snapshot(rows: Iterable[dict[str, Any]]) -> dict[tuple[str, str], str]:
-    """Index a Fedlex snapshot by ``(sr_number, article)`` -> text-hash.
+def _index_snapshot(
+    rows: Iterable[dict[str, Any]],
+) -> tuple[dict[tuple[str, str], str], dict[tuple[str, str], str | None]]:
+    """Index a Fedlex snapshot by ``(sr_number, article)``.
 
+    Returns ``(text_hash_by_article, effective_date_by_article)``.
     Rolls all paragraphs of one article into one digest so a paragraph
     re-numbering (Fedlex sometimes reshuffles ``para_Y`` while keeping
-    text identical) doesn't fire a false "amended" alert.
+    text identical) doesn't fire a false "amended" alert. The date is
+    the max ``effective_date`` seen across the article's rows (Fedlex
+    stores it per-paragraph; latest wins).
     """
     by_article: dict[tuple[str, str], list[tuple[str, str]]] = {}
+    eff_by_article: dict[tuple[str, str], str | None] = {}
     for r in rows:
         sr = str(r.get("sr_number", "") or "")
         art = str(r.get("article", "") or "")
@@ -235,26 +253,37 @@ def _index_snapshot(rows: Iterable[dict[str, Any]]) -> dict[tuple[str, str], str
         para = str(r.get("paragraph", "") or "")
         text = str(r.get("text", "") or "")
         by_article.setdefault((sr, art), []).append((para, text))
+        eff = r.get("effective_date")
+        eff_str = str(eff) if eff else None
+        prev = eff_by_article.get((sr, art))
+        if eff_str and (prev is None or eff_str > prev):
+            eff_by_article[(sr, art)] = eff_str
+        elif (sr, art) not in eff_by_article:
+            eff_by_article[(sr, art)] = prev
     out: dict[tuple[str, str], str] = {}
     for k, paras in by_article.items():
         joined = "\n".join(t for _, t in sorted(paras))
         out[k] = _hash_text(joined)
-    return out
+    return out, eff_by_article
 
 
 def fedlex_changed_articles(
     current_path: str | Path, previous_path: str | Path
-) -> set[tuple[str, str]]:
-    """Return the set of ``(sr_number, article)`` whose text changed.
+) -> dict[tuple[str, str], str | None]:
+    """Return ``{(sr_number, article): effective_date|None}`` for changed articles.
 
     Both inputs are JSON files in the ``law_articles.fedlex.json``
     shape produced by :mod:`swiss_legal_api.ingest.fedlex`. Missing
-    files yield an empty set — first-ever sweep has no baseline to
-    diff against, which is the right behaviour.
+    files yield an empty mapping — first-ever sweep has no baseline to
+    diff against, which is the right behaviour. The date is the most
+    recent ``effective_date`` carried by the article in the *current*
+    snapshot, so the alert can be rendered as "amended on YYYY-MM-DD".
+    Repealed articles (present in previous, absent in current) carry
+    the previous snapshot's date so the UI still has something to show.
     """
     cur_p, prev_p = Path(current_path), Path(previous_path)
     if not cur_p.exists() or not prev_p.exists():
-        return set()
+        return {}
     try:
         cur_rows = json.loads(cur_p.read_text())
         prev_rows = json.loads(prev_p.read_text())
@@ -262,17 +291,17 @@ def fedlex_changed_articles(
         logger.warning(
             "fedlex_diff_unreadable cur=%s prev=%s err=%s", cur_p, prev_p, exc
         )
-        return set()
-    cur_idx = _index_snapshot(cur_rows)
-    prev_idx = _index_snapshot(prev_rows)
-    changed: set[tuple[str, str]] = set()
+        return {}
+    cur_idx, cur_dates = _index_snapshot(cur_rows)
+    prev_idx, prev_dates = _index_snapshot(prev_rows)
+    changed: dict[tuple[str, str], str | None] = {}
     for k, h in cur_idx.items():
         if prev_idx.get(k) != h:
-            changed.add(k)
+            changed[k] = cur_dates.get(k)
     # Removed articles also count as "changed" so any user who cites a
     # now-repealed SR/Art gets an UPDATED alert flagging the disappearance.
     for k in prev_idx.keys() - cur_idx.keys():
-        changed.add(k)
+        changed[k] = prev_dates.get(k)
     return changed
 
 
@@ -302,7 +331,7 @@ async def sweep_one_user(
     catalog: list[Entitlement],
     *,
     scan_fn: ScanFn,
-    changed_articles: set[tuple[str, str]],
+    changed_articles: dict[tuple[str, str], str | None],
 ) -> tuple[BenefitReport, list[Alert]]:
     """Run + persist one user's scan, return (report, inserted_alerts).
 

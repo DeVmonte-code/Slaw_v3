@@ -68,6 +68,12 @@ class AlertPayload(BaseModel):
     # alerts. The frontend renders this as "your cited article was
     # amended" copy.
     changed_citations: list[str] = Field(default_factory=list)
+    # Most recent ``effective_date`` (YYYY-MM-DD) among the changed
+    # articles cited by this entitlement, taken from the Fedlex
+    # snapshot's per-article ``effective_date``. ``None`` when no
+    # cited article carries a date or when this isn't a Fedlex-driven
+    # alert. Surfaced to the user as "amended on <date>".
+    fedlex_amendment_date: str | None = None
 
 
 class Alert(BaseModel):

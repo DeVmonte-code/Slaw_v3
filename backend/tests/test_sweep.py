@@ -189,12 +189,13 @@ class TestClassifyDiff:
             user_id="u",
             previous=prev,
             current=same,
-            changed_articles={("220", "270")},
+            changed_articles={("220", "270"): "2026-01-15"},
         )
         assert len(alerts) == 1
         a = alerts[0]
         assert a.kind == "UPDATED"
         assert a.payload.changed_citations == ["SR220/Art270"]
+        assert a.payload.fedlex_amendment_date == "2026-01-15"
 
     def test_alert_id_is_deterministic(self):
         # Re-running the same diff must yield the same alert_id so
@@ -220,9 +221,12 @@ class TestFedlexDiff:
             {"sr_number": "220", "article": "270", "paragraph": "1", "text": "old"},
         ])
         _write_snapshot(curr, [
-            {"sr_number": "220", "article": "270", "paragraph": "1", "text": "new"},
+            {
+                "sr_number": "220", "article": "270", "paragraph": "1",
+                "text": "new", "effective_date": "2026-03-01",
+            },
         ])
-        assert fedlex_changed_articles(curr, prev) == {("220", "270")}
+        assert fedlex_changed_articles(curr, prev) == {("220", "270"): "2026-03-01"}
 
     def test_paragraph_renumbering_with_same_text_ignored(self, tmp_path: Path):
         # Fedlex sometimes reshuffles para_Y while text stays. The
@@ -239,21 +243,26 @@ class TestFedlexDiff:
             {"sr_number": "220", "article": "270", "paragraph": "alt-2", "text": "bravo"},
             {"sr_number": "220", "article": "270", "paragraph": "alt-1", "text": "alpha"},
         ])
-        assert fedlex_changed_articles(curr, prev) == set()
+        assert fedlex_changed_articles(curr, prev) == {}
 
     def test_repeal_counted_as_change(self, tmp_path: Path):
         prev = tmp_path / "p.json"
         curr = tmp_path / "c.json"
         _write_snapshot(prev, [
-            {"sr_number": "220", "article": "270", "paragraph": "1", "text": "x"},
+            {
+                "sr_number": "220", "article": "270", "paragraph": "1",
+                "text": "x", "effective_date": "2020-01-01",
+            },
         ])
         _write_snapshot(curr, [])
-        assert fedlex_changed_articles(curr, prev) == {("220", "270")}
+        # Repeal carries the previous snapshot's date so the UI can
+        # still render "amended on YYYY-MM-DD" for the GONE case.
+        assert fedlex_changed_articles(curr, prev) == {("220", "270"): "2020-01-01"}
 
     def test_missing_files_returns_empty(self, tmp_path: Path):
         # First-ever sweep has no baseline: don't false-positive every
         # article as "changed".
-        assert fedlex_changed_articles(tmp_path / "x.json", tmp_path / "y.json") == set()
+        assert fedlex_changed_articles(tmp_path / "x.json", tmp_path / "y.json") == {}
 
     def test_promote_copies_current_to_previous(self, tmp_path: Path):
         cur = tmp_path / "c.json"

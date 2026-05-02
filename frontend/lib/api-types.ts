@@ -170,7 +170,15 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Mark Alert Read */
+        /**
+         * Mark Alert Read
+         * @description Mark one alert as read. Idempotent: 204 whether the alert was
+         *     unread, already read, or doesn't exist for this user. We expose
+         *     ``alerts_exists`` checking via :func:`storage.alert_exists` so the
+         *     handler can still return 404 when the alert truly isn't visible
+         *     to this user — that's the case the frontend wants to surface, not
+         *     "already read".
+         */
         post: operations["mark_alert_read_users__user_id__alerts__alert_id__read_post"];
         delete?: never;
         options?: never;
@@ -241,6 +249,8 @@ export interface components {
             previous_estimated_value_chf_max?: number | null;
             /** Changed Citations */
             changed_citations?: string[];
+            /** Fedlex Amendment Date */
+            fedlex_amendment_date?: string | null;
         };
         /** Benefit */
         Benefit: {
