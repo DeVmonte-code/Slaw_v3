@@ -14,5 +14,15 @@ class Settings(BaseSettings):
     embedding_model: str = "intfloat/multilingual-e5-small"
     scan_concurrency: int = 3
 
+    log_level: str = "INFO"
+    cors_allow_origins: str = ""
+    frontend_origin: str = ""
+
+    def cors_origins_list(self) -> list[str]:
+        raw = self.cors_allow_origins or self.frontend_origin
+        if not raw.strip():
+            return []
+        return [o.strip() for o in raw.split(",") if o.strip()]
+
 
 settings = Settings()

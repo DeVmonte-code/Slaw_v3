@@ -4,7 +4,7 @@
     "article": "1",
     "paragraph": "1",
     "language": "en",
-    "text": "A contract is concluded when the parties have reciprocally expressed their consent. An express or tacit declaration of consent is required."
+    "text": "The conclusion of a contract requires a mutual expression of intent by the parties."
   },
   {
     "sr_number": "220",
@@ -18,132 +18,125 @@
     "article": "24",
     "paragraph": "1",
     "language": "en",
-    "text": "An error is a fundamental one in particular where a party was mistaken regarding the nature of the contract, the object of the contract, the quantity of the object, or the person of the other party where such person was a material consideration."
+    "text": "An error is fundamental in the following cases in particular: 1. where the party acting in error intended to conclude a contract different from that to which he consented; 2. where the party acting in error has concluded a contract relating to a subject matter other than the subject matter he intended or, where the contract relates to a specific person, to a person other than the one he intended; 3. where the party acting in error has promised to make a significantly greater performance or has accepted a promise of a significantly lesser consideration than he actually intended; 4. where the error relates to specific facts which the party acting in error considered in good faith to be a necessary basis for the contract."
   },
   {
     "sr_number": "220",
     "article": "28",
     "paragraph": "1",
     "language": "en",
-    "text": "Where a party has been induced to enter into a contract by the other party's deliberate deception, the contract is not binding on the deceived party even if the error was not a fundamental one."
+    "text": "A party induced to enter into a contract by the fraud of the other party is not bound by it even if his error is not fundamental."
   },
   {
     "sr_number": "220",
     "article": "41",
     "paragraph": "1",
     "language": "en",
-    "text": "Any person who unlawfully causes loss or damage to another, whether wilfully or negligently, is obliged to provide compensation."
+    "text": "Any person who unlawfully causes damage to another, whether wilfully or negligently, is obliged to provide compensation."
   },
   {
     "sr_number": "220",
     "article": "42",
     "paragraph": "1",
     "language": "en",
-    "text": "The party seeking damages must prove that damage occurred. Where the exact amount of the damage cannot be determined, the judge will assess it with due regard to the ordinary course of events and the measures taken by the injured party."
+    "text": "A person claiming damages must prove that damage occurred."
   },
   {
     "sr_number": "220",
     "article": "43",
     "paragraph": "1",
     "language": "en",
-    "text": "The court determines the form and amount of compensation with due regard to all the circumstances. Damages may be awarded in the form of an annuity."
+    "text": "The court determines the form and extent of the compensation provided for damage incurred, with due regard to the circumstances and the degree of culpability."
   },
   {
     "sr_number": "220",
     "article": "62",
     "paragraph": "1",
     "language": "en",
-    "text": "Any person who has been unjustifiably enriched at the expense of another is obliged to make restitution. This obligation arises in particular where a person has received without valid cause monies or other assets."
+    "text": "A person who has enriched himself without just cause at the expense of another is obliged to make restitution."
   },
   {
     "sr_number": "220",
     "article": "63",
     "paragraph": "1",
     "language": "en",
-    "text": "Sums paid in satisfaction of a non-existent debt may be reclaimed. However, the right to reclaim does not arise where the payment was made for moral reasons or in recognition of a moral obligation."
+    "text": "A person who has voluntarily satisfied a non-existent debt has a right to restitution of the sum paid only if he can prove that he paid it in the erroneous belief that the debt was owed."
+  },
+  {
+    "sr_number": "220",
+    "article": "197",
+    "paragraph": "1",
+    "language": "en",
+    "text": "The seller is liable to the buyer for any breach of warranty of quality and for any defects that would materially or legally negate or substantially reduce the value of the object or its fitness for the designated purpose."
   },
   {
     "sr_number": "220",
     "article": "257e",
     "paragraph": "1",
     "language": "en",
-    "text": "If the tenant provides security in money or negotiable securities, the landlord must deposit it in a bank savings account or custody account in the tenant's name. The landlord must pay to the tenant interest accruing on such security."
+    "text": "Where the tenant of residential or commercial premises furnishes security in the form of cash or negotiable securities, the landlord must deposit it in a bank savings or deposit account in the tenant’s name."
   },
   {
     "sr_number": "220",
     "article": "270a",
     "paragraph": "1",
     "language": "en",
-    "text": "The tenant may contest the level of the rent at any time when the reference interest rate used to calculate the rent changes, by serving notice on the landlord and requesting a rent reduction. If the landlord does not accept the request, the tenant may within 30 days refer the matter to the conciliation authority."
+    "text": "The tenant may challenge the rent as unfair and request its reduction as of the next termination date where he has good cause to suppose that, because of significant changes to the calculation basis and most notably a reduction in costs, the return derived by the landlord from the leased property is now excessive within the meaning of Articles 269 and 269a."
+  },
+  {
+    "sr_number": "220",
+    "article": "271",
+    "paragraph": "1",
+    "language": "en",
+    "text": "Notice of termination may be challenged where it contravenes the principle of good faith."
   },
   {
     "sr_number": "220",
     "article": "321c",
     "paragraph": "1",
     "language": "en",
-    "text": "If the employee, with the employer's knowledge, performs more work than agreed, this constitutes overtime. The employer must compensate overtime by granting time off of the same duration or, where the employee expressly consents or this is agreed by contract, by paying a supplement of at least 25 percent."
+    "text": "If more hours of work are required than envisaged under the employment contract or provided for by custom, standard employment contract or collective employment contract, the employee is obliged to perform such overtime to the extent that he is able and may conscionably be expected to do so."
+  },
+  {
+    "sr_number": "220",
+    "article": "327a",
+    "paragraph": "1",
+    "language": "en",
+    "text": "The employer must reimburse the employee for all expenses necessarily incurred in the performance of the work and, in the case of work done off the employer’s premises, for his necessary living expenses."
   },
   {
     "sr_number": "220",
     "article": "328",
     "paragraph": "1",
     "language": "en",
-    "text": "The employer must respect and protect the personality of the employee, give all due consideration to the employee's health and ensure that standards of morality are observed. In particular, the employer must ensure that employees are not sexually harassed and that victims of such harassment suffer no adverse consequences."
+    "text": "Within the employment relationship, the employer must acknowledge and safeguard the employee’s personality rights, have due regard for his health and ensure that proper moral standards are maintained. In particular, he must ensure that employees are not sexually harassed and that any victim of sexual harassment suffers no further adverse consequences."
+  },
+  {
+    "sr_number": "220",
+    "article": "329f",
+    "paragraph": "1",
+    "language": "en",
+    "text": "After having given birth, a female employee is entitled to maternity leave of at least 14 weeks."
+  },
+  {
+    "sr_number": "220",
+    "article": "331",
+    "paragraph": "1",
+    "language": "en",
+    "text": "Where the employer contributes to a employee benefits scheme or the employees make their own contributions, the employer must transfer these contributions to a foundation, a cooperative or a public law institution."
+  },
+  {
+    "sr_number": "220",
+    "article": "335",
+    "paragraph": "1",
+    "language": "en",
+    "text": "An employment relationship for an unlimited period may be terminated by either party."
   },
   {
     "sr_number": "220",
     "article": "335c",
     "paragraph": "1",
     "language": "en",
-    "text": "After the probationary period, the contract may be terminated by either party on one month's notice during the first year of service, on two months' notice from the second to the ninth year of service and on three months' notice thereafter."
-  },
-  {
-    "sr_number": "642.11",
-    "article": "9",
-    "paragraph": "1",
-    "language": "en",
-    "text": "The spouses living in legal union are assessed jointly regardless of their matrimonial property regime. They are subject to joint and several liability for the total tax. The tax due is allocated to the spouses in proportion to their respective contributions to the couple's combined income and assets."
-  },
-  {
-    "sr_number": "642.11",
-    "article": "26",
-    "paragraph": "1",
-    "language": "en",
-    "text": "Professional costs that may be deducted include: the costs necessary for travelling between the place of residence and place of work; the additional expenses incurred for meals away from home or where the taxpayer is unable to return home at midday; and other necessary professional expenses."
-  },
-  {
-    "sr_number": "642.11",
-    "article": "33",
-    "paragraph": "1",
-    "language": "en",
-    "text": "The following are deducted from income: payments of insurance premiums; interest on savings; alimony; and documented childcare costs actually incurred by the taxpayer for children under 14 years of age who live in the same household as the taxpayer, up to the maximum amount defined by federal law."
-  },
-  {
-    "sr_number": "642.11",
-    "article": "33a",
-    "paragraph": "1",
-    "language": "en",
-    "text": "The costs of further education and re-training for professional purposes, including the costs of a first higher education degree after completion of a second qualification, may be deducted up to the maximum amount set by the Federal Council."
-  },
-  {
-    "sr_number": "831.40",
-    "article": "82",
-    "paragraph": "1",
-    "language": "en",
-    "text": "Employees and self-employed persons may deduct contributions to recognised pension institutions from their income tax. The Federal Council, in consultation with the cantons, shall regulate the right to deduct contributions; in particular, it shall fix the maximum deductible amount."
-  },
-  {
-    "sr_number": "837.0",
-    "article": "8",
-    "paragraph": "1",
-    "language": "en",
-    "text": "An insured person is entitled to unemployment compensation if they are unemployed, have completed the required contribution period, have suffered an earnings loss, are resident in Switzerland, have fulfilled the compulsory schooling age requirement, are not yet entitled to an old-age pension, and are willing to work."
-  },
-  {
-    "sr_number": "837.0",
-    "article": "9",
-    "paragraph": "1",
-    "language": "en",
-    "text": "The contribution period is fulfilled by persons who have been employed for at least twelve months in total within the two years before claiming unemployment benefit, and who were subject to the obligation to pay contributions during that period."
+    "text": "The employment relationship may be terminated at one month’s notice during the first year of service, at two months’ notice in the second to ninth years of service and at three months’ notice thereafter, all such notice to expire at the end of a calendar month."
   }
 ]

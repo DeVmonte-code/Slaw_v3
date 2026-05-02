@@ -3,14 +3,18 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
+import logging
 import math
-from datetime import datetime
+import time
+from datetime import datetime, timezone
 from typing import Any
 
 from ..config import settings
 from ..schemas import Benefit, BenefitReport, ContextProfile, Entitlement, EvidenceItem
 from .trigger import evaluate_trigger
 from .verify import VerifyResult, verify_entitlement
+
+logger = logging.getLogger(__name__)
 
 
 async def _verify_one(
@@ -23,13 +27,20 @@ async def _verify_one(
         try:
             v = await verify_entitlement(e, profile, evidence)
             return e, evidence, v
-        except Exception:
+        except Exception as exc:
+            logger.exception(
+                "verify_entitlement failed for entitlement_id=%s exc_type=%s",
+                e.id,
+                type(exc).__name__,
+            )
             return e, evidence, None
 
 
 async def run_benefit_scan(
     profile: ContextProfile, catalog: list[Entitlement]
 ) -> BenefitReport:
+    started = time.perf_counter()
+
     triggered: list[tuple[Entitlement, list[dict[str, Any]]]] = []
     for e in catalog:
         r = evaluate_trigger(e.trigger, profile)
@@ -73,8 +84,18 @@ async def run_benefit_scan(
         json.dumps(profile.model_dump(mode="json"), sort_keys=True).encode()
     ).hexdigest()[:16]
 
+    duration_ms = int((time.perf_counter() - started) * 1000)
+    logger.info(
+        "scan_complete profile_hash=%s triggered=%d verified=%d suppressed=%d duration_ms=%d",
+        profile_hash,
+        len(triggered),
+        len(benefits),
+        suppressed,
+        duration_ms,
+    )
+
     return BenefitReport(
-        generated_at=datetime.utcnow().isoformat() + "Z",
+        generated_at=datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
         profile_hash=profile_hash,
         benefits=benefits,
         suppressed_count=suppressed,

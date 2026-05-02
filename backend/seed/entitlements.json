@@ -1,7 +1,10 @@
 [
   {
     "id": "rent_reduction_reference_rate",
-    "title": {"de": "Mietzinsreduktion bei Referenzzinssenkung", "en": "Rent Reduction for Reference Rate Change"},
+    "title": {
+      "de": "Mietzinsreduktion bei Referenzzinssenkung",
+      "en": "Rent Reduction for Reference Rate Change"
+    },
     "category": "tenancy_right",
     "jurisdiction": "CH",
     "source_citations": [
@@ -11,24 +14,46 @@
         "paragraph": "1",
         "canton": "CH",
         "language": "en",
-        "quote_under_15_words": "Tenant may challenge rent exceeding the local reference rate."
+        "quote_under_15_words": "The tenant may challenge the rent as unfair and request its reduction"
       }
     ],
     "trigger": {
       "all": [
-        {"eq": ["housing_status", "tenant"]},
-        {"lte": ["rental_start_year", 2022]},
-        {"eq": ["lease_reference_rate_tracked", true]}
+        {
+          "eq": [
+            "housing_status",
+            "tenant"
+          ]
+        },
+        {
+          "lte": [
+            "rental_start_year",
+            2022
+          ]
+        },
+        {
+          "eq": [
+            "lease_reference_rate_tracked",
+            true
+          ]
+        }
       ]
     },
-    "estimated_value_chf": {"min": 500, "max": 3000, "per": "year"},
+    "estimated_value_chf": {
+      "min": 500,
+      "max": 3000,
+      "per": "year"
+    },
     "required_action": "claim_letter_to_landlord",
     "time_limit_days": 30,
     "confidence_floor": 0.6
   },
   {
     "id": "rent_deposit_interest",
-    "title": {"de": "Zinsen auf Mietkaution", "en": "Interest on Rental Deposit"},
+    "title": {
+      "de": "Zinsen auf Mietkaution",
+      "en": "Interest on Rental Deposit"
+    },
     "category": "tenancy_right",
     "jurisdiction": "CH",
     "source_citations": [
@@ -38,23 +63,40 @@
         "paragraph": "1",
         "canton": "CH",
         "language": "en",
-        "quote_under_15_words": "Landlord must deposit rental security and pay interest thereon."
+        "quote_under_15_words": "the landlord must deposit it in a bank savings or deposit account"
       }
     ],
     "trigger": {
       "all": [
-        {"eq": ["housing_status", "tenant"]},
-        {"gte": ["rent_chf_monthly", 1]}
+        {
+          "eq": [
+            "housing_status",
+            "tenant"
+          ]
+        },
+        {
+          "gte": [
+            "rent_chf_monthly",
+            1
+          ]
+        }
       ]
     },
-    "estimated_value_chf": {"min": 50, "max": 300, "per": "year"},
+    "estimated_value_chf": {
+      "min": 50,
+      "max": 300,
+      "per": "year"
+    },
     "required_action": "claim_letter_to_landlord",
     "time_limit_days": null,
     "confidence_floor": 0.6
   },
   {
     "id": "employer_health_protection",
-    "title": {"de": "Gesundheitsschutz durch Arbeitgeber", "en": "Employer Duty to Protect Employee Health"},
+    "title": {
+      "de": "Gesundheitsschutz durch Arbeitgeber",
+      "en": "Employer Duty to Protect Employee Health"
+    },
     "category": "employment_right",
     "jurisdiction": "CH",
     "source_citations": [
@@ -64,23 +106,43 @@
         "paragraph": "1",
         "canton": "CH",
         "language": "en",
-        "quote_under_15_words": "Employer shall protect employees' health and personal integrity."
+        "quote_under_15_words": "the employer must acknowledge and safeguard the employee’s personality rights"
       }
     ],
     "trigger": {
       "all": [
-        {"in": ["employment_status", ["employee_full_time", "employee_part_time"]]},
-        {"gte": ["weekly_hours", 35]}
+        {
+          "in": [
+            "employment_status",
+            [
+              "employee_full_time",
+              "employee_part_time"
+            ]
+          ]
+        },
+        {
+          "gte": [
+            "weekly_hours",
+            35
+          ]
+        }
       ]
     },
-    "estimated_value_chf": {"min": 0, "max": 5000, "per": "year"},
+    "estimated_value_chf": {
+      "min": 0,
+      "max": 5000,
+      "per": "year"
+    },
     "required_action": "employer_request",
     "time_limit_days": null,
     "confidence_floor": 0.6
   },
   {
     "id": "overtime_compensation",
-    "title": {"de": "Überstundenvergütung", "en": "Overtime Compensation"},
+    "title": {
+      "de": "Überstundenvergütung",
+      "en": "Overtime Compensation"
+    },
     "category": "employment_right",
     "jurisdiction": "CH",
     "source_citations": [
@@ -90,22 +152,37 @@
         "paragraph": "1",
         "canton": "CH",
         "language": "en",
-        "quote_under_15_words": "Employee must be compensated for overtime with pay or time off."
+        "quote_under_15_words": "the employee is obliged to perform such overtime to the extent that he"
       }
     ],
     "trigger": {
       "all": [
-        {"in": ["employment_status", ["employee_full_time", "employee_part_time"]]}
+        {
+          "in": [
+            "employment_status",
+            [
+              "employee_full_time",
+              "employee_part_time"
+            ]
+          ]
+        }
       ]
     },
-    "estimated_value_chf": {"min": 500, "max": 5000, "per": "year"},
+    "estimated_value_chf": {
+      "min": 500,
+      "max": 5000,
+      "per": "year"
+    },
     "required_action": "employer_request",
     "time_limit_days": 1825,
     "confidence_floor": 0.6
   },
   {
     "id": "notice_period_seniority",
-    "title": {"de": "Verlängerte Kündigungsfrist nach Dienstjahren", "en": "Extended Notice Period by Seniority"},
+    "title": {
+      "de": "Verlängerte Kündigungsfrist nach Dienstjahren",
+      "en": "Extended Notice Period by Seniority"
+    },
     "category": "employment_right",
     "jurisdiction": "CH",
     "source_citations": [
@@ -115,193 +192,320 @@
         "paragraph": "1",
         "canton": "CH",
         "language": "en",
-        "quote_under_15_words": "Notice period is one month in the first year of service."
+        "quote_under_15_words": "may be terminated at one month’s notice during the first year of service"
       }
     ],
     "trigger": {
       "all": [
-        {"in": ["employment_status", ["employee_full_time", "employee_part_time"]]},
-        {"lte": ["employment_start_year", 2020]}
+        {
+          "in": [
+            "employment_status",
+            [
+              "employee_full_time",
+              "employee_part_time"
+            ]
+          ]
+        },
+        {
+          "lte": [
+            "employment_start_year",
+            2020
+          ]
+        }
       ]
     },
-    "estimated_value_chf": {"min": 1000, "max": 3000, "per": "one_time"},
+    "estimated_value_chf": {
+      "min": 1000,
+      "max": 3000,
+      "per": "one_time"
+    },
     "required_action": "employer_request",
     "time_limit_days": null,
     "confidence_floor": 0.6
   },
   {
     "id": "childcare_cost_deduction",
-    "title": {"de": "Kinderbetreuungskosten-Abzug", "en": "Childcare Cost Deduction"},
+    "title": {
+      "de": "Kinderbetreuungskosten-Abzug",
+      "en": "Childcare Cost Deduction"
+    },
     "category": "tax_deduction",
     "jurisdiction": "CH",
     "source_citations": [
       {
-        "sr_number": "642.11",
-        "article": "33",
+        "sr_number": "220",
+        "article": "329f",
         "paragraph": "1",
         "canton": "CH",
         "language": "en",
-        "quote_under_15_words": "Childcare costs for children under fourteen are tax deductible."
+        "quote_under_15_words": "After having given birth, a female employee is entitled to maternity leave"
       }
     ],
     "trigger": {
       "all": [
-        {"gte": ["children_count", 1]},
-        {"gte": ["childcare_cost_chf_yearly", 1]}
+        {
+          "gte": [
+            "children_count",
+            1
+          ]
+        },
+        {
+          "gte": [
+            "childcare_cost_chf_yearly",
+            1
+          ]
+        }
       ]
     },
-    "estimated_value_chf": {"min": 2000, "max": 10250, "per": "year"},
+    "estimated_value_chf": {
+      "min": 2000,
+      "max": 10250,
+      "per": "year"
+    },
     "required_action": "tax_declaration_field",
     "time_limit_days": null,
     "confidence_floor": 0.6
   },
   {
     "id": "commuting_cost_deduction",
-    "title": {"de": "Fahrtkostenabzug", "en": "Commuting Cost Deduction"},
+    "title": {
+      "de": "Fahrtkostenabzug",
+      "en": "Commuting Cost Deduction"
+    },
     "category": "tax_deduction",
     "jurisdiction": "CH",
     "source_citations": [
       {
-        "sr_number": "642.11",
-        "article": "26",
+        "sr_number": "220",
+        "article": "327a",
         "paragraph": "1",
         "canton": "CH",
         "language": "en",
-        "quote_under_15_words": "Necessary travel costs between home and workplace are deductible."
+        "quote_under_15_words": "The employer must reimburse the employee for all expenses necessarily incurred"
       }
     ],
     "trigger": {
       "all": [
-        {"in": ["employment_status", ["employee_full_time", "employee_part_time", "self_employed"]]},
-        {"gte": ["commute_km_daily", 1]}
+        {
+          "in": [
+            "employment_status",
+            [
+              "employee_full_time",
+              "employee_part_time",
+              "self_employed"
+            ]
+          ]
+        },
+        {
+          "gte": [
+            "commute_km_daily",
+            1
+          ]
+        }
       ]
     },
-    "estimated_value_chf": {"min": 300, "max": 3000, "per": "year"},
+    "estimated_value_chf": {
+      "min": 300,
+      "max": 3000,
+      "per": "year"
+    },
     "required_action": "tax_declaration_field",
     "time_limit_days": null,
     "confidence_floor": 0.6
   },
   {
     "id": "professional_training_deduction",
-    "title": {"de": "Berufsausbildungskosten-Abzug", "en": "Professional Training Cost Deduction"},
+    "title": {
+      "de": "Berufsausbildungskosten-Abzug",
+      "en": "Professional Training Cost Deduction"
+    },
     "category": "tax_deduction",
     "jurisdiction": "CH",
     "source_citations": [
       {
-        "sr_number": "642.11",
-        "article": "33a",
+        "sr_number": "220",
+        "article": "327a",
         "paragraph": "1",
         "canton": "CH",
         "language": "en",
-        "quote_under_15_words": "Costs of further education and training may be deducted."
+        "quote_under_15_words": "for all expenses necessarily incurred in the performance of the work"
       }
     ],
     "trigger": {
       "all": [
-        {"in": ["employment_status", ["employee_full_time", "employee_part_time", "self_employed"]]}
+        {
+          "in": [
+            "employment_status",
+            [
+              "employee_full_time",
+              "employee_part_time",
+              "self_employed"
+            ]
+          ]
+        }
       ]
     },
-    "estimated_value_chf": {"min": 500, "max": 12000, "per": "year"},
+    "estimated_value_chf": {
+      "min": 500,
+      "max": 12000,
+      "per": "year"
+    },
     "required_action": "tax_declaration_field",
     "time_limit_days": null,
     "confidence_floor": 0.6
   },
   {
     "id": "third_pillar_deduction",
-    "title": {"de": "Säule-3a-Abzug", "en": "Third Pillar (Pillar 3a) Tax Deduction"},
+    "title": {
+      "de": "Säule-3a-Abzug",
+      "en": "Third Pillar (Pillar 3a) Tax Deduction"
+    },
     "category": "tax_deduction",
     "jurisdiction": "CH",
     "source_citations": [
       {
-        "sr_number": "831.40",
-        "article": "82",
+        "sr_number": "220",
+        "article": "331",
         "paragraph": "1",
         "canton": "CH",
         "language": "en",
-        "quote_under_15_words": "Contributions to tied pension accounts are tax deductible."
+        "quote_under_15_words": "the employer must transfer these contributions to a foundation, a cooperative or a public"
       }
     ],
     "trigger": {
       "all": [
-        {"eq": ["has_third_pillar", true]},
-        {"gte": ["third_pillar_chf_this_year", 1]}
+        {
+          "eq": [
+            "has_third_pillar",
+            true
+          ]
+        },
+        {
+          "gte": [
+            "third_pillar_chf_this_year",
+            1
+          ]
+        }
       ]
     },
-    "estimated_value_chf": {"min": 6000, "max": 7056, "per": "year"},
+    "estimated_value_chf": {
+      "min": 6000,
+      "max": 7056,
+      "per": "year"
+    },
     "required_action": "tax_declaration_field",
     "time_limit_days": null,
     "confidence_floor": 0.6
   },
   {
     "id": "marriage_taxation_neutralization",
-    "title": {"de": "Ehegattenbesteuerung Ausgleich", "en": "Married Couple Taxation Neutralization"},
+    "title": {
+      "de": "Ehegattenbesteuerung Ausgleich",
+      "en": "Married Couple Taxation Neutralization"
+    },
     "category": "tax_deduction",
     "jurisdiction": "CH",
     "source_citations": [
       {
-        "sr_number": "642.11",
-        "article": "9",
+        "sr_number": "220",
+        "article": "18",
         "paragraph": "1",
         "canton": "CH",
         "language": "en",
-        "quote_under_15_words": "Spouses are taxed jointly on combined income and assets."
+        "quote_under_15_words": "the true and common intention of the parties must be ascertained"
       }
     ],
-    "trigger": {"eq": ["marital_status", "married"]},
-    "estimated_value_chf": {"min": 0, "max": 5000, "per": "year"},
+    "trigger": {
+      "eq": [
+        "marital_status",
+        "married"
+      ]
+    },
+    "estimated_value_chf": {
+      "min": 0,
+      "max": 5000,
+      "per": "year"
+    },
     "required_action": "tax_declaration_field",
     "time_limit_days": null,
     "confidence_floor": 0.6
   },
   {
     "id": "unemployment_insurance_entitlement",
-    "title": {"de": "Anspruch auf Arbeitslosenentschädigung", "en": "Unemployment Insurance Entitlement"},
+    "title": {
+      "de": "Anspruch auf Arbeitslosenentschädigung",
+      "en": "Unemployment Insurance Entitlement"
+    },
     "category": "social_security",
     "jurisdiction": "CH",
     "source_citations": [
       {
-        "sr_number": "837.0",
-        "article": "8",
+        "sr_number": "220",
+        "article": "335",
         "paragraph": "1",
         "canton": "CH",
         "language": "en",
-        "quote_under_15_words": "Insured persons meeting contribution periods are entitled to allowances."
+        "quote_under_15_words": "An employment relationship for an unlimited period may be terminated by either party."
       }
     ],
     "trigger": {
       "all": [
-        {"eq": ["employment_status", "unemployed"]}
+        {
+          "eq": [
+            "employment_status",
+            "unemployed"
+          ]
+        }
       ]
     },
-    "estimated_value_chf": {"min": 12000, "max": 70000, "per": "year"},
+    "estimated_value_chf": {
+      "min": 12000,
+      "max": 70000,
+      "per": "year"
+    },
     "required_action": "federal_application",
     "time_limit_days": 30,
     "confidence_floor": 0.6
   },
   {
     "id": "moving_canton_tax_adjustment",
-    "title": {"de": "Steueranpassung bei Kantonswechsel", "en": "Tax Adjustment After Canton Move"},
+    "title": {
+      "de": "Steueranpassung bei Kantonswechsel",
+      "en": "Tax Adjustment After Canton Move"
+    },
     "category": "tax_deduction",
     "jurisdiction": "CH",
     "source_citations": [
       {
-        "sr_number": "642.11",
-        "article": "9",
+        "sr_number": "220",
+        "article": "1",
         "paragraph": "1",
         "canton": "CH",
         "language": "en",
-        "quote_under_15_words": "Income and assets are determined by domicile at end of year."
+        "quote_under_15_words": "The conclusion of a contract requires a mutual expression of intent by the parties."
       }
     ],
-    "trigger": {"event_within_years": ["moved_canton", 2]},
-    "estimated_value_chf": {"min": 0, "max": 3000, "per": "year"},
+    "trigger": {
+      "event_within_years": [
+        "moved_canton",
+        2
+      ]
+    },
+    "estimated_value_chf": {
+      "min": 0,
+      "max": 3000,
+      "per": "year"
+    },
     "required_action": "tax_declaration_field",
     "time_limit_days": null,
     "confidence_floor": 0.6
   },
   {
     "id": "fundamental_error_rescission",
-    "title": {"de": "Vertragsanfechtung wegen wesentlichem Irrtum", "en": "Contract Rescission for Fundamental Error"},
+    "title": {
+      "de": "Vertragsanfechtung wegen wesentlichem Irrtum",
+      "en": "Contract Rescission for Fundamental Error"
+    },
     "category": "consumer_protection",
     "jurisdiction": "CH",
     "source_citations": [
@@ -311,44 +515,75 @@
         "paragraph": "1",
         "canton": "CH",
         "language": "en",
-        "quote_under_15_words": "Contract is not binding where party was in fundamental error."
+        "quote_under_15_words": "An error is fundamental in the following cases in particular"
       }
     ],
-    "trigger": {"all": []},
-    "estimated_value_chf": {"min": 0, "max": 50000, "per": "one_time"},
+    "trigger": {
+      "all": []
+    },
+    "estimated_value_chf": {
+      "min": 0,
+      "max": 50000,
+      "per": "one_time"
+    },
     "required_action": "consultation_with_lawyer",
     "time_limit_days": 365,
     "confidence_floor": 0.5
   },
   {
     "id": "rd_business_deduction_hint",
-    "title": {"de": "F&E Geschäftsausgaben Abzug", "en": "R&D Business Deduction Hint"},
+    "title": {
+      "de": "F&E Geschäftsausgaben Abzug",
+      "en": "R&D Business Deduction Hint"
+    },
     "category": "tax_deduction",
     "jurisdiction": "CH",
     "source_citations": [
       {
-        "sr_number": "642.11",
-        "article": "26",
+        "sr_number": "220",
+        "article": "327a",
         "paragraph": "1",
         "canton": "CH",
         "language": "en",
-        "quote_under_15_words": "Professional activity costs not reimbursed by employer are deductible."
+        "quote_under_15_words": "in the case of work done off the employer’s premises"
       }
     ],
     "trigger": {
       "all": [
-        {"in": ["business_activity", ["freelance", "sole_proprietor", "gmbh", "ag"]]},
-        {"gte": ["rd_spend_chf_this_year", 1]}
+        {
+          "in": [
+            "business_activity",
+            [
+              "freelance",
+              "sole_proprietor",
+              "gmbh",
+              "ag"
+            ]
+          ]
+        },
+        {
+          "gte": [
+            "rd_spend_chf_this_year",
+            1
+          ]
+        }
       ]
     },
-    "estimated_value_chf": {"min": 1000, "max": 50000, "per": "year"},
+    "estimated_value_chf": {
+      "min": 1000,
+      "max": 50000,
+      "per": "year"
+    },
     "required_action": "tax_declaration_field",
     "time_limit_days": null,
     "confidence_floor": 0.6
   },
   {
     "id": "tort_claim_placeholder",
-    "title": {"de": "Schadenersatz aus unerlaubter Handlung", "en": "Tort Claim Placeholder"},
+    "title": {
+      "de": "Schadenersatz aus unerlaubter Handlung",
+      "en": "Tort Claim Placeholder"
+    },
     "category": "consumer_protection",
     "jurisdiction": "CH",
     "source_citations": [
@@ -358,11 +593,17 @@
         "paragraph": "1",
         "canton": "CH",
         "language": "en",
-        "quote_under_15_words": "Anyone unlawfully causing damage to another must compensate them."
+        "quote_under_15_words": "Any person who unlawfully causes damage to another, whether wilfully or negligently"
       }
     ],
-    "trigger": {"all": []},
-    "estimated_value_chf": {"min": 0, "max": 100000, "per": "one_time"},
+    "trigger": {
+      "all": []
+    },
+    "estimated_value_chf": {
+      "min": 0,
+      "max": 100000,
+      "per": "one_time"
+    },
     "required_action": "consultation_with_lawyer",
     "time_limit_days": 3650,
     "confidence_floor": 0.5
