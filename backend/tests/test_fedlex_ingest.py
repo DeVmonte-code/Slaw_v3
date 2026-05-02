@@ -283,6 +283,66 @@ def test_ingest_snapshot_diff_repealed_propagates(fedlex_client, tmp_path):
 
 
 @respx.mock
+def test_ingest_snapshot_diff_article_added_propagates(fedlex_client, tmp_path):
+    """Snapshot B inserts a brand-new article (art_700) that wasn't in
+    snapshot A. The diff must surface it as added rows with stable IDs
+    for the unchanged articles, so a re-seed only upserts the new ones
+    (and reconciliation doesn't sweep the unchanged ones)."""
+    # Snapshot A: original XML.
+    respx.post(fedlex.SPARQL_ENDPOINT).mock(
+        return_value=httpx.Response(200, json=_load_json("sparql_sr220.json"))
+    )
+    _stub_filestore(
+        respx,
+        eli_path="27/317_321_377",
+        snapshot_date="20240101",
+        language="de",
+        body=_load_text("sr220_de_min.xml"),
+    )
+    records_a = fedlex.ingest(
+        ["220"],
+        languages=("de",),
+        snapshot_date="20240101",
+        client=fedlex_client,
+    )
+
+    # Snapshot B: same SPARQL metadata, but the AN-XML now contains an
+    # extra art_700 with two paragraphs.
+    respx.post(fedlex.SPARQL_ENDPOINT).mock(
+        return_value=httpx.Response(200, json=_load_json("sparql_sr220.json"))
+    )
+    _stub_filestore(
+        respx,
+        eli_path="27/317_321_377",
+        snapshot_date="20240101",
+        language="de",
+        body=_load_text("sr220_de_added_article.xml"),
+    )
+    records_b = fedlex.ingest(
+        ["220"],
+        languages=("de",),
+        snapshot_date="20240101",
+        client=fedlex_client,
+    )
+
+    keys_a = {(r.article, r.paragraph) for r in records_a}
+    keys_b = {(r.article, r.paragraph) for r in records_b}
+    # Snapshot A is a strict subset of snapshot B.
+    assert keys_a < keys_b
+    added = keys_b - keys_a
+    assert added == {("700", "1"), ("700", "2")}
+    # Crucially, no rows were dropped — additive only.
+    assert keys_a - keys_b == set()
+    # And the existing rows still carry the same effective dates so the
+    # UUID5 stable-ID contract holds across the diff.
+    by_key_a = {(r.article, r.paragraph): r for r in records_a}
+    by_key_b = {(r.article, r.paragraph): r for r in records_b}
+    for k in keys_a:
+        assert by_key_a[k].text == by_key_b[k].text
+        assert by_key_a[k].eli_uri == by_key_b[k].eli_uri
+
+
+@respx.mock
 def test_write_snapshot_is_deterministic(fedlex_client, tmp_path):
     """Re-running write_snapshot() produces byte-identical output."""
     respx.post(fedlex.SPARQL_ENDPOINT).mock(
