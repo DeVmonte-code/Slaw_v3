@@ -116,7 +116,7 @@ packages = ["src/swiss_legal_api"]
 ANTHROPIC_API_KEY=sk-ant-...
 QDRANT_URL=https://xxxx.cloud.qdrant.io
 QDRANT_API_KEY=...
-CLAUDE_MODEL=claude-opus-4-7
+CLAUDE_MODEL=claude-sonnet-4-6
 QDRANT_COLLECTION=swiss_law
 EMBEDDING_MODEL=intfloat/multilingual-e5-small
 SCAN_CONCURRENCY=3
@@ -662,7 +662,7 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     anthropic_api_key: str = ""
-    claude_model: str = "claude-opus-4-7"
+    claude_model: str = "claude-sonnet-4-6"
     qdrant_url: str = ""
     qdrant_api_key: str = ""
     qdrant_collection: str = "swiss_law"

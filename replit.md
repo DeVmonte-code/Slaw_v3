@@ -32,7 +32,7 @@ A Proactive Rights Discovery service for Swiss residents.
 
 ## Optional Config
 
-- `CLAUDE_MODEL` (default: `claude-opus-4-7`)
+- `CLAUDE_MODEL` (default: `claude-sonnet-4-6`)
 - `QDRANT_COLLECTION` (default: `swiss_law`)
 - `EMBEDDING_MODEL` (default: `intfloat/multilingual-e5-small`)
 - `SCAN_CONCURRENCY` (default: `3`)

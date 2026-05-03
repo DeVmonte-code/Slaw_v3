@@ -32,7 +32,7 @@ Embed and upsert all law articles into Qdrant Cloud so the retrieval service can
 | Variable | Default | Source |
 |---|---|---|
 | `anthropic_api_key` | `""` | `.env` |
-| `claude_model` | `claude-opus-4-7` | `.env` |
+| `claude_model` | `claude-sonnet-4-6` | `.env` |
 | `qdrant_url` | `""` | `.env` |
 | `qdrant_api_key` | `""` | `.env` |
 | `qdrant_collection` | `swiss_law` | `.env` |

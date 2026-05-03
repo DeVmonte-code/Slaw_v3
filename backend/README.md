@@ -168,7 +168,7 @@ All settings are read from the environment (see `.env.example`).
 | Variable               | Default                                | Notes                                                                                          |
 | ---------------------- | -------------------------------------- | ---------------------------------------------------------------------------------------------- |
 | `ANTHROPIC_API_KEY`    | (empty)                                | Required for live `/scan` and `/chat`.                                                         |
-| `CLAUDE_MODEL`         | `claude-opus-4-7`                      | Override per environment if needed.                                                            |
+| `CLAUDE_MODEL`         | `claude-sonnet-4-6`                    | Override per environment if needed.                                                            |
 | `QDRANT_URL`           | (empty)                                | Required for readiness and live verified scans. Lifespan pings it but only logs a warning if unreachable; `/readyz` returns 503 in that case. |
 | `QDRANT_API_KEY`       | (empty)                                | Required for Qdrant Cloud.                                                                     |
 | `QDRANT_COLLECTION`    | `swiss_law`                            |                                                                                                |

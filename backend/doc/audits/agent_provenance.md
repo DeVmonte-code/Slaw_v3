@@ -48,7 +48,7 @@ call site speaks the same language:
 
 ```
 claude_call site=engine.verify:tax_deduction_xyz call_kind=messages.create
-  agent_backed=false model=claude-opus-4-7 latency_ms=812
+  agent_backed=false model=claude-sonnet-4-6 latency_ms=812
   input_tokens=1124 output_tokens=87
   agent_id= agent_version= session_id= environment_id=
   tools_offered= tool_use_count=0 mcp_tool_use_count=0
