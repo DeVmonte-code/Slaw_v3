@@ -253,6 +253,39 @@ async def test_requires_action_loop_sends_tool_confirmation() -> None:
     )
 
 
+async def test_fatal_session_error_after_partial_text_raises() -> None:
+    """A non-retryable ``session.error`` MUST fail the session even if
+    the agent already streamed partial text. Returning that text as a
+    success would mask MCP auth/config failures and let invalid or
+    incomplete answers reach the audit.
+    """
+    transport = _make_transport(
+        [
+            {
+                "type": "agent.message",
+                "content": [{"type": "text", "text": "partial answer..."}],
+            },
+            {
+                "type": "session.error",
+                "error": {
+                    "code": "mcp_auth_failed",
+                    "retry_status": "fatal",
+                    "mcp_server_name": "swiss-contract-tools-mcp",
+                    "tool_name": "verify_entitlement",
+                },
+            },
+        ]
+    )
+    with pytest.raises(agent_runner.ManagedAgentsError) as excinfo:
+        await agent_runner.run_session(
+            "do work", site="engine.verify:fatal_after_text", transport=transport
+        )
+    msg = str(excinfo.value)
+    assert "session_error" in msg
+    assert "swiss-contract-tools-mcp" in msg
+    assert "verify_entitlement" in msg
+
+
 async def test_retryable_session_error_raises_retryable_exception() -> None:
     """``session.error`` with ``retry_status='retryable'`` must surface
     as :class:`RetryableManagedAgentsError` so the tenacity filter at

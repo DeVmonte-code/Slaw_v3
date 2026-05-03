@@ -414,9 +414,30 @@ async def run_session(
         raise ManagedAgentsError(
             f"session_terminated session_id={session_id} error={acc.last_error}"
         )
-    if acc.last_error is not None and not acc.text_parts:
+    # Any non-retryable ``session.error`` MUST fail the session, even if
+    # the agent had already streamed partial text. Returning that text
+    # as a successful result would mask MCP auth/config failures and
+    # let invalid/incomplete answers reach the audit. Structured fields
+    # (session_id, retry_status, optional MCP server/tool) are folded
+    # into the message so operators can grep the failure.
+    if acc.last_error is not None:
+        err = acc.last_error
+        retry_status = err.get("retry_status")
+        mcp_server = err.get("mcp_server_name") or err.get("server_name")
+        mcp_tool = err.get("tool_name")
+        logger.warning(
+            "managed_session_error session_id=%s retry_status=%s "
+            "mcp_server=%s mcp_tool=%s error=%s",
+            session_id,
+            retry_status,
+            mcp_server,
+            mcp_tool,
+            err,
+        )
         raise ManagedAgentsError(
-            f"session_error session_id={session_id} error={acc.last_error}"
+            f"session_error session_id={session_id} "
+            f"retry_status={retry_status} mcp_server={mcp_server} "
+            f"mcp_tool={mcp_tool} error={err}"
         )
 
     tool_count = acc.tool_use_count + acc.mcp_tool_use_count
