@@ -297,32 +297,27 @@ export function SteppedWizard() {
     setErrors({});
     setSubmitError(null);
     setIsSubmitting(true);
+    // Hand the scan off to the /results page so the user immediately
+    // sees a "Scan in progress" view (hero, phase ticker, indeterminate
+    // bar, elapsed counter, skeleton cards) instead of waiting on a
+    // disabled button for 20–60 s. The /results page reads the cleaned
+    // profile from sessionStorage and drives the actual /scan POST.
     const cleaned = sanitizeForSubmit(profile);
-    const { data, error } = await api.POST("/scan", { body: cleaned });
-    if (error || !data) {
+    try {
+      sessionStorage.removeItem("benefit_report");
+      sessionStorage.setItem("scan_profile", JSON.stringify(cleaned));
+      sessionStorage.setItem("scan_notify_enabled", notifyEnabled ? "1" : "0");
+      sessionStorage.setItem("benefit_report_pending", "1");
+    } catch {
+      // sessionStorage unavailable (private mode, quota, etc.) — fall
+      // back to surfacing an error here rather than navigating to a
+      // page that can't load the profile.
       setIsSubmitting(false);
-      setSubmitError(String(error ?? "Unknown error — is the backend running?"));
+      setSubmitError(
+        "Your browser blocked session storage, which we need to run the scan. Try a normal (non-private) window."
+      );
       return;
     }
-    // Persist the profile for the nightly sweep. We always upsert (not
-    // only when opting in) so flipping the toggle off here propagates
-    // ``notify_enabled=false`` to the backend and stops the sweep for
-    // returning users. Failure to register is non-fatal: /scan already
-    // succeeded above.
-    const userId = getOrCreateUserId();
-    if (userId) {
-      try {
-        await api.POST("/users/{user_id}/profile", {
-          params: { path: { user_id: userId } },
-          body: { profile: cleaned, notify_enabled: notifyEnabled },
-        });
-      } catch (e) {
-        // eslint-disable-next-line no-console
-        console.warn("sweep_profile_upsert_failed", e);
-      }
-    }
-    setIsSubmitting(false);
-    sessionStorage.setItem("benefit_report", JSON.stringify(data));
     router.push("/results");
   };
 
