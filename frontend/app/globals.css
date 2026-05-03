@@ -67,9 +67,10 @@ body {
     break-inside: avoid;
     page-break-inside: avoid;
   }
-  details { open: true; }
+  /* Force any <details> open in print without relying on
+     non-standard CSS — children become visible regardless of the
+     open attribute, and the disclosure caret is suppressed. */
   details > summary { list-style: none; cursor: default; }
-  details[open] > summary::after { content: ""; }
-  /* Force any <details> open in print. */
+  details > summary::-webkit-details-marker { display: none; }
   details > *:not(summary) { display: block !important; }
 }

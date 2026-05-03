@@ -136,12 +136,19 @@ export function BenefitCard({ benefit: b }: { benefit: Benefit }) {
 
           {!b.agent_provenance?.agent_backed && !agentBadgeDismissed && (
             <span
+              tabIndex={0}
+              role="status"
+              aria-label={
+                b.agent_provenance
+                  ? `Unverified by agent. Verified via ${b.agent_provenance.call_kind}; no managed-agent tool use observed.`
+                  : "Unverified by agent. No provenance recorded for this analysis."
+              }
               title={
                 b.agent_provenance
                   ? `Verified via ${b.agent_provenance.call_kind}; no managed-agent tool use observed.`
                   : "No provenance recorded for this analysis."
               }
-              className="inline-flex items-center gap-1 rounded-full border border-amber-300 bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-800 slaw-no-print"
+              className="inline-flex items-center gap-1 rounded-full border border-amber-300 bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-800 outline-none focus-visible:ring-2 focus-visible:ring-amber-400 slaw-no-print"
             >
               <svg className="h-3 w-3" viewBox="0 0 12 12" fill="none" aria-hidden>
                 <path d="M6 1.5v3.75M6 8.25v.75" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" />
