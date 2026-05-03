@@ -32,10 +32,19 @@ import asyncio
 import json
 import logging
 import time
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Awaitable, Callable
 from dataclasses import dataclass, field
+from typing import Any
 
 import httpx
+
+# Async callback the caller can supply to observe every parsed SSE event
+# the managed-agents stream produces. Used by the scan driver (Task #37)
+# to forward ``agent.mcp_tool_use`` / ``agent.message`` events through
+# the /scan/stream SSE channel as live ``tool_call`` events. A failing
+# callback is logged and swallowed — the session loop never aborts on
+# downstream consumer hiccups.
+EventCallback = Callable[[dict[str, Any]], Awaitable[None]]
 
 from ..config import settings
 from ..schemas import AgentProvenance
@@ -313,9 +322,19 @@ async def _consume(
     client: httpx.AsyncClient,
     session_id: str,
     ready: asyncio.Event,
+    event_cb: EventCallback | None = None,
 ) -> _RunAccumulator:
     acc = _RunAccumulator()
     async for event in _stream_events(client, session_id, ready):
+        if event_cb is not None:
+            try:
+                await event_cb(event)
+            except Exception as exc:
+                logger.debug(
+                    "agent_event_cb_failed session_id=%s err=%s",
+                    session_id,
+                    type(exc).__name__,
+                )
         done = _ingest_event(event, acc)
         # Drain any ``always_ask`` confirmations the agent is waiting
         # on BEFORE deciding to terminate, so the loop can continue
@@ -335,6 +354,7 @@ async def run_session(
     site: str,
     metadata: dict[str, str] | None = None,
     transport: httpx.AsyncBaseTransport | None = None,
+    event_cb: EventCallback | None = None,
 ) -> tuple[str, AgentProvenance]:
     """Run one managed-agents session and return ``(text, AgentProvenance)``.
 
@@ -370,7 +390,7 @@ async def run_session(
         # barrier instead of a scheduling hint.
         ready = asyncio.Event()
         consumer_task = asyncio.create_task(
-            _consume(client, session_id, ready)
+            _consume(client, session_id, ready, event_cb)
         )
         try:
             try:

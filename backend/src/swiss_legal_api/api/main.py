@@ -4,9 +4,12 @@ import asyncio
 import json as _json
 import logging
 import sys
+import time
 from collections.abc import AsyncIterator
 from contextlib import AsyncExitStack, asynccontextmanager
+from urllib.parse import urlparse
 
+import httpx
 from fastapi import FastAPI, Header, HTTPException, Query
 from fastapi import Path as PathParam
 from fastapi.middleware.cors import CORSMiddleware
@@ -105,8 +108,183 @@ _MCP_MOUNTS: tuple[tuple[str, object], ...] = (
 )
 
 
+def _safe_url_host(url: str) -> str:
+    """Strip everything except scheme + host[:port] from an MCP URL.
+
+    MCP endpoint URLs may carry credentials (``user:pass@``), signed
+    query parameters, or internal-only paths that have no business
+    appearing in startup logs or the public ``/readyz`` body. We only
+    need enough to tell two MCPs apart in an outage report — the
+    scheme and host fulfil that without leaking topology or secrets.
+    Returns ``"<unset>"`` for an empty URL and ``"<malformed>"`` if the
+    parse blows up so the caller can still render *something* useful.
+    """
+    if not url:
+        return "<unset>"
+    try:
+        parts = urlparse(url)
+    except (ValueError, TypeError):
+        return "<malformed>"
+    host = parts.hostname or ""
+    if not host:
+        return "<malformed>"
+    scheme = parts.scheme or "https"
+    if parts.port:
+        return f"{scheme}://{host}:{parts.port}"
+    return f"{scheme}://{host}"
+
+
+def _redact_id(value: str) -> str:
+    """Render a managed-agents identifier for logs without leaking it.
+
+    Vault/agent/environment IDs are not secrets the way an API key is,
+    but they're still per-tenant identifiers that have no business in a
+    plaintext log line. Show the first 4 + last 2 characters so an
+    operator can correlate against the bootstrap output without
+    exposing the full value.
+    """
+    if not value:
+        return "<unset>"
+    if len(value) <= 8:
+        return f"{value[:2]}…{value[-2:]}"
+    return f"{value[:4]}…{value[-2:]}"
+
+
+def _validate_managed_agents_config() -> None:
+    """Hard startup gate (Task #37) — fail loudly when managed agents
+    are enabled but the bootstrap-time IDs / MCP URLs are missing.
+
+    Called from the FastAPI lifespan BEFORE the app starts serving so
+    a misconfigured deploy crashes on boot rather than silently
+    serving zero-result scans. Set ``USE_MANAGED_AGENTS=0`` to opt out
+    for local dev / CI / unit tests where there is no real agent.
+    """
+    if not settings.use_managed_agents:
+        return
+    required = {
+        "MANAGED_AGENT_ID": settings.managed_agent_id,
+        "MANAGED_AGENT_VERSION": (
+            str(settings.managed_agent_version)
+            if settings.managed_agent_version > 0
+            else ""
+        ),
+        "MANAGED_ENVIRONMENT_ID": settings.managed_environment_id,
+        "MANAGED_VAULT_ID": settings.managed_vault_id,
+        "MCP_SWISS_LAW_URL": settings.mcp_swiss_law_url,
+        "MCP_CONTRACT_TOOLS_URL": settings.mcp_contract_tools_url,
+        "MCP_USER_CONTEXT_URL": settings.mcp_user_context_url,
+    }
+    missing = [name for name, value in required.items() if not value]
+    if missing:
+        raise RuntimeError(
+            "USE_MANAGED_AGENTS=true but required configuration is missing: "
+            f"{', '.join(missing)}. Run "
+            "`python -m swiss_legal_api.managed_agents.bootstrap` to "
+            "provision the agent and populate the IDs, set MCP_BASE_URL "
+            "(or each MCP_*_URL) to the deployment host, OR set "
+            "USE_MANAGED_AGENTS=0 to opt out (local dev / CI only — "
+            "production must run the agent driver)."
+        )
+    logger.info(
+        "managed_agents_enabled agent=%s version=%d environment=%s "
+        "vault=%s mcp_swiss_law=%s mcp_contract_tools=%s "
+        "mcp_user_context=%s",
+        _redact_id(settings.managed_agent_id),
+        settings.managed_agent_version,
+        _redact_id(settings.managed_environment_id),
+        _redact_id(settings.managed_vault_id),
+        _safe_url_host(settings.mcp_swiss_law_url),
+        _safe_url_host(settings.mcp_contract_tools_url),
+        _safe_url_host(settings.mcp_user_context_url),
+    )
+
+
+_MCP_HEALTH_TIMEOUT_S = 4.0
+
+
+async def _probe_one_mcp(client: httpx.AsyncClient, url: str) -> dict[str, object]:
+    """Single MCP-server reachability probe.
+
+    Streamable-HTTP MCP endpoints reject a bare GET with 405/406 (the
+    JSON-RPC handshake requires POST). We treat any answer below 500
+    as "the server is alive on the network" — a 4xx confirms the
+    process is up and routing requests; a connection / timeout error
+    or a 5xx is an outage. ``elapsed_ms`` is the wall-clock from
+    request to first byte so operators can spot slow but live MCPs.
+
+    The returned dict carries only the redacted ``host`` (scheme +
+    hostname[:port]) — never the raw URL — because ``/readyz`` is
+    publicly reachable and the URL may contain credentialed userinfo,
+    signed query params, or internal-topology paths.
+    """
+    started = time.perf_counter()
+    host = _safe_url_host(url)
+    try:
+        resp = await client.get(url, timeout=_MCP_HEALTH_TIMEOUT_S)
+    except httpx.TimeoutException:
+        return {
+            "host": host,
+            "status": "timeout",
+            "elapsed_ms": int((time.perf_counter() - started) * 1000),
+        }
+    except httpx.HTTPError as exc:
+        return {
+            "host": host,
+            "status": "unreachable",
+            "error": type(exc).__name__,
+            "elapsed_ms": int((time.perf_counter() - started) * 1000),
+        }
+    elapsed_ms = int((time.perf_counter() - started) * 1000)
+    code = resp.status_code
+    if code >= 500:
+        return {
+            "host": host,
+            "status": "server_error",
+            "http_status": code,
+            "elapsed_ms": elapsed_ms,
+        }
+    return {
+        "host": host,
+        "status": "reachable",
+        "http_status": code,
+        "elapsed_ms": elapsed_ms,
+    }
+
+
+async def _probe_mcp_servers() -> dict[str, dict[str, object]]:
+    """Concurrently probe all three MCP servers, return per-server status.
+
+    Output values are safe to expose on /readyz: only the redacted
+    host, status enum, optional HTTP code, and elapsed_ms — never the
+    raw URL.
+    """
+    targets: list[tuple[str, str]] = [
+        ("swiss_law", settings.mcp_swiss_law_url),
+        ("contract_tools", settings.mcp_contract_tools_url),
+        ("user_context", settings.mcp_user_context_url),
+    ]
+    out: dict[str, dict[str, object]] = {}
+    async with httpx.AsyncClient(timeout=_MCP_HEALTH_TIMEOUT_S) as client:
+        coros = [
+            _probe_one_mcp(client, url) if url else _no_url()
+            for _name, url in targets
+        ]
+        results = await asyncio.gather(*coros, return_exceptions=False)
+    for (name, _url), result in zip(targets, results, strict=True):
+        out[name] = result
+    return out
+
+
+async def _no_url() -> dict[str, object]:
+    return {"host": "<unset>", "status": "unconfigured"}
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    # Strict managed-agents config gate (Task #37). Runs FIRST so a
+    # misconfigured deploy crashes before we waste time spinning up MCP
+    # session managers and the embedder.
+    _validate_managed_agents_config()
     async with AsyncExitStack() as mcp_stack:
         for prefix, fmcp in _MCP_MOUNTS:
             try:
@@ -336,6 +514,34 @@ async def readyz(
             )
         body["collection"] = "reachable"
         body["points"] = n
+
+    # Managed-agents MCP probe (Task #37). When the agent driver is the
+    # primary scan path, an unreachable MCP server is just as fatal as
+    # an unreachable Qdrant — surface it on /readyz so deploys catch it
+    # before users do. Probed when ?include=mcp is set OR whenever the
+    # driver is enabled (so the default health check is self-contained
+    # in production).
+    if include == "mcp" or settings.use_managed_agents:
+        mcp_results = await _probe_mcp_servers()
+        body["mcp"] = mcp_results
+        broken = {
+            name: r
+            for name, r in mcp_results.items()
+            if r.get("status") not in ("reachable", "unconfigured")
+        }
+        if broken:
+            logger.warning(
+                "readyz: MCP probe found unreachable servers: %s",
+                sorted(broken.keys()),
+            )
+            raise HTTPException(
+                status_code=503,
+                detail={
+                    "ok": False,
+                    "qdrant": "reachable",
+                    "mcp": mcp_results,
+                },
+            )
 
     if include == "curriculum":
         if settings.curriculum_collection not in collection_names:

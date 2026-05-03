@@ -25,6 +25,8 @@ const EXPECTED_SECS = 35;
  *  running counts the backend has reported so far. Falls back to
  *  ``"timer"`` (the original behaviour) on any SSE failure or in
  *  environments that buffer text/event-stream. */
+type ToolCall = { tool: string; server: string | null; label: string; at: number };
+
 type Progress = {
   mode: "timer" | "stream";
   phaseMessage?: string;
@@ -32,7 +34,16 @@ type Progress = {
   verifiedSoFar?: number;
   suppressedSoFar?: number;
   currentTitle?: string;
+  /** Rolling buffer of the most recent agent tool_call events forwarded
+   *  through /scan/stream (Task #37). When non-empty the in-progress
+   *  card swaps the static phase ticker for a live feed of what the
+   *  managed agent is actually doing right now. Newest first; capped
+   *  to MAX_TOOL_FEED so the UI never grows unbounded on a chatty
+   *  session. */
+  toolCalls?: ToolCall[];
 };
+
+const MAX_TOOL_FEED = 5;
 
 function fmtElapsed(s: number) {
   const m = Math.floor(s / 60);
@@ -109,14 +120,22 @@ function ScanInProgress({
     Math.round(8 + 87 * (1 - Math.pow(1 - timerRatio, 2))),
   );
 
+  const toolCalls = progress.toolCalls ?? [];
+  const hasToolFeed = isStream && toolCalls.length > 0;
+
   let phaseLabel: string;
   let pct: number;
   let stepLabel: string | null;
   if (isStream) {
     const total = progress.triggered ?? 0;
     const done = (progress.verifiedSoFar ?? 0) + (progress.suppressedSoFar ?? 0);
-    phaseLabel =
-      progress.currentTitle && total > 0
+    // Live agent activity wins over the per-entitlement title when we
+    // have it: the most recent tool_call event is the truthful "what
+    // is happening right now" signal. Falls back to the verifying
+    // title, then the phase message, then a generic placeholder.
+    phaseLabel = hasToolFeed
+      ? `${toolCalls[0].label}…`
+      : progress.currentTitle && total > 0
         ? `Verifying: ${progress.currentTitle}`
         : progress.phaseMessage ?? "Starting your scan";
     if (total > 0) {
@@ -185,6 +204,39 @@ function ScanInProgress({
           it&rsquo;s ready. We&rsquo;re reading federal and cantonal sources
           and grounding every result in a citation.
         </p>
+
+        {hasToolFeed && (
+          <ol
+            className="mt-4 space-y-1.5 text-xs text-[var(--slaw-ink-soft)]"
+            aria-live="polite"
+            aria-label="Live agent activity"
+          >
+            {toolCalls.slice(0, MAX_TOOL_FEED).map((tc, idx) => (
+              <li
+                key={`${tc.at}-${tc.tool}-${idx}`}
+                className="flex items-start gap-2"
+              >
+                <span
+                  className={
+                    "mt-1 inline-block h-1.5 w-1.5 shrink-0 rounded-full " +
+                    (idx === 0
+                      ? "animate-pulse bg-[var(--slaw-primary)]"
+                      : "bg-[var(--slaw-line-strong)]")
+                  }
+                  aria-hidden
+                />
+                <span className={idx === 0 ? "text-[var(--slaw-ink)]" : ""}>
+                  {tc.label}
+                  {tc.server ? (
+                    <span className="ml-1 text-[var(--slaw-ink-muted)]">
+                      · {tc.server}
+                    </span>
+                  ) : null}
+                </span>
+              </li>
+            ))}
+          </ol>
+        )}
       </div>
 
       <div className="mt-5 space-y-5" aria-hidden>
@@ -477,6 +529,29 @@ export default function ResultsPage() {
               verifiedSoFar,
               suppressedSoFar,
               currentTitle: undefined,
+            }));
+          } else if (ev.type === "tool_call") {
+            const tool = typeof payload.tool === "string" ? payload.tool : "";
+            const server =
+              typeof payload.server === "string" && payload.server
+                ? payload.server
+                : null;
+            const label =
+              typeof payload.label === "string" && payload.label
+                ? payload.label
+                : tool
+                  ? `Calling ${tool}`
+                  : "Working with the agent";
+            const entry: ToolCall = {
+              tool,
+              server,
+              label,
+              at: Date.now(),
+            };
+            setProgress((p) => ({
+              ...p,
+              mode: "stream",
+              toolCalls: [entry, ...(p.toolCalls ?? [])].slice(0, MAX_TOOL_FEED),
             }));
           } else if (ev.type === "complete") {
             finalReport = payload.report as BenefitReport;

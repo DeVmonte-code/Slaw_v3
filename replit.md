@@ -100,12 +100,16 @@ Key modules:
 - `frontend/lib/api-client.ts` — `getOrCreateUserId()` localStorage helper
 - See `backend/README.md` "Scheduled sweep" section for full configuration / endpoint reference.
 
-## Managed Agents pipeline (Task #26)
+## Managed Agents pipeline (Task #26 / #37)
 
-Every `_call_claude` site (`engine/verify.py`, `api/chat.py`) can route
-through a Claude Managed Agents session instead of `messages.create`.
-Gated by `USE_MANAGED_AGENTS` (default false) so dev/test environments
-without provisioned agent IDs still work.
+Every `_call_claude` site (`engine/verify.py`, `api/chat.py`) and the
+batched scan driver (`engine/scan.py::_verify_via_managed_session`)
+route through a Claude Managed Agents session instead of
+`messages.create`. **Default is now ON** (`USE_MANAGED_AGENTS=1`) — set
+`USE_MANAGED_AGENTS=0` only for local dev / CI / unit tests where no
+real agent is provisioned. The offline test suite pins this in
+`backend/tests/conftest.py` so existing tests keep using the local
+verifier path.
 
 - `backend/src/swiss_legal_api/mcp_servers/{swiss_law,contract_tools,user_context}.py`
   — three MCP servers (read-only retrieval; verify/scan; user docs).
@@ -131,12 +135,36 @@ without provisioned agent IDs still work.
 - Tests: `backend/tests/test_agent_runner.py` (mocked SSE),
   `backend/tests/test_mcp_single_source_of_truth.py`.
 
-Required settings to flip the flag: `MANAGED_AGENT_ID`,
+Required settings (validated at startup — Task #37): `MANAGED_AGENT_ID`,
 `MANAGED_ENVIRONMENT_ID`, `MANAGED_VAULT_ID`, `MANAGED_AGENT_VERSION`,
 plus either `MCP_BASE_URL` (recommended — derives the three per-server
 URLs from the deployment host) or each of `MCP_SWISS_LAW_URL`,
-`MCP_CONTRACT_TOOLS_URL`, `MCP_USER_CONTEXT_URL`. Missing IDs raise
-`ManagedAgentsConfigError` at request time (no silent degrade).
+`MCP_CONTRACT_TOOLS_URL`, `MCP_USER_CONTEXT_URL`. The FastAPI
+`lifespan` runs `_validate_managed_agents_config()` and raises
+`RuntimeError` with the missing variable list before serving any
+requests, so a misconfigured deploy crashes on boot instead of silently
+serving zero-result scans. `GET /readyz` additionally probes each MCP
+URL (concurrent HTTPS GET, ≤4 s timeout) and returns 503 with the
+per-server status (`reachable` / `unreachable` / `timeout` / `server_error`)
+when any server is down. Hit `/readyz?include=mcp` to force the probe
+even when `USE_MANAGED_AGENTS=0`.
+
+## How a scan runs (Task #37)
+
+1. Frontend `POST /scan/stream` with the user's profile.
+2. Backend evaluates deterministic triggers from `seed/entitlements.json`
+   and emits a `triggered` SSE event with the count.
+3. `_verify_via_managed_session` opens **one** managed-agents session
+   for the whole batch and streams its events. Every
+   `agent.mcp_tool_use` is forwarded through the SSE channel as a
+   `tool_call` event (`{tool, server, label}`); the frontend renders
+   the latest 5 in a live feed inside `ScanInProgress`.
+4. The agent's batched JSON reply is parsed back into one
+   `VerifyResult` per entitlement; unresolved citations and zero-MCP
+   sessions are suppressed with `requires_evidence_review`.
+5. The final `BenefitReport` ships in a `complete` SSE event and is
+   cached in `sessionStorage`. The plain `POST /scan` path remains as
+   the fallback when SSE is unavailable.
 
 ## Key Files
 

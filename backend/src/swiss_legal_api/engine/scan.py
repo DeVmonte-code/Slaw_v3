@@ -374,10 +374,72 @@ async def _resolve_agent_citation(
     return cit, chunks
 
 
+_TOOL_LABELS: dict[str, str] = {
+    "qdrant_search": "Searching Swiss federal law",
+    "fetch_article_by_sr": "Fetching cited article",
+    "verify_entitlement": "Cross-checking entitlement against the corpus",
+    "benefit_scan": "Running batched benefit scan",
+    "get_user_profile": "Reading your profile",
+}
+
+
+def _humanize_tool_call(tool: str, server: str | None) -> str:
+    """Map an MCP tool name (and optional server hint) to a UI label.
+
+    Falls back to a generic ``"Calling <tool>"`` so a brand-new tool
+    still renders something useful in the live feed without forcing a
+    code change here. Server hint is appended to disambiguate cases
+    where two MCPs expose the same tool name (e.g. retrieval helpers).
+    """
+    label = _TOOL_LABELS.get(tool)
+    if label:
+        return label
+    if tool:
+        return f"Calling {tool}"
+    return "Working with the agent"
+
+
+def _make_agent_event_cb(
+    progress_cb: ProgressCallback | None,
+) -> "Any":
+    """Build the per-event forwarder the managed-agents runner invokes.
+
+    Translates ``agent.mcp_tool_use`` / ``agent.tool_use`` SSE events
+    into ``tool_call`` progress events so /scan/stream can show the
+    real, agent-driven activity instead of the timer-driven phase
+    ticker. ``agent.message`` events are intentionally NOT forwarded
+    — the verbatim agent output is JSON the parser owns; surfacing it
+    raw to the UI would be noisy and could leak intermediate planning
+    tokens.
+    """
+    if progress_cb is None:
+        return None
+
+    async def _forward(event: dict[str, Any]) -> None:
+        et = event.get("type")
+        if et not in ("agent.mcp_tool_use", "agent.tool_use"):
+            return
+        tool = str(event.get("name") or event.get("tool_name") or "")
+        srv_raw = event.get("server_name") or event.get("mcp_server_name")
+        server = srv_raw if isinstance(srv_raw, str) and srv_raw else None
+        await _emit(
+            progress_cb,
+            {
+                "type": "tool_call",
+                "tool": tool,
+                "server": server,
+                "label": _humanize_tool_call(tool, server),
+            },
+        )
+
+    return _forward
+
+
 async def _verify_via_managed_session(
     profile: ContextProfile,
     triggered: list[tuple[Entitlement, list[dict[str, Any]]]],
     user_id: str,
+    progress_cb: ProgressCallback | None = None,
 ) -> dict[str, VerifyResult]:
     """Drive verification of every triggered entitlement in ONE session.
 
@@ -401,6 +463,7 @@ async def _verify_via_managed_session(
         brief,
         site="engine.scan.batch",
         metadata={"user_id": user_id},
+        event_cb=_make_agent_event_cb(progress_cb),
     )
     logger.info(
         "managed_scan_session entitlements=%d session=%s "
@@ -604,7 +667,7 @@ async def run_benefit_scan(
         # ManagedAgentsError fatal failures bubble up so /scan returns
         # 5xx — same posture as the per-entitlement fan-out's re-raise.
         verdicts_by_id = await _verify_via_managed_session(
-            profile, triggered, user_id
+            profile, triggered, user_id, progress_cb=progress_cb
         )
         for idx, (e, ev) in enumerate(triggered):
             v = verdicts_by_id.get(e.id)

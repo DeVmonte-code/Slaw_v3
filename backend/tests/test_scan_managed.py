@@ -110,6 +110,7 @@ def _install_fake_run_session(
         site: str = "engine.scan.batch",
         metadata: dict[str, str] | None = None,
         transport: Any = None,
+        event_cb: Any = None,
     ) -> tuple[str, AgentProvenance]:
         if call_counter is not None:
             call_counter.append(1)

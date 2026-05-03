@@ -73,11 +73,13 @@ class Settings(BaseSettings):
     # ``call_kind='sessions.events'`` and the tool/MCP traces populated so
     # the Task #25 audit flips to ``agent_backed=True``.
     #
-    # Defaulted off so a misconfigured deploy (missing agent_id, vault,
-    # MCP servers) cannot silently degrade to zero-result scans. Flip this
-    # flag only after ``managed_agents.bootstrap`` has populated the IDs
-    # below and the three MCP servers are reachable over HTTPS.
-    use_managed_agents: bool = False
+    # Defaulted ON (Task #37) so production deploys cannot silently fall
+    # back to ``messages.create``. Misconfigured deploys (missing IDs,
+    # missing MCP URLs) crash on startup via the strict validation in
+    # ``api.main.lifespan`` rather than degrading to zero-result scans.
+    # Local dev / CI / unit tests set ``USE_MANAGED_AGENTS=0`` to opt
+    # out (the test conftest does this for the whole offline suite).
+    use_managed_agents: bool = True
     # Persisted IDs from the one-shot bootstrap. The bootstrap script
     # writes them back to the .env on success; the runner refuses to
     # start a session when ``use_managed_agents=True`` and any of these

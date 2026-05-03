@@ -16,3 +16,11 @@ from __future__ import annotations
 import os
 
 os.environ.setdefault("ANTHROPIC_API_KEY", "test-key-offline-mocked")
+
+# Task #37 flipped ``use_managed_agents`` to True by default so production
+# deploys can never silently fall back to ``messages.create``. The offline
+# test suite has no real Anthropic key and no provisioned managed agent,
+# so it pins the legacy path here. Individual tests that exercise the
+# managed driver still monkeypatch ``settings.use_managed_agents=True``
+# (see test_scan_managed.py / test_agent_runner.py).
+os.environ.setdefault("USE_MANAGED_AGENTS", "0")
