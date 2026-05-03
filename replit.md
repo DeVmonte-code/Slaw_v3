@@ -64,6 +64,8 @@ chunk's `effective_date` and `score` on `best_citation`.
 
 ## Seed Data
 
+
+**Note:** The authoritative source for Federal law is now `backend/seed/law_articles.fedlex.json`. The manual `law_articles.json` is strictly for fallback. Orphaned SR 831.40 articles were pruned.
 Before scanning works end-to-end, Qdrant must be seeded:
 ```
 cd backend && PYTHONPATH=src python3 -m swiss_legal_api.seeding.seed_qdrant
