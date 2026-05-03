@@ -51,3 +51,8 @@ run = ["bash", "start.sh"]
 [postMerge]
 path = "scripts/post-merge.sh"
 timeoutMs = 180000
+
+[userenv]
+
+[userenv.development]
+USE_MANAGED_AGENTS = "0"
