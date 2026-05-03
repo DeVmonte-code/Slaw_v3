@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import asyncio
+import json as _json
 import logging
 import sys
 from collections.abc import AsyncIterator
@@ -8,6 +10,7 @@ from contextlib import AsyncExitStack, asynccontextmanager
 from fastapi import FastAPI, Header, HTTPException, Query
 from fastapi import Path as PathParam
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from .. import scheduler as sweep_scheduler
@@ -370,6 +373,95 @@ async def scan(
     except Exception as exc:
         logger.exception("scan failed: %s", type(exc).__name__)
         raise HTTPException(status_code=500, detail="Internal error") from exc
+
+
+# ---------------------------------------------------------------------------
+# /scan/stream — Server-Sent Events progress channel (Task #34)
+# ---------------------------------------------------------------------------
+# A second surface over the same ``run_benefit_scan`` engine that pushes
+# real progress events as the scan proceeds, so the /results UI can show
+# the *actual* phase (trigger → verify → report), the real number of
+# entitlements being verified, and per-benefit completions instead of a
+# client-side timer-driven phase ticker.
+#
+# Wire format: standard SSE (``text/event-stream``). Each event has an
+# ``event:`` line carrying the event type and a ``data:`` line carrying
+# a single-line JSON payload. Event types emitted:
+#
+#   - ``phase``     — {"name": "trigger"|"verify"|"report", "message": str}
+#   - ``triggered`` — {"count": int, "pending_corpus_backfill": int}
+#   - ``verifying`` — per-entitlement start
+#   - ``verified``  — per-entitlement finish (carries running counts)
+#   - ``complete``  — {"report": BenefitReport}  (terminal, success)
+#   - ``error``     — {"message": str}            (terminal, failure)
+#
+# The plain ``POST /scan`` endpoint is unchanged and remains the
+# fallback the frontend uses when SSE isn't available (proxies that
+# buffer text/event-stream, hostile networks, etc.).
+
+@app.post("/scan/stream")
+async def scan_stream(
+    profile: ContextProfile,
+    x_user_id: str | None = Header(default=None, alias="X-User-Id"),
+) -> StreamingResponse:
+    queue: asyncio.Queue[dict[str, object] | None] = asyncio.Queue()
+
+    async def _on_progress(event: dict[str, object]) -> None:
+        await queue.put(event)
+
+    async def _runner() -> None:
+        try:
+            report = await run_benefit_scan(
+                profile,
+                load_catalog(),
+                user_id=x_user_id or "anonymous",
+                progress_cb=_on_progress,
+            )
+            await queue.put(
+                {"type": "complete", "report": report.model_dump(mode="json")}
+            )
+        except Exception as exc:  # pragma: no cover - defensive
+            logger.exception("scan_stream failed: %s", type(exc).__name__)
+            await queue.put({"type": "error", "message": "Internal error"})
+        finally:
+            await queue.put(None)  # sentinel: close the stream
+
+    async def _event_source() -> AsyncIterator[bytes]:
+        task = asyncio.create_task(_runner())
+        try:
+            while True:
+                ev = await queue.get()
+                if ev is None:
+                    break
+                ev_type = str(ev.get("type", "message"))
+                # SSE framing: an event is an optional ``event:`` line plus
+                # one ``data:`` line followed by a blank line. We use a
+                # single-line JSON payload so clients can ``JSON.parse``
+                # without buffering across data lines.
+                payload = _json.dumps(ev, separators=(",", ":"), default=str)
+                yield (
+                    f"event: {ev_type}\n"
+                    f"data: {payload}\n\n"
+                ).encode("utf-8")
+        finally:
+            if not task.done():
+                task.cancel()
+                try:
+                    await task
+                except (asyncio.CancelledError, Exception):
+                    pass
+
+    return StreamingResponse(
+        _event_source(),
+        media_type="text/event-stream",
+        headers={
+            # Prevent intermediary buffering — without these the events
+            # arrive in one big chunk at the end, defeating the point.
+            "Cache-Control": "no-cache, no-transform",
+            "X-Accel-Buffering": "no",
+            "Connection": "keep-alive",
+        },
+    )
 
 
 @app.post("/chat", response_model=ChatResponse)

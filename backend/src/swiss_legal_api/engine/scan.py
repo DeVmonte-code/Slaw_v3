@@ -6,10 +6,18 @@ import json
 import logging
 import math
 import time
+from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
+
+# Type alias: an async progress callback invoked by ``run_benefit_scan`` at
+# meaningful state transitions (phase boundaries, per-entitlement verify
+# start/finish, completion). The /scan/stream SSE endpoint hands in a
+# callback that pushes events onto an asyncio.Queue; plain /scan callers
+# pass ``None`` and the function behaves exactly as before.
+ProgressCallback = Callable[[dict[str, Any]], Awaitable[None]]
 
 from ..config import settings
 from ..schemas import Benefit, BenefitReport, ContextProfile, Entitlement, EvidenceItem
@@ -17,6 +25,19 @@ from .trigger import evaluate_trigger
 from .verify import VerifyResult, verify_entitlement
 
 logger = logging.getLogger(__name__)
+
+
+async def _emit(cb: ProgressCallback | None, event: dict[str, Any]) -> None:
+    """Best-effort progress emit. A failing callback (slow consumer,
+    closed queue, disconnected SSE client) MUST NOT abort the scan —
+    we log and swallow so the report still completes for the caller
+    that is still listening, or for the sweep job that doesn't care."""
+    if cb is None:
+        return
+    try:
+        await cb(event)
+    except Exception as exc:
+        logger.debug("scan_progress_emit_failed err=%s", type(exc).__name__)
 
 
 # Mirrored from swiss_legal_api.seeding.seed_qdrant._PLACEHOLDER_SENTINEL.
@@ -87,8 +108,25 @@ async def _verify_one(
     sem: asyncio.Semaphore,
     user_id: str = "anonymous",
     force_local: bool = False,
+    progress_cb: ProgressCallback | None = None,
+    index: int = 0,
+    total: int = 0,
 ) -> tuple[Entitlement, list[dict[str, Any]], VerifyResult | None]:
     async with sem:
+        title_for_event = str(
+            getattr(e.title, profile.language, None) or e.title.en
+        )
+        await _emit(
+            progress_cb,
+            {
+                "type": "verifying",
+                "entitlement_id": e.id,
+                "title": title_for_event,
+                "category": e.category,
+                "index": index,
+                "total": total,
+            },
+        )
         try:
             if force_local:
                 # Used by the MCP ``benefit_scan`` tool wrapper to avoid
@@ -130,8 +168,18 @@ async def run_benefit_scan(
     catalog: list[Entitlement],
     user_id: str = "anonymous",
     force_local: bool = False,
+    progress_cb: ProgressCallback | None = None,
 ) -> BenefitReport:
     started = time.perf_counter()
+
+    await _emit(
+        progress_cb,
+        {
+            "type": "phase",
+            "name": "trigger",
+            "message": "Reading your profile",
+        },
+    )
 
     pending_articles = _pending_corpus_articles()
     triggered: list[tuple[Entitlement, list[dict[str, Any]]]] = []
@@ -157,12 +205,102 @@ async def run_benefit_scan(
             continue
         triggered.append((e, r.evidence))
 
+    total = len(triggered)
+    await _emit(
+        progress_cb,
+        {
+            "type": "triggered",
+            "count": total,
+            "pending_corpus_backfill": pending_corpus_backfill,
+        },
+    )
+    await _emit(
+        progress_cb,
+        {
+            "type": "phase",
+            "name": "verify",
+            "message": (
+                f"Verifying {total} potential benefit(s) against Swiss law"
+                if total
+                else "No matching entitlements triggered"
+            ),
+        },
+    )
+
     sem = asyncio.Semaphore(settings.scan_concurrency)
-    results = await asyncio.gather(
-        *[
-            _verify_one(e, profile, ev, sem, user_id, force_local)
-            for e, ev in triggered
-        ]
+
+    # Wrap each verification so we can emit a "verified" event the
+    # moment the future resolves — gather() preserves input order, but
+    # for honest streaming we want the real completion order, so we
+    # use as_completed and rebuild the list afterwards.
+    verified_count = 0
+    suppressed_running = 0
+
+    async def _wrapped(
+        idx: int, e: Entitlement, ev: list[dict[str, Any]]
+    ) -> tuple[int, tuple[Entitlement, list[dict[str, Any]], VerifyResult | None]]:
+        out = await _verify_one(
+            e,
+            profile,
+            ev,
+            sem,
+            user_id,
+            force_local,
+            progress_cb=progress_cb,
+            index=idx,
+            total=total,
+        )
+        return idx, out
+
+    results: list[tuple[Entitlement, list[dict[str, Any]], VerifyResult | None]] = (
+        [None] * total  # type: ignore[list-item]
+    )
+    coros = [
+        _wrapped(i, e, ev) for i, (e, ev) in enumerate(triggered)
+    ]
+    for coro in asyncio.as_completed(coros):
+        idx, out = await coro
+        results[idx] = out
+        e, _ev, v = out
+        title = str(getattr(e.title, profile.language, None) or e.title.en)
+        if v is None or not v.supports or v.confidence < e.confidence_floor:
+            suppressed_running += 1
+            await _emit(
+                progress_cb,
+                {
+                    "type": "verified",
+                    "entitlement_id": e.id,
+                    "title": title,
+                    "supported": False,
+                    "confidence": float(v.confidence) if v else 0.0,
+                    "verified_count": verified_count,
+                    "suppressed_count": suppressed_running,
+                    "total": total,
+                },
+            )
+        else:
+            verified_count += 1
+            await _emit(
+                progress_cb,
+                {
+                    "type": "verified",
+                    "entitlement_id": e.id,
+                    "title": title,
+                    "supported": True,
+                    "confidence": float(v.confidence),
+                    "verified_count": verified_count,
+                    "suppressed_count": suppressed_running,
+                    "total": total,
+                },
+            )
+
+    await _emit(
+        progress_cb,
+        {
+            "type": "phase",
+            "name": "report",
+            "message": "Drafting your report",
+        },
     )
 
     benefits: list[Benefit] = []

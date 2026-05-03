@@ -19,10 +19,54 @@ const PHASES = [
  *  Caps at 95% so we never falsely "complete" before the response. */
 const EXPECTED_SECS = 35;
 
+/** Real progress snapshot derived from the /scan/stream SSE channel.
+ *  When ``mode === "stream"`` the in-progress UI ignores the timer
+ *  ticker and renders the actual phase / triggered count / verified
+ *  running counts the backend has reported so far. Falls back to
+ *  ``"timer"`` (the original behaviour) on any SSE failure or in
+ *  environments that buffer text/event-stream. */
+type Progress = {
+  mode: "timer" | "stream";
+  phaseMessage?: string;
+  triggered?: number;
+  verifiedSoFar?: number;
+  suppressedSoFar?: number;
+  currentTitle?: string;
+};
+
 function fmtElapsed(s: number) {
   const m = Math.floor(s / 60);
   const r = s % 60;
   return `${m}:${r.toString().padStart(2, "0")}`;
+}
+
+/** Parse a chunked text/event-stream body into discrete events. The
+ *  backend emits one ``event:`` + one ``data:`` line per event, but a
+ *  proxy could split a frame across reads, so we buffer until we see
+ *  the SSE record terminator ``\n\n``. */
+async function* readSse(
+  body: ReadableStream<Uint8Array>,
+): AsyncGenerator<{ type: string; data: string }> {
+  const reader = body.getReader();
+  const decoder = new TextDecoder();
+  let buf = "";
+  for (;;) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buf += decoder.decode(value, { stream: true });
+    let idx: number;
+    while ((idx = buf.indexOf("\n\n")) !== -1) {
+      const frame = buf.slice(0, idx);
+      buf = buf.slice(idx + 2);
+      let type = "message";
+      const dataLines: string[] = [];
+      for (const raw of frame.split("\n")) {
+        if (raw.startsWith("event:")) type = raw.slice(6).trim();
+        else if (raw.startsWith("data:")) dataLines.push(raw.slice(5).trim());
+      }
+      if (dataLines.length) yield { type, data: dataLines.join("\n") };
+    }
+  }
 }
 
 function SkeletonCard() {
@@ -44,12 +88,52 @@ function SkeletonCard() {
   );
 }
 
-function ScanInProgress({ elapsed }: { elapsed: number }) {
-  const phaseIdx = Math.min(PHASES.length - 1, Math.floor(elapsed / 5));
-  // Logarithmic-ish curve that grows fast early, slows, and caps at 95%
-  // of EXPECTED_SECS. Even past expected, we pin to 95.
-  const ratio = Math.min(1, elapsed / EXPECTED_SECS);
-  const pct = Math.min(95, Math.round(8 + 87 * (1 - Math.pow(1 - ratio, 2))));
+function ScanInProgress({
+  elapsed,
+  progress,
+}: {
+  elapsed: number;
+  progress: Progress;
+}) {
+  // Two presentation modes share this card:
+  //   - "stream": real backend events drive the message + progress bar
+  //     (verified / triggered ratio once verification starts).
+  //   - "timer": legacy fallback that rotates the canned PHASES list and
+  //     uses an ease-out curve over EXPECTED_SECS — kept honest by the
+  //     95 % cap so we never claim "complete" before /scan returns.
+  const isStream = progress.mode === "stream";
+  const timerPhaseIdx = Math.min(PHASES.length - 1, Math.floor(elapsed / 5));
+  const timerRatio = Math.min(1, elapsed / EXPECTED_SECS);
+  const timerPct = Math.min(
+    95,
+    Math.round(8 + 87 * (1 - Math.pow(1 - timerRatio, 2))),
+  );
+
+  let phaseLabel: string;
+  let pct: number;
+  let stepLabel: string | null;
+  if (isStream) {
+    const total = progress.triggered ?? 0;
+    const done = (progress.verifiedSoFar ?? 0) + (progress.suppressedSoFar ?? 0);
+    phaseLabel =
+      progress.currentTitle && total > 0
+        ? `Verifying: ${progress.currentTitle}`
+        : progress.phaseMessage ?? "Starting your scan";
+    if (total > 0) {
+      // Reserve 10 % for the trigger phase, 80 % for verification, the
+      // remaining 10 % is held back until the "report" phase fires so
+      // the bar visibly clicks forward at the end.
+      pct = Math.min(95, 10 + Math.round((done / total) * 80));
+      stepLabel = `${done} of ${total} verified`;
+    } else {
+      pct = Math.min(15, 4 + elapsed);
+      stepLabel = null;
+    }
+  } else {
+    phaseLabel = `${PHASES[timerPhaseIdx]}…`;
+    pct = timerPct;
+    stepLabel = `Step ${timerPhaseIdx + 1} of ${PHASES.length}`;
+  }
 
   return (
     <div className="mb-8">
@@ -70,12 +154,11 @@ function ScanInProgress({ elapsed }: { elapsed: number }) {
         </div>
 
         <p
-          key={phaseIdx}
+          key={phaseLabel}
           className="mt-3 text-sm text-[var(--slaw-ink-soft)] transition-opacity duration-500"
           aria-live="polite"
         >
-          {PHASES[phaseIdx]}
-          {phaseIdx < PHASES.length - 1 ? "…" : "…"}
+          {phaseLabel}
         </p>
 
         <div
@@ -94,9 +177,7 @@ function ScanInProgress({ elapsed }: { elapsed: number }) {
 
         <div className="mt-2 flex items-center justify-between text-xs text-[var(--slaw-ink-muted)]">
           <span>{fmtElapsed(elapsed)} elapsed · usually 20–60 s</span>
-          <span>
-            Step {phaseIdx + 1} of {PHASES.length}
-          </span>
+          <span>{stepLabel ?? ""}</span>
         </div>
 
         <p className="mt-4 rounded-md bg-[var(--slaw-bg-elev)] px-3 py-2 text-xs text-[var(--slaw-ink-muted)]">
@@ -205,6 +286,7 @@ export default function ResultsPage() {
   const [error, setError] = useState<string>("");
   const [elapsed, setElapsed] = useState(0);
   const [scanNonce, setScanNonce] = useState(0);
+  const [progress, setProgress] = useState<Progress>({ mode: "timer" });
   // Guard so React 18 strict-mode double-mount doesn't fire two /scan
   // requests in dev.
   const inFlight = useRef(false);
@@ -251,42 +333,14 @@ export default function ResultsPage() {
     }
     inFlight.current = true;
     setElapsed(0);
+    setProgress({ mode: "timer" });
     const started = Date.now();
     const tick = window.setInterval(() => {
       setElapsed(Math.floor((Date.now() - started) / 1000));
     }, 1000);
+    const abort = new AbortController();
 
-    (async () => {
-      const { data, error: apiErr } = await api.POST("/scan", { body: cleaned });
-      window.clearInterval(tick);
-      inFlight.current = false;
-      if (apiErr || !data) {
-        // Clear the pending marker so a hard refresh on /results doesn't
-        // silently auto-retry. Retrying must be an explicit user action
-        // (the "Try again" button restores the marker via scanNonce).
-        try {
-          sessionStorage.removeItem("benefit_report_pending");
-        } catch {
-          /* non-fatal */
-        }
-        let msg: string;
-        if (apiErr == null) {
-          msg = "Unknown error — is the backend running?";
-        } else if (typeof apiErr === "string") {
-          msg = apiErr;
-        } else if (typeof apiErr === "object") {
-          const e = apiErr as { detail?: unknown; message?: unknown };
-          msg =
-            (typeof e.detail === "string" && e.detail) ||
-            (typeof e.message === "string" && e.message) ||
-            JSON.stringify(apiErr);
-        } else {
-          msg = String(apiErr);
-        }
-        setError(msg);
-        setStatus("error");
-        return;
-      }
+    const finishOk = (data: BenefitReport) => {
       try {
         sessionStorage.setItem("benefit_report", JSON.stringify(data));
         sessionStorage.removeItem("benefit_report_pending");
@@ -311,10 +365,170 @@ export default function ResultsPage() {
             console.warn("sweep_profile_upsert_failed", e);
           });
       }
+    };
+
+    const finishErr = (msg: string) => {
+      // Clear the pending marker so a hard refresh on /results doesn't
+      // silently auto-retry. Retrying must be an explicit user action
+      // (the "Try again" button restores the marker via scanNonce).
+      try {
+        sessionStorage.removeItem("benefit_report_pending");
+      } catch {
+        /* non-fatal */
+      }
+      setError(msg);
+      setStatus("error");
+    };
+
+    const fallbackToPlainPost = async () => {
+      // SSE was unavailable (404, buffering proxy, network error). Fall
+      // back to the legacy single-shot /scan POST and the timer ticker.
+      setProgress({ mode: "timer" });
+      const { data, error: apiErr } = await api.POST("/scan", {
+        body: cleaned,
+      });
+      if (apiErr || !data) {
+        let msg: string;
+        if (apiErr == null) {
+          msg = "Unknown error — is the backend running?";
+        } else if (typeof apiErr === "string") {
+          msg = apiErr;
+        } else if (typeof apiErr === "object") {
+          const e = apiErr as { detail?: unknown; message?: unknown };
+          msg =
+            (typeof e.detail === "string" && e.detail) ||
+            (typeof e.message === "string" && e.message) ||
+            JSON.stringify(apiErr);
+        } else {
+          msg = String(apiErr);
+        }
+        finishErr(msg);
+        return;
+      }
+      finishOk(data);
+    };
+
+    const baseUrl =
+      process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+
+    (async () => {
+      // Prefer the streaming endpoint so we can show real progress.
+      // Any failure (network, non-200, parse error, terminal "error"
+      // event) falls back to the plain POST so users in restrictive
+      // environments still get a working scan.
+      let streamWorked = false;
+      try {
+        const res = await fetch(`${baseUrl}/scan/stream`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(cleaned),
+          signal: abort.signal,
+        });
+        if (!res.ok || !res.body) {
+          throw new Error(`stream_unavailable_${res.status}`);
+        }
+        const ct = res.headers.get("content-type") ?? "";
+        if (!ct.includes("text/event-stream")) {
+          throw new Error("stream_unavailable_content_type");
+        }
+        setProgress({ mode: "stream", phaseMessage: "Starting your scan" });
+        let terminal: "complete" | "error" | null = null;
+        let finalReport: BenefitReport | null = null;
+        let terminalErr = "";
+        for await (const ev of readSse(res.body)) {
+          streamWorked = true;
+          let payload: Record<string, unknown> = {};
+          try {
+            payload = JSON.parse(ev.data) as Record<string, unknown>;
+          } catch {
+            continue;
+          }
+          if (ev.type === "phase") {
+            const message = String(payload.message ?? "");
+            setProgress((p) => ({
+              ...p,
+              mode: "stream",
+              phaseMessage: message,
+              currentTitle: undefined,
+            }));
+          } else if (ev.type === "triggered") {
+            const count = Number(payload.count ?? 0);
+            setProgress((p) => ({
+              ...p,
+              mode: "stream",
+              triggered: count,
+              verifiedSoFar: 0,
+              suppressedSoFar: 0,
+            }));
+          } else if (ev.type === "verifying") {
+            const title =
+              typeof payload.title === "string" ? payload.title : undefined;
+            setProgress((p) => ({
+              ...p,
+              mode: "stream",
+              currentTitle: title,
+            }));
+          } else if (ev.type === "verified") {
+            const verifiedSoFar = Number(payload.verified_count ?? 0);
+            const suppressedSoFar = Number(payload.suppressed_count ?? 0);
+            setProgress((p) => ({
+              ...p,
+              mode: "stream",
+              verifiedSoFar,
+              suppressedSoFar,
+              currentTitle: undefined,
+            }));
+          } else if (ev.type === "complete") {
+            finalReport = payload.report as BenefitReport;
+            terminal = "complete";
+          } else if (ev.type === "error") {
+            terminalErr =
+              typeof payload.message === "string"
+                ? payload.message
+                : "Scan failed";
+            terminal = "error";
+          }
+        }
+        window.clearInterval(tick);
+        inFlight.current = false;
+        if (terminal === "complete" && finalReport) {
+          finishOk(finalReport);
+          return;
+        }
+        if (terminal === "error") {
+          finishErr(terminalErr || "Scan failed");
+          return;
+        }
+        // Stream closed without a terminal event — treat as failure
+        // and fall back to plain POST.
+        if (!streamWorked) {
+          throw new Error("stream_no_events");
+        }
+        finishErr("Scan ended unexpectedly. Please try again.");
+        return;
+      } catch (e) {
+        if (abort.signal.aborted) return;
+        // eslint-disable-next-line no-console
+        console.warn("scan_stream_unavailable", e);
+        // Only fall back if the stream never produced any usable data;
+        // otherwise we'd risk running the scan twice.
+        if (streamWorked) {
+          window.clearInterval(tick);
+          inFlight.current = false;
+          finishErr(
+            e instanceof Error ? e.message : "Scan stream interrupted",
+          );
+          return;
+        }
+      }
+      await fallbackToPlainPost();
+      window.clearInterval(tick);
+      inFlight.current = false;
     })();
 
     return () => {
       window.clearInterval(tick);
+      abort.abort();
     };
   }, [status, scanNonce, router]);
 
@@ -375,7 +589,9 @@ export default function ResultsPage() {
           </p>
         </header>
 
-        {status === "pending" && <ScanInProgress elapsed={elapsed} />}
+        {status === "pending" && (
+          <ScanInProgress elapsed={elapsed} progress={progress} />
+        )}
 
         {status === "error" && (
           <ScanError
