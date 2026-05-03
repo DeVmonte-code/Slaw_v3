@@ -5,6 +5,7 @@ import hashlib
 import json
 import logging
 import math
+import re
 import time
 from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
@@ -20,9 +21,28 @@ from typing import Any
 ProgressCallback = Callable[[dict[str, Any]], Awaitable[None]]
 
 from ..config import settings
-from ..schemas import Benefit, BenefitReport, ContextProfile, Entitlement, EvidenceItem
+from ..schemas import (
+    AgentProvenance,
+    Benefit,
+    BenefitReport,
+    Citation,
+    ContextProfile,
+    Entitlement,
+    EvidenceItem,
+)
 from .trigger import evaluate_trigger
 from .verify import VerifyResult, verify_entitlement
+
+# Reasoning string the managed driver attaches when an agent verdict is
+# rejected because its claimed citation does not resolve to a real
+# corpus article (or because no MCP tool was invoked at all). Stable so
+# tests and dashboards can pin on it.
+_REQUIRES_EVIDENCE_REVIEW = (
+    "requires_evidence_review: managed agent verdict could not be "
+    "grounded in a corpus citation"
+)
+
+_AGENT_JSON_RE = re.compile(r"\{.*\}", re.DOTALL)
 
 logger = logging.getLogger(__name__)
 
@@ -163,6 +183,326 @@ async def _verify_one(
             return e, evidence, None
 
 
+def _build_agent_brief(
+    profile: ContextProfile,
+    triggered: list[tuple[Entitlement, list[dict[str, Any]]]],
+) -> str:
+    """Render the single-session task brief listing every triggered entitlement.
+
+    The agent receives JUST IDs, titles, and seed-citation hints (SR +
+    article) per entitlement — never the chunks themselves. It must
+    invoke the MCP tools to fetch the authoritative text and decide
+    each verdict. Output schema is fixed so the parser can rebuild
+    one ``VerifyResult`` per entitlement deterministically.
+    """
+    safe_fields = {
+        "canton": profile.canton,
+        "employment_status": profile.employment_status,
+        "housing_status": profile.housing_status,
+        "household_size": profile.household_size,
+        "children_count": profile.children_count,
+        "marital_status": profile.marital_status,
+        "income_band_chf": profile.income_band_chf,
+        "business_activity": profile.business_activity,
+    }
+    items: list[dict[str, Any]] = []
+    for e, evidence in triggered:
+        items.append(
+            {
+                "entitlement_id": e.id,
+                "title": e.title.en,
+                "category": e.category,
+                "jurisdiction": e.jurisdiction,
+                "seed_citations": [
+                    {
+                        "sr_number": c.sr_number,
+                        "article": c.article,
+                        "paragraph": c.paragraph,
+                        "language": c.language,
+                    }
+                    for c in e.source_citations
+                ],
+                "triggered_evidence": evidence,
+            }
+        )
+    return (
+        "TASK: verify a batch of triggered Swiss legal entitlements for one user.\n\n"
+        "user_profile (structured fields, JSON):\n"
+        f"{json.dumps(safe_fields, indent=2)}\n\n"
+        "triggered_entitlements (JSON array):\n"
+        f"{json.dumps(items, indent=2)}\n\n"
+        "PROCEDURE (mandatory):\n"
+        "1) For EACH entitlement above, call swiss-contract-tools-mcp.\n"
+        "   verify_entitlement with the entitlement_id and the\n"
+        "   user_profile dict. The MCP tool runs the canonical retrieval +\n"
+        "   analysis pipeline and returns supports / confidence /\n"
+        "   reasoning / best_citation. You MAY also call swiss-law-\n"
+        "   retrieval-mcp.qdrant_search or fetch_article_by_sr if you\n"
+        "   want to inspect raw chunks before deciding.\n"
+        "2) When you have a verdict for every entitlement, return ONLY\n"
+        "   the final JSON object as your last message. No prose.\n\n"
+        "REPLY SCHEMA (strict):\n"
+        "{\n"
+        '  "verifications": [\n'
+        "    {\n"
+        '      "entitlement_id": str,\n'
+        '      "supports": bool,\n'
+        '      "confidence": number 0..1,\n'
+        '      "reasoning": str,\n'
+        '      "best_quote": str (<=15 words, verbatim from the corpus),\n'
+        '      "citation": {\n'
+        '        "sr_number": str,\n'
+        '        "article": str,\n'
+        '        "paragraph": str | null,\n'
+        '        "language": "de"|"fr"|"it"|"en"\n'
+        "      }\n"
+        "    }, ...\n"
+        "  ]\n"
+        "}\n\n"
+        "Rules:\n"
+        "- Include EVERY entitlement_id from the input, even when supports=false.\n"
+        "- The citation MUST be a real Swiss SR article — the server\n"
+        "  re-checks resolution against the corpus and suppresses any\n"
+        "  entitlement whose citation does not retrieve.\n"
+        "- best_quote MUST come from the retrieved corpus, never from\n"
+        "  doctrine or from your own paraphrase.\n"
+    )
+
+
+def _parse_agent_verifications(text: str) -> dict[str, dict[str, Any]]:
+    """Extract the ``{entitlement_id: entry}`` map from the agent's reply.
+
+    Returns an empty dict when the reply is not parseable JSON or when
+    it lacks the expected ``verifications`` array. The caller then
+    suppresses every triggered entitlement with the standard
+    ``requires_evidence_review`` reason — i.e. a malformed reply degrades
+    to "no benefits" rather than silently fabricating verdicts.
+    """
+    m = _AGENT_JSON_RE.search(text or "")
+    raw = m.group(0) if m else (text or "")
+    try:
+        parsed = json.loads(raw)
+    except json.JSONDecodeError:
+        return {}
+    entries = parsed.get("verifications") if isinstance(parsed, dict) else None
+    if not isinstance(entries, list):
+        return {}
+    by_id: dict[str, dict[str, Any]] = {}
+    for entry in entries:
+        if not isinstance(entry, dict):
+            continue
+        eid = entry.get("entitlement_id")
+        if isinstance(eid, str) and eid:
+            by_id[eid] = entry
+    return by_id
+
+
+def _verify_result_unsupported(
+    cit: Citation,
+    reasoning: str,
+    provenance: AgentProvenance | None,
+) -> VerifyResult:
+    kwargs: dict[str, Any] = {
+        "supports": False,
+        "confidence": 0.0,
+        "reasoning": reasoning,
+        "best_citation": cit,
+    }
+    if provenance is not None:
+        kwargs["agent_provenance"] = provenance
+    return VerifyResult(**kwargs)
+
+
+async def _resolve_agent_citation(
+    entry: dict[str, Any],
+    fallback: Citation,
+    profile_canton: str,
+    entitlement_id: str,
+) -> tuple[Citation | None, list[Any]]:
+    """Build a Pydantic ``Citation`` from the agent's reply and probe it.
+
+    Returns ``(citation, chunks)``:
+      - ``citation`` is None when the agent's payload is structurally
+        invalid (missing fields, validation error). The caller suppresses.
+      - ``chunks`` is the retrieval probe result against that citation.
+        An empty list means "citation does not resolve to corpus" and
+        the caller suppresses with ``requires_evidence_review``.
+
+    We import ``retrieve_for_citation`` lazily and run it in a worker
+    thread so this function is safely callable from the asyncio event
+    loop without blocking on Qdrant I/O.
+    """
+    from .retrieval import retrieve_for_citation
+
+    raw_cit = entry.get("citation")
+    if not isinstance(raw_cit, dict):
+        return None, []
+    quote = " ".join(str(entry.get("best_quote", "")).strip().split()[:14]) or "n/a"
+    try:
+        cit = Citation(
+            sr_number=str(raw_cit.get("sr_number", "")),
+            article=str(raw_cit.get("article", "")),
+            paragraph=raw_cit.get("paragraph"),
+            canton=str(raw_cit.get("canton") or fallback.canton),
+            language=raw_cit.get("language") or fallback.language,
+            quote_under_15_words=quote,
+        )
+    except Exception as exc:
+        logger.info(
+            "managed_scan_bad_citation entitlement_id=%s exc=%s",
+            entitlement_id,
+            type(exc).__name__,
+        )
+        return None, []
+    try:
+        chunks = await asyncio.to_thread(
+            retrieve_for_citation,
+            cit,
+            "",
+            profile_canton,
+            None,
+            None,
+            f"managed-scan-resolve entitlement_id={entitlement_id}",
+        )
+    except Exception as exc:
+        logger.warning(
+            "managed_scan_resolve_probe_failed entitlement_id=%s exc=%s",
+            entitlement_id,
+            type(exc).__name__,
+        )
+        chunks = []
+    return cit, chunks
+
+
+async def _verify_via_managed_session(
+    profile: ContextProfile,
+    triggered: list[tuple[Entitlement, list[dict[str, Any]]]],
+    user_id: str,
+) -> dict[str, VerifyResult]:
+    """Drive verification of every triggered entitlement in ONE session.
+
+    Replaces the per-entitlement fan-out on the managed-agents path.
+    Returns ``{entitlement_id: VerifyResult}`` for every entitlement in
+    ``triggered``. Failure modes fold into per-entitlement
+    ``supports=False`` results carrying the ``requires_evidence_review``
+    reason so ``run_benefit_scan`` can keep its single suppress branch.
+
+    A managed session that streams zero MCP tool uses is treated as
+    ungrounded — the same hard gate the per-entitlement path applies.
+    A fatal :class:`ManagedAgentsError` is re-raised so the operator
+    sees a 5xx, mirroring ``_verify_one``.
+    """
+    # Lazy import so test environments that never set use_managed_agents
+    # don't pay the SSE-streaming machinery's cold-start cost.
+    from .agent_runner import ManagedAgentsError, run_session
+
+    brief = _build_agent_brief(profile, triggered)
+    text, provenance = await run_session(
+        brief,
+        site="engine.scan.batch",
+        metadata={"user_id": user_id},
+    )
+    logger.info(
+        "managed_scan_session entitlements=%d session=%s "
+        "agent_backed=%s tools=%d mcp_tools=%d latency_ms=%d",
+        len(triggered),
+        provenance.session_id,
+        str(provenance.agent_backed).lower(),
+        provenance.tool_use_count or 0,
+        provenance.mcp_tool_use_count or 0,
+        provenance.latency_ms,
+    )
+
+    results: dict[str, VerifyResult] = {}
+    # Hard gate: a session that never invoked an MCP tool cannot have
+    # produced grounded verdicts. Suppress every entitlement.
+    if (provenance.mcp_tool_use_count or 0) == 0:
+        logger.warning(
+            "managed_scan_no_mcp_tools session=%s entitlements=%d",
+            provenance.session_id,
+            len(triggered),
+        )
+        for e, _ev in triggered:
+            results[e.id] = _verify_result_unsupported(
+                e.source_citations[0],
+                _REQUIRES_EVIDENCE_REVIEW,
+                provenance,
+            )
+        return results
+
+    by_id = _parse_agent_verifications(text)
+    if not by_id:
+        logger.warning(
+            "managed_scan_bad_reply session=%s raw_len=%d",
+            provenance.session_id,
+            len(text or ""),
+        )
+
+    for e, _ev in triggered:
+        entry = by_id.get(e.id)
+        seed = e.source_citations[0]
+        if entry is None:
+            results[e.id] = _verify_result_unsupported(
+                seed, _REQUIRES_EVIDENCE_REVIEW, provenance
+            )
+            continue
+
+        try:
+            confidence = max(0.0, min(1.0, float(entry.get("confidence", 0.0))))
+        except (TypeError, ValueError):
+            confidence = 0.0
+        supports = bool(entry.get("supports", False))
+        reasoning = str(entry.get("reasoning", "")).strip()
+
+        if not supports:
+            # The agent itself decided the article does not support the
+            # claim — keep its reasoning, fall back to seed citation
+            # since we don't need to prove a positive grounding.
+            results[e.id] = VerifyResult(
+                supports=False,
+                confidence=confidence,
+                reasoning=reasoning or "Agent verdict: not supported.",
+                best_citation=seed,
+                agent_provenance=provenance,
+            )
+            continue
+
+        cit, chunks = await _resolve_agent_citation(
+            entry, seed, profile.canton, e.id
+        )
+        if cit is None or not chunks:
+            logger.info(
+                "managed_scan_unresolved_citation entitlement_id=%s "
+                "session=%s",
+                e.id,
+                provenance.session_id,
+            )
+            results[e.id] = _verify_result_unsupported(
+                seed, _REQUIRES_EVIDENCE_REVIEW, provenance
+            )
+            continue
+
+        top = chunks[0]
+        results[e.id] = VerifyResult(
+            supports=True,
+            confidence=confidence,
+            reasoning=reasoning or "Agent verdict: supported.",
+            best_citation=cit.model_copy(
+                update={
+                    "effective_date": top.effective_date or cit.effective_date,
+                    "score": top.score,
+                }
+            ),
+            agent_provenance=provenance,
+        )
+
+    # Re-raise of ManagedAgentsError happens naturally because run_session
+    # raises it before this function can return — name-checked here as a
+    # contract reminder so a future refactor doesn't drop the import.
+    _ = ManagedAgentsError
+    return results
+
+
 async def run_benefit_scan(
     profile: ContextProfile,
     catalog: list[Entitlement],
@@ -227,72 +567,133 @@ async def run_benefit_scan(
         },
     )
 
-    sem = asyncio.Semaphore(settings.scan_concurrency)
+    # Verification dispatch:
+    #   * managed-agents driver path — one session for the whole batch,
+    #     guarded by ``settings.use_managed_agents`` and disabled when
+    #     ``force_local=True`` (the MCP ``benefit_scan`` wrapper passes
+    #     that to avoid a managed-session-inside-a-managed-session
+    #     recursion).
+    #   * local fan-out — one verifier call per entitlement, the
+    #     pre-Task-#36 behaviour. Still what the MCP wrapper, the
+    #     ``use_managed_agents=False`` dev path, and the test suite
+    #     exercise.
+    use_agent_driver = settings.use_managed_agents and not force_local
 
-    # Wrap each verification so we can emit a "verified" event the
-    # moment the future resolves — gather() preserves input order, but
-    # for honest streaming we want the real completion order, so we
-    # use as_completed and rebuild the list afterwards.
     verified_count = 0
     suppressed_running = 0
-
-    async def _wrapped(
-        idx: int, e: Entitlement, ev: list[dict[str, Any]]
-    ) -> tuple[int, tuple[Entitlement, list[dict[str, Any]], VerifyResult | None]]:
-        out = await _verify_one(
-            e,
-            profile,
-            ev,
-            sem,
-            user_id,
-            force_local,
-            progress_cb=progress_cb,
-            index=idx,
-            total=total,
-        )
-        return idx, out
-
     results: list[tuple[Entitlement, list[dict[str, Any]], VerifyResult | None]] = (
         [None] * total  # type: ignore[list-item]
     )
-    coros = [
-        _wrapped(i, e, ev) for i, (e, ev) in enumerate(triggered)
-    ]
-    for coro in asyncio.as_completed(coros):
-        idx, out = await coro
-        results[idx] = out
-        e, _ev, v = out
-        title = str(getattr(e.title, profile.language, None) or e.title.en)
-        if v is None or not v.supports or v.confidence < e.confidence_floor:
-            suppressed_running += 1
+
+    if use_agent_driver and total:
+        for idx, (e, ev) in enumerate(triggered):
+            title_for_event = str(
+                getattr(e.title, profile.language, None) or e.title.en
+            )
+            await _emit(
+                progress_cb,
+                {
+                    "type": "verifying",
+                    "entitlement_id": e.id,
+                    "title": title_for_event,
+                    "category": e.category,
+                    "index": idx,
+                    "total": total,
+                },
+            )
+        # ManagedAgentsError fatal failures bubble up so /scan returns
+        # 5xx — same posture as the per-entitlement fan-out's re-raise.
+        verdicts_by_id = await _verify_via_managed_session(
+            profile, triggered, user_id
+        )
+        for idx, (e, ev) in enumerate(triggered):
+            v = verdicts_by_id.get(e.id)
+            results[idx] = (e, ev, v)
+            title = str(getattr(e.title, profile.language, None) or e.title.en)
+            if v is None or not v.supports or v.confidence < e.confidence_floor:
+                suppressed_running += 1
+                supported_event = False
+            else:
+                verified_count += 1
+                supported_event = True
             await _emit(
                 progress_cb,
                 {
                     "type": "verified",
                     "entitlement_id": e.id,
                     "title": title,
-                    "supported": False,
+                    "supported": supported_event,
                     "confidence": float(v.confidence) if v else 0.0,
                     "verified_count": verified_count,
                     "suppressed_count": suppressed_running,
                     "total": total,
                 },
             )
-        else:
-            verified_count += 1
-            await _emit(
-                progress_cb,
-                {
-                    "type": "verified",
-                    "entitlement_id": e.id,
-                    "title": title,
-                    "supported": True,
-                    "confidence": float(v.confidence),
-                    "verified_count": verified_count,
-                    "suppressed_count": suppressed_running,
-                    "total": total,
-                },
+
+    else:
+        sem = asyncio.Semaphore(settings.scan_concurrency)
+
+        # Wrap each verification so we can emit a "verified" event the
+        # moment the future resolves — gather() preserves input order, but
+        # for honest streaming we want the real completion order, so we
+        # use as_completed and rebuild the list afterwards.
+
+        async def _wrapped(
+            idx: int, e: Entitlement, ev: list[dict[str, Any]]
+        ) -> tuple[
+            int, tuple[Entitlement, list[dict[str, Any]], VerifyResult | None]
+        ]:
+            out = await _verify_one(
+                e,
+                profile,
+                ev,
+                sem,
+                user_id,
+                force_local,
+                progress_cb=progress_cb,
+                index=idx,
+                total=total,
             )
+            return idx, out
+
+        coros = [
+            _wrapped(i, e, ev) for i, (e, ev) in enumerate(triggered)
+        ]
+        for coro in asyncio.as_completed(coros):
+            idx, out = await coro
+            results[idx] = out
+            e, _ev, v = out
+            title = str(getattr(e.title, profile.language, None) or e.title.en)
+            if v is None or not v.supports or v.confidence < e.confidence_floor:
+                suppressed_running += 1
+                await _emit(
+                    progress_cb,
+                    {
+                        "type": "verified",
+                        "entitlement_id": e.id,
+                        "title": title,
+                        "supported": False,
+                        "confidence": float(v.confidence) if v else 0.0,
+                        "verified_count": verified_count,
+                        "suppressed_count": suppressed_running,
+                        "total": total,
+                    },
+                )
+            else:
+                verified_count += 1
+                await _emit(
+                    progress_cb,
+                    {
+                        "type": "verified",
+                        "entitlement_id": e.id,
+                        "title": title,
+                        "supported": True,
+                        "confidence": float(v.confidence),
+                        "verified_count": verified_count,
+                        "suppressed_count": suppressed_running,
+                        "total": total,
+                    },
+                )
 
     await _emit(
         progress_cb,
