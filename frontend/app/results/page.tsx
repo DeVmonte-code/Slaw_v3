@@ -261,9 +261,29 @@ export default function ResultsPage() {
       window.clearInterval(tick);
       inFlight.current = false;
       if (apiErr || !data) {
-        setError(
-          String(apiErr ?? "Unknown error — is the backend running?"),
-        );
+        // Clear the pending marker so a hard refresh on /results doesn't
+        // silently auto-retry. Retrying must be an explicit user action
+        // (the "Try again" button restores the marker via scanNonce).
+        try {
+          sessionStorage.removeItem("benefit_report_pending");
+        } catch {
+          /* non-fatal */
+        }
+        let msg: string;
+        if (apiErr == null) {
+          msg = "Unknown error — is the backend running?";
+        } else if (typeof apiErr === "string") {
+          msg = apiErr;
+        } else if (typeof apiErr === "object") {
+          const e = apiErr as { detail?: unknown; message?: unknown };
+          msg =
+            (typeof e.detail === "string" && e.detail) ||
+            (typeof e.message === "string" && e.message) ||
+            JSON.stringify(apiErr);
+        } else {
+          msg = String(apiErr);
+        }
+        setError(msg);
         setStatus("error");
         return;
       }
@@ -361,6 +381,11 @@ export default function ResultsPage() {
           <ScanError
             message={error}
             onRetry={() => {
+              try {
+                sessionStorage.setItem("benefit_report_pending", "1");
+              } catch {
+                /* non-fatal */
+              }
               setError("");
               setStatus("pending");
               setScanNonce((n) => n + 1);
