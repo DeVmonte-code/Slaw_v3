@@ -158,7 +158,11 @@ even when `USE_MANAGED_AGENTS=0`.
    for the whole batch and streams its events. Every
    `agent.mcp_tool_use` is forwarded through the SSE channel as a
    `tool_call` event (`{tool, server, label}`); the frontend renders
-   the latest 5 in a live feed inside `ScanInProgress`.
+   the latest 5 in a live feed inside `ScanInProgress`. **Note:**
+   `agent.message` events are intentionally NOT forwarded — the
+   verbatim model output is the JSON the parser owns, and surfacing
+   intermediate planning tokens to the UI would be both noisy and a
+   small leak surface (no PII redaction has been performed on it).
 4. The agent's batched JSON reply is parsed back into one
    `VerifyResult` per entitlement; unresolved citations and zero-MCP
    sessions are suppressed with `requires_evidence_review`.
