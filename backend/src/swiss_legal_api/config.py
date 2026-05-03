@@ -33,6 +33,9 @@ class Settings(BaseSettings):
     # ``sweep_enabled`` is true. Off by default so test/dev runs don't
     # spawn a background thread silently.
     sweep_enabled: bool = False
+    # When True, the nightly schedule will fetch new data from Fedlex
+    # and then promote it. Disabled by default.
+    fedlex_refresh_enabled: bool = False
     # Cron HOUR for the nightly sweep, in the server's local timezone.
     # Decoupled from minute=0 so two clusters in the same region can
     # stagger by a few minutes without colliding on Fedlex / Anthropic.

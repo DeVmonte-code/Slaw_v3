@@ -140,9 +140,7 @@ async def _call_claude(
         # the agent_runner / httpx-streaming machinery.
         from .agent_runner import run_session
 
-        return await run_session(
-            user_content, site=site, metadata={"user_id": user_id}
-        )
+        return await run_session(user_content, site=site, metadata={"user_id": user_id})
     started = time.perf_counter()
     resp = await _anthropic.messages.create(
         model=settings.claude_model,
@@ -264,8 +262,7 @@ async def _verify_via_managed_agent(
             f"managed-cap-probe entitlement_id={entitlement.id}",
         )
         translation_only_managed = bool(probe_chunks) and not any(
-            _is_authoritative_language(cit.sr_number, c.language)
-            for c in probe_chunks
+            _is_authoritative_language(cit.sr_number, c.language) for c in probe_chunks
         )
     except Exception as exc:
         logger.warning(
@@ -439,7 +436,8 @@ async def _verify_local(
             confidence=0.0,
             reasoning=(
                 "No retrieved chunk above similarity threshold for "
-                f"SR {cit.sr_number} Art. {cit.article} in canton "
+                f"{'Cantonal Law' if cit.canton else 'SR'} {cit.sr_number} "
+                f"Art. {cit.article} in canton "
                 f"{profile.canton}; refusing to verify."
             ),
             best_citation=cit,
@@ -505,8 +503,9 @@ async def _verify_local(
         f"{_CHUNKS_CLOSE}"
     )
 
+    law_txt = f"Cantonal Law ({cit.canton})" if getattr(cit, "canton", None) else "SR"
     user_content = f"""Entitlement: {entitlement.title.en}
-Claim: This user is entitled to this under SR {cit.sr_number} Art. {cit.article}.
+Claim: This user is entitled to this under {law_txt} {cit.sr_number} Art. {cit.article}.
 Category: {entitlement.category}
 Jurisdiction: {entitlement.jurisdiction}
 
@@ -521,9 +520,7 @@ Retrieved legal text (authoritative chunks first):
 
 Respond with JSON only."""
 
-    text, provenance = await _call_claude(
-        user_content, site=f"engine.verify:{entitlement.id}"
-    )
+    text, provenance = await _call_claude(user_content, site=f"engine.verify:{entitlement.id}")
     logger.info(
         "claude_verify entitlement_id=%s latency_ms=%d input_tokens=%d "
         "output_tokens=%d agent_backed=%s",

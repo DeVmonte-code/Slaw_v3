@@ -207,7 +207,7 @@ def ingest(
     try:
         out: list[CantonalArticleRecord] = []
         for spec in specs:
-            resp = http.get(spec.url)
+            resp = http.get(spec.url, follow_redirects=True)
             resp.raise_for_status()
             content_type = resp.headers.get("content-type", "").lower()
             if spec.is_pdf or "pdf" in content_type:

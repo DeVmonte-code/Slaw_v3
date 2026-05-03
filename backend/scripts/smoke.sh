@@ -30,7 +30,7 @@ else
   uvicorn swiss_legal_api.api.main:app --host 0.0.0.0 --port 8000 &
   SERVER_PID=$!
   trap "kill $SERVER_PID 2>/dev/null || true" EXIT
-  sleep 4
+  sleep 15
 fi
 
 echo "=== Health ==="

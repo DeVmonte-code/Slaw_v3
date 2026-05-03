@@ -196,7 +196,7 @@ def ingest(
     try:
         out: list[CantonalArticleRecord] = []
         for spec in specs:
-            resp = http.get(spec.url)
+            resp = http.get(spec.url, follow_redirects=True)
             resp.raise_for_status()
             out.extend(
                 parse_articles(

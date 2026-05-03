@@ -152,6 +152,7 @@ class FedlexClient:
             "  ?act jolux:isRealizedBy ?expr .\n"
             "  OPTIONAL { ?act jolux:dateEntryInForce ?eif }\n"
             "  OPTIONAL { ?act jolux:dateNoLongerInForce ?nolonger }\n"
+            "  FILTER ( !bound(?nolonger) )\n"
             "}\n"
         )
         rows = self._sparql(query)

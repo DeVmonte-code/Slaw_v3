@@ -50,7 +50,7 @@ class McpServerSpec:
     tools: tuple[McpToolSpec, ...]
 
 
-def build_fastmcp(spec: "McpServerSpec", *, mount_path: str = "/") -> "FastMCP":
+def build_fastmcp(spec: McpServerSpec, *, mount_path: str = "/") -> FastMCP:
     """Construct a configured ``FastMCP`` from a registry spec.
 
     Used by both the standalone ``serve()`` shims and the FastAPI mount

@@ -95,7 +95,7 @@ def _probe_primary_collection(
 # ``MCP_BASE_URL=https://<deployment-host>``; the per-server URLs are
 # auto-derived to point at the mounts below.
 
-_MCP_MOUNTS: tuple[tuple[str, "object"], ...] = (
+_MCP_MOUNTS: tuple[tuple[str, object], ...] = (
     ("/mcp/swiss-law", build_fastmcp(_sl_server.SERVER)),
     ("/mcp/contract-tools", build_fastmcp(_ct_server.SERVER)),
     ("/mcp/user-context", build_fastmcp(_uc_server.SERVER)),
@@ -107,18 +107,22 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     async with AsyncExitStack() as mcp_stack:
         for prefix, fmcp in _MCP_MOUNTS:
             try:
+                # the run() method fails if called repeatedly on the same instance
+                # in a testing context where the app starts up multiple times.
+                from mcp.server.streamable_http_manager import StreamableHTTPSessionManager
+                fmcp._session_manager = StreamableHTTPSessionManager(fmcp._mcp_server)  # type: ignore
                 await mcp_stack.enter_async_context(
-                    fmcp.session_manager.run()
+                    fmcp.session_manager.run()  # type: ignore
                 )
                 logger.info(
                     "mcp_server_started name=%s mount=%s",
-                    fmcp.name,
+                    getattr(fmcp, "name", "unknown"),
                     prefix,
                 )
             except Exception:
                 logger.exception(
-                    "mcp_server_start_failed name=%s mount=%s",
-                    fmcp.name,
+                    "mcp_server_start_failed",
+                    getattr(fmcp, "name", "unknown"),
                     prefix,
                 )
                 raise
@@ -191,7 +195,7 @@ app = FastAPI(
 # The MCP endpoint is reachable at ``<prefix>/`` (FastMCP's
 # ``streamable_http_path`` defaults to "/" via ``build_fastmcp``).
 for _prefix, _fmcp in _MCP_MOUNTS:
-    app.mount(_prefix, _fmcp.streamable_http_app())
+    app.mount(_prefix, _fmcp.streamable_http_app())  # type: ignore
 
 
 _origins = settings.cors_origins_list()

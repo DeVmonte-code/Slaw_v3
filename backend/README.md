@@ -485,7 +485,7 @@ UPDATED alerts whenever their entitlements move.
 
 ### What it does
 
-1. APScheduler fires once per night (default `03:17` server-local).
+1. APScheduler fires once per night (default `03:17` server-local). Set `FEDLEX_REFRESH_ENABLED=1` to also download the latest federal laws beforehand. If the download fails, the schedule preserves the previous snapshot and logs a warning so no alert storm is triggered by an outage.
 2. For each user with `notify_enabled=true`, the orchestrator calls
    the same `run_benefit_scan` that powers `/scan` so diffs are
    apples-to-apples with the synchronous endpoint.
