@@ -741,8 +741,20 @@ export function SteppedWizard() {
           </AnimatePresence>
 
           {submitError && (
-            <div className="rounded border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-800 mb-4">
-              {submitError}
+            <div
+              role="alert"
+              className="mb-4 flex items-start gap-3 rounded-lg border border-red-200 bg-[var(--slaw-danger-bg)] px-4 py-3 text-sm text-[var(--slaw-danger)] shadow-sm"
+            >
+              <svg className="mt-0.5 h-4 w-4 shrink-0" viewBox="0 0 16 16" fill="none" aria-hidden>
+                <circle cx="8" cy="8" r="7" stroke="currentColor" strokeWidth="1.5" />
+                <path d="M8 4.5v4M8 11v.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+              </svg>
+              <div className="min-w-0">
+                <div className="font-semibold">Couldn&rsquo;t run the scan</div>
+                <div className="mt-0.5 break-words text-[var(--slaw-danger)]/90">
+                  {submitError}
+                </div>
+              </div>
             </div>
           )}
         </form>
