@@ -180,6 +180,21 @@ All settings are read from the environment (see `.env.example`).
 | `CORS_ALLOW_ORIGINS`   | (empty)                                | Comma-separated CORS origins. Wins over `FRONTEND_ORIGIN` if both set.                         |
 | `APP_ENV`              | `development`                          | Set to `production` (or `prod`) to make CORS origins mandatory — startup fails if neither origin var is set. |
 
+### Frontend wiring
+
+The Next.js frontend (`frontend/`) is served on port 5000 and uses
+**same-origin** requests for every backend path. `next.config.mjs`
+declares `rewrites()` that forward `/scan`, `/scan/stream`, `/chat`,
+`/audits`, `/users/*`, `/health`, `/healthz`, `/readyz`, and
+`/openapi.json` to `BACKEND_INTERNAL_URL` (default
+`http://localhost:8000`). Do NOT set `NEXT_PUBLIC_API_URL` to
+`http://localhost:8000` in `frontend/.env.local` or as a hard-coded
+fallback — the browser would then try to reach the user's own laptop
+from the deployed Replit preview and every `/scan` would fail with
+`Failed to fetch`. Leave it empty (same-origin) and override
+`BACKEND_INTERNAL_URL` only when the backend lives on a different
+host than the Next server.
+
 ### CORS
 
 If neither `FRONTEND_ORIGIN` nor `CORS_ALLOW_ORIGINS` is set in development

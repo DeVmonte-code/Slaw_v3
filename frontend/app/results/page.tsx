@@ -460,8 +460,7 @@ export default function ResultsPage() {
       finishOk(data);
     };
 
-    const baseUrl =
-      process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+    const baseUrl = process.env.NEXT_PUBLIC_API_URL ?? "";
 
     (async () => {
       // Prefer the streaming endpoint so we can show real progress.

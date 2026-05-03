@@ -3,6 +3,9 @@ set -e
 
 # Start backend on port 8000 (background)
 cd /home/runner/workspace/backend
+# Local Replit dev: opt out of managed-agents (no agent provisioned).
+# Production deployments must set USE_MANAGED_AGENTS=1 + the bootstrap IDs.
+export USE_MANAGED_AGENTS="${USE_MANAGED_AGENTS:-0}"
 PYTHONPATH=src uvicorn swiss_legal_api.api.main:app --host localhost --port 8000 &
 BACKEND_PID=$!
 

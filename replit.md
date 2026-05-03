@@ -15,6 +15,16 @@ A Proactive Rights Discovery service for Swiss residents.
   - Entry: `pnpm start` (production) or `pnpm dev` (development)
   - Pages: `/` (profile wizard form), `/results` (benefit cards)
   - Types auto-generated from backend OpenAPI schema
+  - **Same-origin API**: `NEXT_PUBLIC_API_URL` defaults to `""` (empty
+    string) so the browser issues same-origin requests against port
+    5000. `next.config.mjs` `rewrites()` then forwards `/scan`,
+    `/scan/stream`, `/chat`, `/audits`, `/users/*`, `/health`,
+    `/healthz`, `/readyz`, and `/openapi.json` to the backend at
+    `BACKEND_INTERNAL_URL` (default `http://localhost:8000`). This is
+    what makes the deployed Replit preview work without exposing the
+    backend port publicly. Do NOT reintroduce `http://localhost:8000`
+    as a hard-coded fallback — it breaks the preview (browser tries to
+    fetch the user's own laptop and gets `Failed to fetch`).
 
 ## How It Works
 
