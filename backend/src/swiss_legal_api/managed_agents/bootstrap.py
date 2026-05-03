@@ -254,14 +254,33 @@ def _persist_env(updates: dict[str, str]) -> None:
     logger.info("bootstrap_persisted_env keys=%s", sorted(updates))
 
 
-def bootstrap(*, dry_run: bool = False) -> dict[str, str]:
+def bootstrap(
+    *,
+    dry_run: bool = False,
+    write_env: bool = True,
+) -> dict[str, str]:
     """Create or update the agent + environment + vault.
 
     Returns the resulting IDs as a dict so callers (and the CLI) can
     surface them without re-reading the .env. ``dry_run=True`` prints
     the JSON payloads instead of POSTing them — useful for code review
-    before a live cluster mutation.
+    before a live cluster mutation. ``write_env=False`` skips the
+    backend/.env write — used when the deploy persists IDs as Replit
+    Secrets (or any other secret manager) instead of a checked-in
+    dotenv file. The returned dict is the same in both cases so the
+    caller can pipe it into the platform's secret-setter.
     """
+    # Surface the MCP URLs the bootstrap is about to register so a
+    # mis-set MCP_BASE_URL can't silently land an agent that points at
+    # the wrong host. The values are public URLs (not secrets) so
+    # logging them is safe.
+    logger.info(
+        "bootstrap_mcp_urls swiss_law=%s contract_tools=%s user_context=%s",
+        settings.mcp_swiss_law_url or "<unset>",
+        settings.mcp_contract_tools_url or "<unset>",
+        settings.mcp_user_context_url or "<unset>",
+    )
+
     agent_body = _agent_payload()
     env_body = _environment_payload()
     vault_body = _vault_payload()
@@ -327,7 +346,8 @@ def bootstrap(*, dry_run: bool = False) -> dict[str, str]:
         "MANAGED_ENVIRONMENT_ID": str(env["id"]),
         "MANAGED_VAULT_ID": str(vault["id"]),
     }
-    _persist_env(ids)
+    if write_env:
+        _persist_env(ids)
     return ids
 
 
@@ -338,10 +358,30 @@ def main() -> int:
         action="store_true",
         help="Print the request bodies instead of POSTing them.",
     )
+    parser.add_argument(
+        "--no-write-env",
+        action="store_true",
+        help=(
+            "Skip writing IDs to backend/.env. Use when the platform "
+            "stores the four MANAGED_* IDs as Replit Secrets / shared "
+            "env vars instead of a dotenv file."
+        ),
+    )
+    parser.add_argument(
+        "--out",
+        metavar="PATH",
+        help=(
+            "When set, also write the four ID-name → value pairs as a "
+            "single JSON object to PATH. The platform's secret-setter "
+            "(or any wrapper script) can then load that file and "
+            "register the values as shared env vars without re-parsing "
+            "stdout."
+        ),
+    )
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
     try:
-        ids = bootstrap(dry_run=args.dry_run)
+        ids = bootstrap(dry_run=args.dry_run, write_env=not args.no_write_env)
     except httpx.HTTPStatusError as exc:
         logger.error(
             "bootstrap_http_error status=%d body=%s",
@@ -353,6 +393,9 @@ def main() -> int:
         logger.error("bootstrap_failed exc=%s msg=%s", type(exc).__name__, exc)
         return 1
     if ids:
+        if args.out:
+            Path(args.out).write_text(json.dumps(ids, indent=2) + "\n")
+            logger.info("bootstrap_wrote_ids path=%s", args.out)
         for k, v in ids.items():
             print(f"{k}={v}")
     return 0

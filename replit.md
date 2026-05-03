@@ -118,13 +118,23 @@ without provisioned agent IDs still work.
   ≥1 tool/MCP-tool event was observed.
 - `backend/src/swiss_legal_api/managed_agents/bootstrap.py` —
   `python -m swiss_legal_api.managed_agents.bootstrap` provisions agent
-  + environment + vault and writes IDs back to `.env`.
-- Operator runbook: `backend/doc/audits/2026-05-02-managed-agents-flip.md`.
+  + environment + vault. Defaults to writing IDs to `backend/.env`;
+  pass `--no-write-env --out /tmp/managed-ids.json` for the prod
+  flow that registers the IDs as Replit Secrets / shared env vars.
+- Operator runbook: `backend/doc/managed-agents-setup.md` (this is the
+  one to follow for new deployments — covers `MCP_BASE_URL` derivation,
+  the bootstrap CLI flags, and the smoke command).
+- `backend/scripts/managed_agents_smoke.py` — opens one real session
+  and exits non-zero with a precise reason (config missing / no MCP
+  tool used / fatal session error) so a misconfigured deploy is
+  caught before flipping `USE_MANAGED_AGENTS`.
 - Tests: `backend/tests/test_agent_runner.py` (mocked SSE),
   `backend/tests/test_mcp_single_source_of_truth.py`.
 
 Required settings to flip the flag: `MANAGED_AGENT_ID`,
-`MANAGED_ENVIRONMENT_ID`, `MCP_SWISS_LAW_URL`,
+`MANAGED_ENVIRONMENT_ID`, `MANAGED_VAULT_ID`, `MANAGED_AGENT_VERSION`,
+plus either `MCP_BASE_URL` (recommended — derives the three per-server
+URLs from the deployment host) or each of `MCP_SWISS_LAW_URL`,
 `MCP_CONTRACT_TOOLS_URL`, `MCP_USER_CONTEXT_URL`. Missing IDs raise
 `ManagedAgentsConfigError` at request time (no silent degrade).
 
