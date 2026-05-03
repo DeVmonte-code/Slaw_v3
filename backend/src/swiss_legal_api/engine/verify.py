@@ -121,7 +121,10 @@ def _is_authoritative_language(sr_number: str, lang: str) -> bool:
     reraise=True,
 )
 async def _call_claude(
-    user_content: str, *, site: str = "engine.verify"
+    user_content: str,
+    *,
+    site: str = "engine.verify",
+    user_id: str = "anonymous",
 ) -> tuple[str, AgentProvenance]:
     """Run one Claude inference and return (text, provenance).
 
@@ -137,7 +140,9 @@ async def _call_claude(
         # the agent_runner / httpx-streaming machinery.
         from .agent_runner import run_session
 
-        return await run_session(user_content, site=site)
+        return await run_session(
+            user_content, site=site, metadata={"user_id": user_id}
+        )
     started = time.perf_counter()
     resp = await _anthropic.messages.create(
         model=settings.claude_model,
@@ -172,6 +177,7 @@ async def _verify_via_managed_agent(
     entitlement: Entitlement,
     profile: ContextProfile,
     triggered_evidence: list[dict[str, Any]],
+    user_id: str = "anonymous",
 ) -> VerifyResult:
     """Delegate verification to the managed agent.
 
@@ -218,7 +224,9 @@ async def _verify_via_managed_agent(
         '    "best_quote": str (<=15 words)}.'
     )
     text, provenance = await _call_claude(
-        user_content, site=f"engine.verify:{entitlement.id}"
+        user_content,
+        site=f"engine.verify:{entitlement.id}",
+        user_id=user_id,
     )
     logger.info(
         "claude_verify entitlement_id=%s latency_ms=%d input_tokens=%d "
@@ -356,6 +364,7 @@ async def verify_entitlement(
     entitlement: Entitlement,
     profile: ContextProfile,
     triggered_evidence: list[dict[str, Any]],
+    user_id: str = "anonymous",
 ) -> VerifyResult:
     """Public verifier entry. Branches on ``settings.use_managed_agents``.
 
@@ -367,7 +376,7 @@ async def verify_entitlement(
     """
     if settings.use_managed_agents:
         return await _verify_via_managed_agent(
-            entitlement, profile, triggered_evidence
+            entitlement, profile, triggered_evidence, user_id=user_id
         )
     return await _verify_local(entitlement, profile, triggered_evidence)
 

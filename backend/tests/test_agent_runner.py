@@ -30,13 +30,27 @@ def _sse(events: list[dict[str, object]]) -> bytes:
     return ("\n".join(f"data: {json.dumps(e)}" for e in events) + "\n").encode()
 
 
-def _make_transport(stream_events: list[dict[str, object]]) -> httpx.MockTransport:
-    """Mock /v1/sessions, /events, and /stream — the three calls the runner makes."""
+def _make_transport(
+    stream_events: list[dict[str, object]],
+    *,
+    captured_events: list[dict[str, object]] | None = None,
+    captured_session_payload: list[dict[str, object]] | None = None,
+) -> httpx.MockTransport:
+    """Mock /v1/sessions, /events, and /stream — the three calls the runner makes.
+
+    Optional ``captured_events`` and ``captured_session_payload`` lists
+    record the bodies the runner POSTs so tests can assert metadata
+    plumbing and tool-confirmation replies.
+    """
 
     def handler(request: httpx.Request) -> httpx.Response:
         if request.url.path == "/v1/sessions" and request.method == "POST":
+            if captured_session_payload is not None:
+                captured_session_payload.append(json.loads(request.content))
             return httpx.Response(200, json={"id": "sess_test_123"})
         if request.url.path.endswith("/events") and request.method == "POST":
+            if captured_events is not None:
+                captured_events.append(json.loads(request.content))
             return httpx.Response(200, json={"ok": True})
         if request.url.path.endswith("/stream") and request.method == "GET":
             return httpx.Response(
@@ -146,6 +160,99 @@ async def test_terminated_session_raises_managed_agents_error() -> None:
         )
 
 
+async def test_session_metadata_carries_user_id_and_task_type() -> None:
+    """Launch metadata MUST include ``user_id`` + ``task_type`` so the
+    audit + per-user analytics work end-to-end. Caller-supplied
+    metadata (``user_id="luis"``) wins over the ``anonymous`` default.
+    """
+    captured: list[dict[str, object]] = []
+    transport = _make_transport(
+        [
+            {
+                "type": "agent.message",
+                "content": [{"type": "text", "text": "ok"}],
+            },
+            {"type": "session.status_idle"},
+        ],
+        captured_session_payload=captured,
+    )
+    await agent_runner.run_session(
+        "ping",
+        site="engine.verify:luis",
+        metadata={"user_id": "luis"},
+        transport=transport,
+    )
+    assert captured, "expected a POST /v1/sessions body"
+    md = captured[0].get("metadata")
+    assert isinstance(md, dict)
+    assert md.get("user_id") == "luis"
+    assert md.get("task_type") == "engine.verify:luis"
+
+
+async def test_requires_action_loop_sends_tool_confirmation() -> None:
+    """When ``session.status_idle`` carries a ``requires_action``
+    payload the runner must POST a ``user.tool_confirmation`` event
+    for each pending action and keep streaming — NOT terminate
+    prematurely. Without this loop the verify path returns empty
+    text and the hard MCP-tool gate fires a false negative.
+    """
+    confirmations: list[dict[str, object]] = []
+    transport = _make_transport(
+        [
+            # Boundary 1: agent paused waiting for bash approval.
+            {
+                "type": "session.status_idle",
+                "requires_action": {
+                    "tool_confirmations": [
+                        {"tool_use_id": "tu_1", "tool_name": "bash"},
+                    ]
+                },
+            },
+            # After the runner POSTs the confirmation the agent
+            # continues, calls an MCP tool, emits the final answer
+            # and idles cleanly.
+            {
+                "type": "agent.mcp_tool_use",
+                "name": "verify_entitlement",
+                "server_name": "swiss-contract-tools-mcp",
+            },
+            {
+                "type": "agent.message",
+                "content": [{"type": "text", "text": "all good"}],
+            },
+            {"type": "session.status_idle"},
+        ],
+        captured_events=confirmations,
+    )
+    text, prov = await agent_runner.run_session(
+        "do work", site="engine.verify:approve", transport=transport
+    )
+    assert text == "all good"
+    assert prov.mcp_tool_use_count == 1
+    # First POST is the user.message; second is the tool_confirmation
+    # batch the runner sent before continuing.
+    confirmation_batches = [
+        body
+        for body in confirmations
+        if isinstance(body, dict)
+        and isinstance(body.get("events"), list)
+        and any(
+            isinstance(e, dict) and e.get("type") == "user.tool_confirmation"
+            for e in body["events"]
+        )
+    ]
+    assert confirmation_batches, "runner did not send user.tool_confirmation"
+    confirmed_events = confirmation_batches[0]["events"]
+    assert isinstance(confirmed_events, list)
+    assert any(
+        isinstance(e, dict)
+        and e.get("type") == "user.tool_confirmation"
+        and e.get("tool_use_id") == "tu_1"
+        and e.get("decision") == "allow"
+        for e in confirmed_events
+    )
+
+
 async def test_retryable_session_error_raises_retryable_exception() -> None:
     """``session.error`` with ``retry_status='retryable'`` must surface
     as :class:`RetryableManagedAgentsError` so the tenacity filter at
@@ -217,8 +324,8 @@ async def test_managed_verify_refuses_when_no_mcp_tool_invoked(
     monkeypatch.setattr(
         verify_mod,
         "_call_claude",
-        lambda content, *, site="engine.verify": agent_runner.run_session(
-            content, site=site, transport=transport_real
+        lambda content, *, site="engine.verify", user_id="anonymous": (
+            agent_runner.run_session(content, site=site, transport=transport_real)
         ),
     )
 

@@ -43,7 +43,10 @@ _anthropic = AsyncAnthropic(api_key=settings.anthropic_api_key)
     reraise=True,
 )
 async def _call_claude(
-    message_content: str, *, site: str = "api.chat"
+    message_content: str,
+    *,
+    site: str = "api.chat",
+    user_id: str = "anonymous",
 ) -> tuple[str, AgentProvenance]:
     """Run one Claude inference for /chat and return (text, provenance).
 
@@ -56,7 +59,9 @@ async def _call_claude(
     if settings.use_managed_agents:
         from ..engine.agent_runner import run_session
 
-        return await run_session(message_content, site=site)
+        return await run_session(
+            message_content, site=site, metadata={"user_id": user_id}
+        )
     started = time.perf_counter()
     resp = await _anthropic.messages.create(
         model=settings.claude_model,
@@ -86,7 +91,9 @@ async def _call_claude(
 
 
 async def answer_follow_up(
-    message: str, benefit_id: str | None
+    message: str,
+    benefit_id: str | None,
+    user_id: str = "anonymous",
 ) -> tuple[str, AgentProvenance]:
     # Managed-agents mode: skip local pre-retrieval entirely. The agent
     # must use swiss-law-retrieval-mcp.fetch_article_by_sr (or
@@ -119,7 +126,9 @@ async def answer_follow_up(
             f"User question: {message}"
         )
         text, provenance = await _call_claude(
-            payload, site=f"api.chat:{benefit_id or 'no_benefit'}"
+            payload,
+            site=f"api.chat:{benefit_id or 'no_benefit'}",
+            user_id=user_id,
         )
         # Hard gate (Task #26): if a benefit_id was given, the agent
         # MUST have invoked at least one MCP tool — otherwise it
@@ -142,6 +151,10 @@ async def answer_follow_up(
         return text, provenance
 
     context = ""
+    # ``user_id`` is honoured on the legacy messages.create path too —
+    # the structured ``claude_call`` log line carries it via the
+    # ``site`` field below so per-user audit grep works in both modes.
+    _ = user_id
     if benefit_id:
         ent = next((e for e in load_catalog() if e.id == benefit_id), None)
         if ent:

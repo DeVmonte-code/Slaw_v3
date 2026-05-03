@@ -528,7 +528,10 @@ async def test_supporting_doctrine_threads_through_to_benefit(
     )
 
     async def _fake_verify(
-        _e: Entitlement, _p: ContextProfile, _ev: list[Any]
+        _e: Entitlement,
+        _p: ContextProfile,
+        _ev: list[Any],
+        user_id: str = "anonymous",
     ) -> verify_mod.VerifyResult:
         return fake_result
 

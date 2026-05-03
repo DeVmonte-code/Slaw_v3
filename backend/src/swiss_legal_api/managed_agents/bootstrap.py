@@ -68,17 +68,24 @@ Output:
 # sane defaults. Read-only retrieval = always_allow, write-ish or
 # Claude-call-triggering = always_ask.
 def _agent_payload() -> dict[str, Any]:
+    # Permission contract per Anthropic docs (Permission policies.md):
+    # ``default_config.permission_policy`` sets the toolset-wide default;
+    # ``configs`` is a list of per-tool overrides. Read-only retrieval
+    # tools are ``always_allow``; ``bash`` (and any other shell-like
+    # tool) is ``always_ask`` so the runner's requires_action loop has
+    # to explicitly confirm it.
     tools: list[dict[str, Any]] = [
         {
             "type": "agent_toolset_20260401",
             "default_config": {
-                "permission_policies": {
-                    "file": {"type": "always_allow"},
-                    "web_search": {"type": "always_allow"},
-                    "web_fetch": {"type": "always_allow"},
-                    "bash": {"type": "always_ask"},
-                }
+                "permission_policy": {"type": "always_allow"},
             },
+            "configs": [
+                {
+                    "tool_name": "bash",
+                    "permission_policy": {"type": "always_ask"},
+                },
+            ],
         }
     ]
     mcp_servers: list[dict[str, str]] = []

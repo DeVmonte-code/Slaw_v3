@@ -84,6 +84,11 @@ class _RunAccumulator:
     mcp_servers_invoked: set[str] = field(default_factory=set)
     last_error: dict[str, object] | None = None
     terminated: bool = False
+    # Pending ``always_ask`` confirmations the consumer must POST back
+    # before the session can continue. Populated by ``_ingest_event``
+    # when ``session.status_idle`` carries ``requires_action`` and
+    # drained by ``_consume`` after sending ``user.tool_confirmation``.
+    pending_actions: list[dict[str, object]] = field(default_factory=list)
 
     @property
     def text(self) -> str:
@@ -227,6 +232,25 @@ def _ingest_event(event: dict[str, object], acc: _RunAccumulator) -> bool:
         if isinstance(server, str) and server:
             acc.mcp_servers_invoked.add(server)
     elif et == "session.status_idle":
+        # ``always_ask`` boundary: the docs (Permission policies.md)
+        # specify the server pauses on ``status_idle`` with a
+        # ``requires_action`` payload until the client confirms each
+        # pending tool use via ``user.tool_confirmation``. Treat that
+        # as a continue signal — _consume will send the confirmations
+        # and keep streaming. Only a CLEAN ``status_idle`` (no
+        # required actions) terminates the session.
+        req = event.get("requires_action")
+        if isinstance(req, dict):
+            actions = req.get("tool_confirmations") or req.get("actions") or []
+        elif isinstance(req, list):
+            actions = req
+        else:
+            actions = []
+        if isinstance(actions, list) and actions:
+            for a in actions:
+                if isinstance(a, dict):
+                    acc.pending_actions.append(a)
+            return False
         return True
     elif et == "session.status_terminated":
         acc.terminated = True
@@ -243,6 +267,48 @@ def _ingest_event(event: dict[str, object], acc: _RunAccumulator) -> bool:
     return False
 
 
+async def _send_tool_confirmations(
+    client: httpx.AsyncClient,
+    session_id: str,
+    actions: list[dict[str, object]],
+) -> None:
+    """POST ``user.tool_confirmation`` events for every pending action.
+
+    The runner's policy is "allow everything the bootstrap permission
+    contract surfaced as ``always_ask``". The server-side policy is
+    the actual gate; this client unconditionally approves so the
+    headless agent loop can run to completion. If a future contract
+    needs human-in-the-loop, this is the single place to wire that in.
+    """
+    events: list[dict[str, object]] = []
+    for action in actions:
+        # The docs allow either ``id`` or ``tool_use_id``; forward
+        # whichever the server supplied so we don't break either shape.
+        action_id = action.get("id") or action.get("tool_use_id")
+        if not action_id:
+            logger.warning(
+                "managed_skip_unidentified_action session_id=%s keys=%s",
+                session_id,
+                sorted(action.keys()),
+            )
+            continue
+        events.append(
+            {
+                "type": "user.tool_confirmation",
+                "tool_use_id": action_id,
+                "decision": "allow",
+            }
+        )
+    if not events:
+        return
+    resp = await client.post(
+        f"/v1/sessions/{session_id}/events",
+        json={"events": events},
+        headers=_headers(),
+    )
+    resp.raise_for_status()
+
+
 async def _consume(
     client: httpx.AsyncClient,
     session_id: str,
@@ -250,7 +316,15 @@ async def _consume(
 ) -> _RunAccumulator:
     acc = _RunAccumulator()
     async for event in _stream_events(client, session_id, ready):
-        if _ingest_event(event, acc):
+        done = _ingest_event(event, acc)
+        # Drain any ``always_ask`` confirmations the agent is waiting
+        # on BEFORE deciding to terminate, so the loop can continue
+        # past the approval boundary instead of returning empty text.
+        if acc.pending_actions:
+            pending = acc.pending_actions[:]
+            acc.pending_actions.clear()
+            await _send_tool_confirmations(client, session_id, pending)
+        if done:
             break
     return acc
 
@@ -271,8 +345,15 @@ async def run_session(
     """
     _require_config()
     started = time.perf_counter()
+    # Launch metadata contract: every managed session MUST carry a
+    # ``user_id`` and ``task_type`` so audit + per-user usage analytics
+    # work end-to-end. Caller-supplied metadata wins; otherwise we fall
+    # back to ``anonymous`` to keep the field present (the docs treat
+    # absent ``user_id`` as a soft validation failure that we want to
+    # surface in our own logs, not silently inherit a vendor default).
     md = {
         "task_type": site,
+        "user_id": "anonymous",
         **(metadata or {}),
     }
 

@@ -170,6 +170,12 @@ else:
 class ChatRequest(BaseModel):
     message: str
     benefit_id: str | None = None
+    # Caller-supplied identifier so the managed-agents launch metadata
+    # (Task #26) carries a stable user_id end-to-end. Falls back to
+    # ``anonymous`` when omitted — preserves backward compatibility for
+    # the unauthenticated /chat surface while still letting clients
+    # that DO know who is asking thread the value through.
+    user_id: str = "anonymous"
 
 
 class ChatResponse(BaseModel):
@@ -290,9 +296,18 @@ async def readyz(
 
 
 @app.post("/scan", response_model=BenefitReport)
-async def scan(profile: ContextProfile) -> BenefitReport:
+async def scan(
+    profile: ContextProfile,
+    x_user_id: str | None = Header(default=None, alias="X-User-Id"),
+) -> BenefitReport:
+    # Propagate the caller's user_id (Task #26 metadata contract) into
+    # every managed-agents session run as part of this scan. Header is
+    # optional — anonymous /scan still works for the public landing-
+    # page surface; the per-user sweep path passes a real id.
     try:
-        return await run_benefit_scan(profile, load_catalog())
+        return await run_benefit_scan(
+            profile, load_catalog(), user_id=x_user_id or "anonymous"
+        )
     except Exception as exc:
         logger.exception("scan failed: %s", type(exc).__name__)
         raise HTTPException(status_code=500, detail="Internal error") from exc
@@ -301,7 +316,9 @@ async def scan(profile: ContextProfile) -> BenefitReport:
 @app.post("/chat", response_model=ChatResponse)
 async def chat(req: ChatRequest) -> ChatResponse:
     try:
-        answer, provenance = await answer_follow_up(req.message, req.benefit_id)
+        answer, provenance = await answer_follow_up(
+            req.message, req.benefit_id, user_id=req.user_id
+        )
         return ChatResponse(answer=answer, agent_provenance=provenance)
     except Exception as exc:
         logger.exception("chat failed: %s", type(exc).__name__)

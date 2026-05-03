@@ -85,10 +85,11 @@ async def _verify_one(
     profile: ContextProfile,
     evidence: list[dict[str, Any]],
     sem: asyncio.Semaphore,
+    user_id: str = "anonymous",
 ) -> tuple[Entitlement, list[dict[str, Any]], VerifyResult | None]:
     async with sem:
         try:
-            v = await verify_entitlement(e, profile, evidence)
+            v = await verify_entitlement(e, profile, evidence, user_id=user_id)
             return e, evidence, v
         except Exception as exc:
             # Managed-agents fatal errors (terminated session, fatal
@@ -113,7 +114,9 @@ async def _verify_one(
 
 
 async def run_benefit_scan(
-    profile: ContextProfile, catalog: list[Entitlement]
+    profile: ContextProfile,
+    catalog: list[Entitlement],
+    user_id: str = "anonymous",
 ) -> BenefitReport:
     started = time.perf_counter()
 
@@ -143,7 +146,7 @@ async def run_benefit_scan(
 
     sem = asyncio.Semaphore(settings.scan_concurrency)
     results = await asyncio.gather(
-        *[_verify_one(e, profile, ev, sem) for e, ev in triggered]
+        *[_verify_one(e, profile, ev, sem, user_id) for e, ev in triggered]
     )
 
     benefits: list[Benefit] = []
