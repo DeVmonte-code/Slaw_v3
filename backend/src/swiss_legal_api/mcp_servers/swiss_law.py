@@ -25,7 +25,7 @@ from typing import Any
 from ..catalog import load_catalog
 from ..engine.retrieval import retrieve_for_citation
 from ..schemas import Citation
-from . import McpServerSpec, McpToolSpec
+from . import McpServerSpec, McpToolSpec, build_fastmcp
 
 
 def qdrant_search(
@@ -108,16 +108,12 @@ SERVER = McpServerSpec(
 def serve() -> None:  # pragma: no cover — production deployment shim
     """Run as a standalone MCP server over HTTPS streamable-HTTP.
 
-    Imported lazily so unit tests don't need the ``mcp`` SDK installed.
-    Production deploys this file as a separate service whose URL is
-    referenced by ``settings.mcp_swiss_law_url``.
+    Production deploys this file either standalone (one process per
+    server) or co-hosted under the FastAPI app at
+    ``${MCP_BASE_URL}/mcp/swiss-law/`` — both paths build the same
+    ``FastMCP`` via :func:`mcp_servers.build_fastmcp`.
     """
-    from mcp.server.fastmcp import FastMCP  # type: ignore[import-not-found]
-
-    app = FastMCP(SERVER.name)
-    for tool in SERVER.tools:
-        app.tool(name=tool.name, description=tool.description)(tool.impl)
-    app.run(transport="streamable-http")
+    build_fastmcp(SERVER, mount_path="/mcp").run(transport="streamable-http")
 
 
 if __name__ == "__main__":  # pragma: no cover

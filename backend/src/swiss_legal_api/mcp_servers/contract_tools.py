@@ -51,7 +51,7 @@ from ..schemas import (
     TriggerExpr,
 )
 from ..schemas.sweep import Alert
-from . import McpServerSpec, McpToolSpec
+from . import McpServerSpec, McpToolSpec, build_fastmcp
 
 _TRIGGER_ADAPTER: TypeAdapter[TriggerExpr] = TypeAdapter(TriggerExpr)
 
@@ -247,12 +247,7 @@ SERVER = McpServerSpec(
 
 
 def serve() -> None:  # pragma: no cover
-    from mcp.server.fastmcp import FastMCP  # type: ignore[import-not-found]
-
-    app = FastMCP(SERVER.name)
-    for tool in SERVER.tools:
-        app.tool(name=tool.name, description=tool.description)(tool.impl)
-    app.run(transport="streamable-http")
+    build_fastmcp(SERVER, mount_path="/mcp").run(transport="streamable-http")
 
 
 if __name__ == "__main__":  # pragma: no cover

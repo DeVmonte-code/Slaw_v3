@@ -16,6 +16,7 @@ dependencies = [
   "tenacity>=8.0.0",
   "pypdf>=4.0.0",
   "apscheduler>=3.10.0",
+  "mcp>=1.27.0",
 ]
 
 [project.optional-dependencies]

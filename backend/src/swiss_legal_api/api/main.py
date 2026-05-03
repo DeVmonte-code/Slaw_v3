@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 import sys
 from collections.abc import AsyncIterator
-from contextlib import asynccontextmanager
+from contextlib import AsyncExitStack, asynccontextmanager
 
 from fastapi import FastAPI, Header, HTTPException, Query
 from fastapi import Path as PathParam
@@ -17,6 +17,10 @@ from ..catalog import load_catalog
 from ..config import settings
 from ..engine.retrieval import _client as qdrant_client
 from ..engine.scan import run_benefit_scan
+from ..mcp_servers import build_fastmcp
+from ..mcp_servers import contract_tools as _ct_server
+from ..mcp_servers import swiss_law as _sl_server
+from ..mcp_servers import user_context as _uc_server
 from ..schemas import (
     AgentProvenance,
     Alert,
@@ -77,8 +81,53 @@ def _probe_primary_collection(
     return ("ok", n)
 
 
+# ---------------------------------------------------------------------------
+# Co-hosted MCP servers (Task #31)
+# ---------------------------------------------------------------------------
+# The three MCP servers (swiss_law, contract_tools, user_context) are
+# mounted under the FastAPI app at stable path prefixes so a single
+# Replit deployment exposes all three streamable-HTTP endpoints over
+# HTTPS. Each FastMCP instance owns a session_manager that MUST be
+# entered as part of the parent app's lifespan — otherwise inbound
+# JSON-RPC requests hit a closed task group and 500.
+#
+# Production wires the agent (managed_agents.bootstrap) by setting
+# ``MCP_BASE_URL=https://<deployment-host>``; the per-server URLs are
+# auto-derived to point at the mounts below.
+
+_MCP_MOUNTS: tuple[tuple[str, "object"], ...] = (
+    ("/mcp/swiss-law", build_fastmcp(_sl_server.SERVER)),
+    ("/mcp/contract-tools", build_fastmcp(_ct_server.SERVER)),
+    ("/mcp/user-context", build_fastmcp(_uc_server.SERVER)),
+)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    async with AsyncExitStack() as mcp_stack:
+        for prefix, fmcp in _MCP_MOUNTS:
+            try:
+                await mcp_stack.enter_async_context(
+                    fmcp.session_manager.run()
+                )
+                logger.info(
+                    "mcp_server_started name=%s mount=%s",
+                    fmcp.name,
+                    prefix,
+                )
+            except Exception:
+                logger.exception(
+                    "mcp_server_start_failed name=%s mount=%s",
+                    fmcp.name,
+                    prefix,
+                )
+                raise
+        async with _app_lifespan_body():
+            yield
+
+
+@asynccontextmanager
+async def _app_lifespan_body() -> AsyncIterator[None]:
     try:
         get_embedder()
         logger.info("embedder warmed: %s", settings.embedding_model)
@@ -137,6 +186,12 @@ app = FastAPI(
     description="Proactive Rights Discovery for Swiss residents.",
     lifespan=lifespan,
 )
+
+# Mount each FastMCP's streamable-HTTP ASGI app at its stable prefix.
+# The MCP endpoint is reachable at ``<prefix>/`` (FastMCP's
+# ``streamable_http_path`` defaults to "/" via ``build_fastmcp``).
+for _prefix, _fmcp in _MCP_MOUNTS:
+    app.mount(_prefix, _fmcp.streamable_http_app())
 
 
 _origins = settings.cors_origins_list()

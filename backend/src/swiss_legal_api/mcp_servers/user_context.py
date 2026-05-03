@@ -17,7 +17,7 @@ from typing import Any
 
 from .. import storage
 from ..schemas import ContextProfile
-from . import McpServerSpec, McpToolSpec
+from . import McpServerSpec, McpToolSpec, build_fastmcp
 
 
 def read_user_docs(user_id: str) -> dict[str, Any] | None:
@@ -55,12 +55,7 @@ SERVER = McpServerSpec(
 
 
 def serve() -> None:  # pragma: no cover
-    from mcp.server.fastmcp import FastMCP  # type: ignore[import-not-found]
-
-    app = FastMCP(SERVER.name)
-    for tool in SERVER.tools:
-        app.tool(name=tool.name, description=tool.description)(tool.impl)
-    app.run(transport="streamable-http")
+    build_fastmcp(SERVER, mount_path="/mcp").run(transport="streamable-http")
 
 
 if __name__ == "__main__":  # pragma: no cover

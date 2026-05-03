@@ -90,6 +90,13 @@ class Settings(BaseSettings):
     mcp_swiss_law_url: str = ""
     mcp_contract_tools_url: str = ""
     mcp_user_context_url: str = ""
+    # Single-base override for the co-hosted MCP deployment (Task #31).
+    # When set and a per-server URL above is empty, it is auto-derived
+    # to ``{mcp_base_url}/mcp/<server>/`` — the path that
+    # ``api.main`` mounts each ``FastMCP`` under. Lets a single
+    # ``MCP_BASE_URL=https://swiss-legal.example.app`` env var wire all
+    # three servers without enumerating each URL.
+    mcp_base_url: str = ""
     # Anthropic Managed Agents beta header value. Centralised so a future
     # GA bump only changes one constant.
     managed_agents_beta: str = "managed-agents-2026-04-01"
@@ -99,6 +106,21 @@ class Settings(BaseSettings):
     # the agent's tool budget too, but we add a client-side timeout so
     # one stuck session can't block a /scan request indefinitely.
     managed_session_timeout_s: float = 180.0
+
+    def model_post_init(self, __context: object) -> None:
+        # Derive per-server MCP URLs from a single base, when given.
+        # Per-server overrides win — a deploy that points one server
+        # at a separate host (e.g. user_context running in a different
+        # region for data residency) can do so without losing the
+        # base-URL convenience for the other two.
+        base = self.mcp_base_url.rstrip("/")
+        if base:
+            if not self.mcp_swiss_law_url:
+                self.mcp_swiss_law_url = f"{base}/mcp/swiss-law/"
+            if not self.mcp_contract_tools_url:
+                self.mcp_contract_tools_url = f"{base}/mcp/contract-tools/"
+            if not self.mcp_user_context_url:
+                self.mcp_user_context_url = f"{base}/mcp/user-context/"
 
     def cors_origins_list(self) -> list[str]:
         raw = self.cors_allow_origins or self.frontend_origin

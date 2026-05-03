@@ -21,6 +21,10 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:  # pragma: no cover - import only for type checkers
+    from mcp.server.fastmcp import FastMCP
 
 
 @dataclass(frozen=True)
@@ -46,4 +50,21 @@ class McpServerSpec:
     tools: tuple[McpToolSpec, ...]
 
 
-__all__ = ["McpServerSpec", "McpToolSpec"]
+def build_fastmcp(spec: "McpServerSpec", *, mount_path: str = "/") -> "FastMCP":
+    """Construct a configured ``FastMCP`` from a registry spec.
+
+    Used by both the standalone ``serve()`` shims and the FastAPI mount
+    helper (``swiss_legal_api.api.main``) so the wire-level wiring lives
+    in one place. ``mount_path="/"`` makes the streamable-HTTP endpoint
+    reachable at the root of the server (or sub-mount), which is what
+    ``Settings.mcp_base_url``-derived URLs assume.
+    """
+    from mcp.server.fastmcp import FastMCP
+
+    app = FastMCP(spec.name, streamable_http_path=mount_path)
+    for tool in spec.tools:
+        app.tool(name=tool.name, description=tool.description)(tool.impl)
+    return app
+
+
+__all__ = ["McpServerSpec", "McpToolSpec", "build_fastmcp"]
