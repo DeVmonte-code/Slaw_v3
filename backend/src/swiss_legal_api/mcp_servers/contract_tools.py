@@ -81,9 +81,16 @@ async def verify_entitlement_tool(
 
 
 async def benefit_scan_tool(profile: dict[str, Any]) -> dict[str, Any]:
-    """MCP wrapper around :func:`engine.scan.run_benefit_scan`."""
+    """MCP wrapper around :func:`engine.scan.run_benefit_scan`.
+
+    Forces the local verifier path (``force_local=True``) so an agent
+    calling ``benefit_scan`` from within a managed session does NOT
+    spawn one nested managed session per entitlement. The verification
+    code executed is identical — only the managed-session indirection
+    is bypassed.
+    """
     ctx = ContextProfile.model_validate(profile)
-    report = await _run_scan(ctx, load_catalog())
+    report = await _run_scan(ctx, load_catalog(), force_local=True)
     return report.model_dump(mode="json")
 
 

@@ -86,10 +86,22 @@ async def _verify_one(
     evidence: list[dict[str, Any]],
     sem: asyncio.Semaphore,
     user_id: str = "anonymous",
+    force_local: bool = False,
 ) -> tuple[Entitlement, list[dict[str, Any]], VerifyResult | None]:
     async with sem:
         try:
-            v = await verify_entitlement(e, profile, evidence, user_id=user_id)
+            if force_local:
+                # Used by the MCP ``benefit_scan`` tool wrapper to avoid
+                # fan-out: when an agent calls ``benefit_scan`` we MUST
+                # NOT spawn one managed session per entitlement (would
+                # recurse inside a managed session). The local verifier
+                # path is identical code, just without the managed-
+                # agents indirection.
+                from .verify import _verify_local
+
+                v = await _verify_local(e, profile, evidence)
+            else:
+                v = await verify_entitlement(e, profile, evidence, user_id=user_id)
             return e, evidence, v
         except Exception as exc:
             # Managed-agents fatal errors (terminated session, fatal
@@ -117,6 +129,7 @@ async def run_benefit_scan(
     profile: ContextProfile,
     catalog: list[Entitlement],
     user_id: str = "anonymous",
+    force_local: bool = False,
 ) -> BenefitReport:
     started = time.perf_counter()
 
@@ -146,7 +159,10 @@ async def run_benefit_scan(
 
     sem = asyncio.Semaphore(settings.scan_concurrency)
     results = await asyncio.gather(
-        *[_verify_one(e, profile, ev, sem, user_id) for e, ev in triggered]
+        *[
+            _verify_one(e, profile, ev, sem, user_id, force_local)
+            for e, ev in triggered
+        ]
     )
 
     benefits: list[Benefit] = []

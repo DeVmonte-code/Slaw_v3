@@ -26,7 +26,7 @@ from ..schemas import (
     UserRecord,
 )
 from ..seeding.embedder import get_embedder
-from .chat import answer_follow_up
+from .chat import UnknownBenefitError, answer_follow_up
 
 logging.basicConfig(
     level=getattr(logging, settings.log_level.upper(), logging.INFO),
@@ -320,6 +320,13 @@ async def chat(req: ChatRequest) -> ChatResponse:
             req.message, req.benefit_id, user_id=req.user_id
         )
         return ChatResponse(answer=answer, agent_provenance=provenance)
+    except UnknownBenefitError as exc:
+        # Explicit 4xx for stale/typoed benefit_id — keeps the
+        # MCP-grounding gate intact while giving the operator a
+        # actionable error instead of an opaque 500.
+        raise HTTPException(
+            status_code=404, detail=f"unknown benefit_id: {exc}"
+        ) from exc
     except Exception as exc:
         logger.exception("chat failed: %s", type(exc).__name__)
         raise HTTPException(status_code=500, detail="Internal error") from exc

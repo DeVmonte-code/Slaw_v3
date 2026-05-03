@@ -16,6 +16,14 @@ from ..engine.agent_runner import (
 from ..engine.retrieval import retrieve_for_citation
 from ..schemas import AgentProvenance
 
+
+class UnknownBenefitError(ValueError):
+    """Raised when /chat receives a ``benefit_id`` not in the catalog.
+
+    Mapped to HTTP 404 by the API layer so callers get an explicit
+    client error instead of an opaque 500.
+    """
+
 logger = logging.getLogger(__name__)
 
 _anthropic = AsyncAnthropic(api_key=settings.anthropic_api_key)
@@ -101,12 +109,13 @@ async def answer_follow_up(
     # call would not register as agent_backed in the audit. The bare
     # benefit_id + user message is the smallest payload that lets the
     # agent decide which MCP tool to invoke.
+    if benefit_id is not None:
+        ent = next((e for e in load_catalog() if e.id == benefit_id), None)
+        if ent is None:
+            raise UnknownBenefitError(benefit_id)
+    else:
+        ent = None
     if settings.use_managed_agents:
-        ent = (
-            next((e for e in load_catalog() if e.id == benefit_id), None)
-            if benefit_id
-            else None
-        )
         cit_hint = (
             f"\nCited article hint: SR {ent.source_citations[0].sr_number} "
             f"Art. {ent.source_citations[0].article}"
@@ -155,23 +164,21 @@ async def answer_follow_up(
     # the structured ``claude_call`` log line carries it via the
     # ``site`` field below so per-user audit grep works in both modes.
     _ = user_id
-    if benefit_id:
-        ent = next((e for e in load_catalog() if e.id == benefit_id), None)
-        if ent:
-            chunks = await asyncio.to_thread(
-                retrieve_for_citation,
-                ent.source_citations[0],
-                ent.title.en,
-                # No profile context in the chat endpoint — fall back to
-                # federal-only ("CH"). Cantonal follow-up chat would need
-                # the same canton plumbing as /scan.
-                "CH",
-            )
-            context = (
-                f"Entitlement: {ent.title.en}\n\n"
-                f"Relevant article text:\n"
-                + "\n\n".join(c.text for c in chunks)
-            )
+    if ent is not None:
+        chunks = await asyncio.to_thread(
+            retrieve_for_citation,
+            ent.source_citations[0],
+            ent.title.en,
+            # No profile context in the chat endpoint — fall back to
+            # federal-only ("CH"). Cantonal follow-up chat would need
+            # the same canton plumbing as /scan.
+            "CH",
+        )
+        context = (
+            f"Entitlement: {ent.title.en}\n\n"
+            f"Relevant article text:\n"
+            + "\n\n".join(c.text for c in chunks)
+        )
 
     payload = f"{context}\n\nUser question: {message}"
     # Provenance is propagated to the caller (and into the /chat
