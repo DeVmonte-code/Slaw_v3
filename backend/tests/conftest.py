@@ -11,6 +11,7 @@ patch `retrieve_for_citation`, and the live-secrets-gated tests in
 test_api.py / test_scan.py / test_retrieval.py read QDRANT_URL directly to
 decide whether to skip themselves.
 """
+
 from __future__ import annotations
 
 import os

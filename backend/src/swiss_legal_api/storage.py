@@ -30,6 +30,7 @@ Test injection:
   drops the connection so the next call rebuilds the schema from
   scratch.
 """
+
 from __future__ import annotations
 
 import json
@@ -162,9 +163,7 @@ def _txn() -> Iterator[sqlite3.Connection]:
 # ----- Users --------------------------------------------------------------
 
 
-def upsert_user(
-    user_id: str, profile: ContextProfile, notify_enabled: bool
-) -> UserRecord:
+def upsert_user(user_id: str, profile: ContextProfile, notify_enabled: bool) -> UserRecord:
     """Idempotent profile upsert.
 
     First write creates the row with ``created_at = last_seen_at = now``.
@@ -192,9 +191,7 @@ def upsert_user(
 
 
 def get_user(user_id: str) -> UserRecord | None:
-    row = _get_conn().execute(
-        "SELECT * FROM users WHERE user_id = ?", (user_id,)
-    ).fetchone()
+    row = _get_conn().execute("SELECT * FROM users WHERE user_id = ?", (user_id,)).fetchone()
     if row is None:
         return None
     return _row_to_user(row)
@@ -235,14 +232,18 @@ def insert_scan(user_id: str, report: BenefitReport) -> None:
 
 
 def latest_scan(user_id: str) -> BenefitReport | None:
-    row = _get_conn().execute(
-        """
+    row = (
+        _get_conn()
+        .execute(
+            """
         SELECT report_json FROM scan_results
         WHERE user_id = ?
         ORDER BY scan_at DESC LIMIT 1
         """,
-        (user_id,),
-    ).fetchone()
+            (user_id,),
+        )
+        .fetchone()
+    )
     if row is None:
         return None
     return BenefitReport.model_validate_json(row["report_json"])
@@ -259,9 +260,7 @@ def iter_all_scans() -> Iterator[BenefitReport]:
     Streams via ``cursor.fetchone()`` so a large history doesn't
     materialise the full result set in memory.
     """
-    cur = _get_conn().execute(
-        "SELECT report_json FROM scan_results ORDER BY scan_at ASC"
-    )
+    cur = _get_conn().execute("SELECT report_json FROM scan_results ORDER BY scan_at ASC")
     while True:
         row = cur.fetchone()
         if row is None:
@@ -321,9 +320,7 @@ def insert_alert(alert: Alert) -> bool:
         return bool(cur.rowcount)
 
 
-def list_alerts(
-    user_id: str, *, unread_only: bool = False, limit: int = 100
-) -> list[Alert]:
+def list_alerts(user_id: str, *, unread_only: bool = False, limit: int = 100) -> list[Alert]:
     sql = "SELECT * FROM alerts WHERE user_id = ?"
     params: list[Any] = [user_id]
     if unread_only:
@@ -339,10 +336,14 @@ def alert_exists(user_id: str, alert_id: str) -> bool:
 
     Used by the read endpoint to distinguish "404 — not your alert"
     from "204 — already read / now read"."""
-    row = _get_conn().execute(
-        "SELECT 1 FROM alerts WHERE alert_id = ? AND user_id = ?",
-        (alert_id, user_id),
-    ).fetchone()
+    row = (
+        _get_conn()
+        .execute(
+            "SELECT 1 FROM alerts WHERE alert_id = ? AND user_id = ?",
+            (alert_id, user_id),
+        )
+        .fetchone()
+    )
     return row is not None
 
 

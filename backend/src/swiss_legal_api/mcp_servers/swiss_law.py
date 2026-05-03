@@ -18,6 +18,7 @@ Why read-only: this server is the agent's authoritative-source
 gateway. Permission policy on the agent is ``always_allow`` — there is
 no write surface, so silent execution is safe and auditable.
 """
+
 from __future__ import annotations
 
 from typing import Any
@@ -56,17 +57,13 @@ def qdrant_search(
             "text": c.text,
             "language": c.language,
             "score": round(c.score, 3),
-            "effective_date": c.effective_date.isoformat()
-            if c.effective_date
-            else None,
+            "effective_date": c.effective_date.isoformat() if c.effective_date else None,
         }
         for c in chunks
     ]
 
 
-def fetch_article_by_sr(
-    sr_number: str, article: str, canton: str = "CH"
-) -> list[dict[str, Any]]:
+def fetch_article_by_sr(sr_number: str, article: str, canton: str = "CH") -> list[dict[str, Any]]:
     """Exact-match retrieval — same callable, empty query string."""
     return qdrant_search("", sr_number, article, canton)
 
@@ -77,10 +74,7 @@ def list_citations(entitlement_id: str) -> list[dict[str, str]]:
     ent = cat.get(entitlement_id)
     if ent is None:
         return []
-    return [
-        {"sr_number": c.sr_number, "article": c.article}
-        for c in ent.source_citations
-    ]
+    return [{"sr_number": c.sr_number, "article": c.article} for c in ent.source_citations]
 
 
 SERVER = McpServerSpec(

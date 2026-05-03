@@ -29,6 +29,7 @@ chunker), then split into article+paragraph rows with
 ("aufgehoben" / "abrogated" markers anywhere in the article body flag
 every paragraph as repealed).
 """
+
 from __future__ import annotations
 
 import io
@@ -129,9 +130,7 @@ class _BSGActParser(HTMLParser):
             return
         text = " ".join("".join(self._buf).split())
         if self._cur_article and self._cur_paragraph and text:
-            self._article_buffer.append(
-                (self._cur_article, self._cur_paragraph, text)
-            )
+            self._article_buffer.append((self._cur_article, self._cur_paragraph, text))
         self._buf = []
         self._in_para = False
 
@@ -166,7 +165,7 @@ def parse_articles(
 ) -> list[CantonalArticleRecord]:
     """Parse one BSG act page into per-paragraph records.
 
-    The compilation ID is the BSG number (e.g. ``"661.11"`` for the
+    The compilation ID is the BSG number (e.g. ``"271.1"`` for the
     Mietverfahrensverordnung). Articles flagged ``aufgehoben`` surface
     with ``repealed_date=9999-12-31`` (same convention as ZH-Lex).
     """
@@ -226,7 +225,8 @@ def ingest(
                     # log + skip is better than partial corpus loss.
                     logger.exception(
                         "bsg_pdf_parse_failed compilation=%s url=%s",
-                        spec.compilation_id, spec.url,
+                        spec.compilation_id,
+                        spec.url,
                     )
                 continue
             out.extend(
@@ -436,9 +436,7 @@ def parse_index(html: str, *, base_url: str = BSG_INDEX_URL) -> list[_BEArticleS
     p = _BSGIndexParser()
     p.feed(html)
     p.close()
-    return [
-        replace(spec, url=urljoin(base_url, spec.url)) for spec in p.entries
-    ]
+    return [replace(spec, url=urljoin(base_url, spec.url)) for spec in p.entries]
 
 
 def discover_specs(

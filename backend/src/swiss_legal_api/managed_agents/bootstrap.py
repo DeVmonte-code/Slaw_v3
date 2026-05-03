@@ -15,6 +15,7 @@ The system prompt below preserves the citation contract and the FADP
 rules from ``engine/verify.py:SYSTEM`` so the managed-agents path
 ships with the same legal posture as the messages.create baseline.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -101,9 +102,7 @@ def _agent_payload() -> dict[str, Any]:
             {
                 "type": "mcp_toolset",
                 "mcp_server_name": "swiss-law-retrieval-mcp",
-                "default_config": {
-                    "permission_policy": {"type": "always_allow"}
-                },
+                "default_config": {"permission_policy": {"type": "always_allow"}},
             }
         )
     if settings.mcp_contract_tools_url:
@@ -118,9 +117,7 @@ def _agent_payload() -> dict[str, Any]:
             {
                 "type": "mcp_toolset",
                 "mcp_server_name": "swiss-contract-tools-mcp",
-                "default_config": {
-                    "permission_policy": {"type": "always_ask"}
-                },
+                "default_config": {"permission_policy": {"type": "always_ask"}},
             }
         )
     if settings.mcp_user_context_url:
@@ -135,9 +132,7 @@ def _agent_payload() -> dict[str, Any]:
             {
                 "type": "mcp_toolset",
                 "mcp_server_name": "swiss-user-context-mcp",
-                "default_config": {
-                    "permission_policy": {"type": "always_ask"}
-                },
+                "default_config": {"permission_policy": {"type": "always_ask"}},
             }
         )
     return {
@@ -206,9 +201,7 @@ def _vault_payload() -> dict[str, Any]:
 def _vault_payload_safe_for_logging() -> dict[str, Any]:
     """Same as :func:`_vault_payload` but redacts credential values."""
     payload = _vault_payload()
-    payload["credentials"] = [
-        {**c, "value": "***REDACTED***"} for c in payload["credentials"]
-    ]
+    payload["credentials"] = [{**c, "value": "***REDACTED***"} for c in payload["credentials"]]
     return payload
 
 
@@ -302,13 +295,9 @@ def bootstrap(
         return {}
 
     if not settings.anthropic_api_key:
-        raise RuntimeError(
-            "ANTHROPIC_API_KEY is unset; bootstrap requires Anthropic credentials."
-        )
+        raise RuntimeError("ANTHROPIC_API_KEY is unset; bootstrap requires Anthropic credentials.")
 
-    with httpx.Client(
-        base_url=settings.anthropic_api_base, timeout=60.0
-    ) as client:
+    with httpx.Client(base_url=settings.anthropic_api_base, timeout=60.0) as client:
         # Agent: create or update-by-version. We don't try to look up
         # an existing agent by name (the API doesn't expose a
         # name-search) — the .env's MANAGED_AGENT_ID is the sole
@@ -327,9 +316,7 @@ def bootstrap(
         if settings.managed_environment_id:
             env = {"id": settings.managed_environment_id}
         else:
-            r = client.post(
-                "/v1/environments", json=env_body, headers=_headers()
-            )
+            r = client.post("/v1/environments", json=env_body, headers=_headers())
             r.raise_for_status()
             env = r.json()
 

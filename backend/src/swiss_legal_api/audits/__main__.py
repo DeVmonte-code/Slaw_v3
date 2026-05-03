@@ -3,6 +3,7 @@
 Mirrors the admin endpoint's filter set so an operator can run the
 audit from cron with the same arguments the HTTP caller would use.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -22,10 +23,7 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument(
         "--since",
         default=None,
-        help=(
-            "ISO-8601 timestamp; only reports generated at or after "
-            "this instant are counted."
-        ),
+        help=("ISO-8601 timestamp; only reports generated at or after this instant are counted."),
     )
     p.add_argument(
         "--entitlement-id",
@@ -44,10 +42,7 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument(
         "--details",
         action="store_true",
-        help=(
-            "Include the full per-verification provenance list under "
-            "'records'."
-        ),
+        help=("Include the full per-verification provenance list under 'records'."),
     )
     args = parser.parse_args(argv)
     if args.cmd == "agent_backed":

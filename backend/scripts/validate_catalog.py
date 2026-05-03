@@ -10,6 +10,7 @@ hard gate. Run from `backend/`:
 
     python scripts/validate_catalog.py
 """
+
 from __future__ import annotations
 
 import json
@@ -23,7 +24,7 @@ from typing import get_args
 _BACKEND_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(_BACKEND_ROOT / "src"))
 
-from swiss_legal_api.schemas import ContextProfile, Entitlement  # noqa: E402
+from swiss_legal_api.schemas import ContextProfile, Entitlement
 from swiss_legal_api.schemas.context_profile import LifeEventKind
 from swiss_legal_api.schemas.trigger_dsl import (
     All,
@@ -109,8 +110,7 @@ def main() -> int:
         return 1
 
     print(
-        f"OK: validated {len(data)} entitlements, "
-        f"all trigger field paths exist on ContextProfile."
+        f"OK: validated {len(data)} entitlements, all trigger field paths exist on ContextProfile."
     )
     return 0
 

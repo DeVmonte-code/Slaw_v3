@@ -5,13 +5,42 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 Canton = Literal[
-    "AG", "AI", "AR", "BE", "BL", "BS", "FR", "GE", "GL", "GR", "JU", "LU",
-    "NE", "NW", "OW", "SG", "SH", "SO", "SZ", "TG", "TI", "UR", "VD", "VS", "ZG", "ZH",
+    "AG",
+    "AI",
+    "AR",
+    "BE",
+    "BL",
+    "BS",
+    "FR",
+    "GE",
+    "GL",
+    "GR",
+    "JU",
+    "LU",
+    "NE",
+    "NW",
+    "OW",
+    "SG",
+    "SH",
+    "SO",
+    "SZ",
+    "TG",
+    "TI",
+    "UR",
+    "VD",
+    "VS",
+    "ZG",
+    "ZH",
 ]
 Language = Literal["de", "fr", "it", "en"]
 EmploymentStatus = Literal[
-    "employee_full_time", "employee_part_time", "self_employed",
-    "business_owner", "unemployed", "student", "retired",
+    "employee_full_time",
+    "employee_part_time",
+    "self_employed",
+    "business_owner",
+    "unemployed",
+    "student",
+    "retired",
 ]
 HousingStatus = Literal["tenant", "owner", "living_with_family"]
 MaritalStatus = Literal["single", "married", "registered_partnership", "divorced", "widowed"]
@@ -24,8 +53,15 @@ BusinessActivity = Literal["none", "freelance", "sole_proprietor", "gmbh", "ag"]
 PermitType = Literal["none", "B", "C", "L", "F", "N", "S", "G", "Ci"]
 NationalityStatus = Literal["swiss", "eu_efta", "third_country"]
 LifeEventKind = Literal[
-    "moved_canton", "had_child", "got_married", "got_divorced",
-    "lost_job", "started_business", "started_studies", "bought_property", "retired",
+    "moved_canton",
+    "had_child",
+    "got_married",
+    "got_divorced",
+    "lost_job",
+    "started_business",
+    "started_studies",
+    "bought_property",
+    "retired",
 ]
 
 

@@ -16,6 +16,7 @@ Adapters MUST emit deterministic output so the snapshot file is
 byte-stable across re-runs (downstream UUID5 IDs depend on stable
 ordering for human review).
 """
+
 from __future__ import annotations
 
 import json
@@ -103,9 +104,7 @@ def sort_records(records: Iterable[CantonalArticleRecord]) -> list[CantonalArtic
     return sorted(records, key=key)
 
 
-def write_snapshot(
-    records: Iterable[CantonalArticleRecord], path: Path
-) -> int:
+def write_snapshot(records: Iterable[CantonalArticleRecord], path: Path) -> int:
     """Serialise sorted records to JSON, returning the row count.
 
     Output shape is identical to ``law_articles.fedlex.json`` so the

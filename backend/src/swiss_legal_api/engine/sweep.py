@@ -22,6 +22,7 @@ Determinism contract:
 * The classifier sorts alerts by ``(kind, entitlement_id)`` before
   returning so test fixtures don't have to depend on dict ordering.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -69,9 +70,7 @@ def _value_changed(prev: Benefit, curr: Benefit) -> bool:
     )
 
 
-def _citations_changed(
-    prev: Benefit, curr: Benefit
-) -> bool:
+def _citations_changed(prev: Benefit, curr: Benefit) -> bool:
     """Two benefits cite different SR/articles for their primary basis.
 
     We compare the *set* of (sr_number, article) tuples — not the
@@ -116,21 +115,15 @@ def _make_alert(
     changed_citations: list[str] | None = None,
     fedlex_amendment_date: str | None = None,
 ) -> Alert:
-    aid = uuid.uuid5(
-        _ALERT_NAMESPACE, f"{user_id}|{scan_at}|{kind}|{benefit.entitlement_id}"
-    )
+    aid = uuid.uuid5(_ALERT_NAMESPACE, f"{user_id}|{scan_at}|{kind}|{benefit.entitlement_id}")
     payload = AlertPayload(
         entitlement_id=benefit.entitlement_id,
         title=benefit.title,
         category=benefit.category,
         estimated_value_chf_min=benefit.estimated_value_chf.min,
         estimated_value_chf_max=benefit.estimated_value_chf.max,
-        previous_estimated_value_chf_min=(
-            previous_value[0] if previous_value else None
-        ),
-        previous_estimated_value_chf_max=(
-            previous_value[1] if previous_value else None
-        ),
+        previous_estimated_value_chf_min=(previous_value[0] if previous_value else None),
+        previous_estimated_value_chf_max=(previous_value[1] if previous_value else None),
         changed_citations=changed_citations or [],
         fedlex_amendment_date=fedlex_amendment_date,
     )
@@ -170,9 +163,7 @@ def classify_diff(
     """
     changed: dict[tuple[str, str], str | None] = changed_articles or {}
     curr_by_id = {_benefit_key(b): b for b in current.benefits}
-    prev_by_id = (
-        {_benefit_key(b): b for b in previous.benefits} if previous else {}
-    )
+    prev_by_id = {_benefit_key(b): b for b in previous.benefits} if previous else {}
 
     alerts: list[Alert] = []
 
@@ -189,11 +180,7 @@ def classify_diff(
             continue
         prev_b = prev_by_id[eid]
         cited_changes, amendment_date = _benefit_cites_changed(benefit, changed)
-        if (
-            _value_changed(prev_b, benefit)
-            or _citations_changed(prev_b, benefit)
-            or cited_changes
-        ):
+        if _value_changed(prev_b, benefit) or _citations_changed(prev_b, benefit) or cited_changes:
             alerts.append(
                 _make_alert(
                     user_id=user_id,
@@ -288,9 +275,7 @@ def fedlex_changed_articles(
         cur_rows = json.loads(cur_p.read_text())
         prev_rows = json.loads(prev_p.read_text())
     except (OSError, json.JSONDecodeError) as exc:
-        logger.warning(
-            "fedlex_diff_unreadable cur=%s prev=%s err=%s", cur_p, prev_p, exc
-        )
+        logger.warning("fedlex_diff_unreadable cur=%s prev=%s err=%s", cur_p, prev_p, exc)
         return {}
     cur_idx, cur_dates = _index_snapshot(cur_rows)
     prev_idx, prev_dates = _index_snapshot(prev_rows)
@@ -305,9 +290,7 @@ def fedlex_changed_articles(
     return changed
 
 
-def promote_fedlex_snapshot(
-    current_path: str | Path, previous_path: str | Path
-) -> None:
+def promote_fedlex_snapshot(current_path: str | Path, previous_path: str | Path) -> None:
     """Copy the current snapshot over the previous-snapshot slot.
 
     Called *after* a successful sweep so the next run only sees deltas
@@ -358,11 +341,12 @@ async def sweep_one_user(
         except Exception as exc:
             logger.exception(
                 "sweep_alert_insert_failed user_id=%s alert_id=%s err=%s",
-                user.user_id, a.alert_id, type(exc).__name__,
+                user.user_id,
+                a.alert_id,
+                type(exc).__name__,
             )
     logger.info(
-        "sweep_user_done user_id=%s benefits=%d new_alerts=%d "
-        "previous=%s changed_articles=%d",
+        "sweep_user_done user_id=%s benefits=%d new_alerts=%d previous=%s changed_articles=%d",
         user.user_id,
         len(report.benefits),
         len(inserted),
@@ -393,11 +377,7 @@ async def sweep_all_users(
     assert on it without re-querying storage.
     """
     cur_path = Path(fedlex_current) if fedlex_current else _default_fedlex_current()
-    prev_path = (
-        Path(fedlex_previous)
-        if fedlex_previous
-        else _default_fedlex_previous()
-    )
+    prev_path = Path(fedlex_previous) if fedlex_previous else _default_fedlex_previous()
     changed = fedlex_changed_articles(cur_path, prev_path)
 
     users = storage.list_users(only_notify_enabled=True)
@@ -406,14 +386,18 @@ async def sweep_all_users(
     for u in users:
         try:
             _, inserted = await sweep_one_user(
-                u, catalog, scan_fn=scan_fn, changed_articles=changed,
+                u,
+                catalog,
+                scan_fn=scan_fn,
+                changed_articles=changed,
             )
             total_alerts += len(inserted)
         except Exception as exc:
             failures += 1
             logger.exception(
                 "sweep_user_failed user_id=%s err=%s",
-                u.user_id, type(exc).__name__,
+                u.user_id,
+                type(exc).__name__,
             )
 
     if failures == 0:
@@ -451,9 +435,7 @@ def sweep_all_users_sync(
 
 
 def _default_fedlex_current() -> Path:
-    return (
-        Path(__file__).resolve().parents[3] / "seed" / "law_articles.fedlex.json"
-    )
+    return Path(__file__).resolve().parents[3] / "seed" / "law_articles.fedlex.json"
 
 
 def _default_fedlex_previous() -> Path:

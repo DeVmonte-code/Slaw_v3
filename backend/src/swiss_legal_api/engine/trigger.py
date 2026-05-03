@@ -97,9 +97,7 @@ def evaluate_trigger(expr: TriggerExpr, profile: ContextProfile) -> EvalResult:
         f, (lo, hi) = expr.between
         ev = _record(f, profile)
         x = ev["value"]
-        return EvalResult(
-            matched=isinstance(x, (int, float)) and lo <= x <= hi, evidence=[ev]
-        )
+        return EvalResult(matched=isinstance(x, (int, float)) and lo <= x <= hi, evidence=[ev])
     if isinstance(expr, Exists):
         ev = _record(expr.exists, profile)
         return EvalResult(matched=ev["value"] is not None, evidence=[ev])

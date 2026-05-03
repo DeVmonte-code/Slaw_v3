@@ -64,9 +64,7 @@ def _normalize_date(value: Any) -> str | None:
     try:
         date.fromisoformat(s)
     except ValueError as exc:
-        raise ValueError(
-            f"date must be 'YYYY-MM-DD' or ISO datetime, got {s!r}"
-        ) from exc
+        raise ValueError(f"date must be 'YYYY-MM-DD' or ISO datetime, got {s!r}") from exc
     return f"{s}T00:00:00Z"
 
 
@@ -124,9 +122,8 @@ def _load_articles(explicit: str | None) -> tuple[list[dict[str, Any]], list[Pat
     Returns (records, source_paths) so the CLI can log which files actually
     contributed.
     """
-    def _drop_placeholders(
-        records: list[dict[str, Any]], origin: str
-    ) -> list[dict[str, Any]]:
+
+    def _drop_placeholders(records: list[dict[str, Any]], origin: str) -> list[dict[str, Any]]:
         # Defensive: even an explicit --source could be the bootstrap manual
         # file, which historically carries placeholder rows for articles
         # awaiting Fedlex backfill. We strip them here so the seeder never
@@ -140,10 +137,7 @@ def _load_articles(explicit: str | None) -> tuple[list[dict[str, Any]], list[Pat
                 continue
             kept.append(r)
         if dropped:
-            print(
-                f"Skipped {dropped} placeholder rows from {origin} "
-                f"(awaiting Fedlex backfill)"
-            )
+            print(f"Skipped {dropped} placeholder rows from {origin} (awaiting Fedlex backfill)")
         return kept
 
     if explicit:
@@ -174,9 +168,7 @@ def _load_articles(explicit: str | None) -> tuple[list[dict[str, Any]], list[Pat
         sources.append(fedlex)
         if manual.exists():
             covered = {_coverage_key(r) for r in fedlex_records}
-            manual_records = _drop_placeholders(
-                json.loads(manual.read_text()), str(manual)
-            )
+            manual_records = _drop_placeholders(json.loads(manual.read_text()), str(manual))
             fallback = [r for r in manual_records if _coverage_key(r) not in covered]
             records = fedlex_records + fallback
             sources.append(manual)
@@ -192,9 +184,7 @@ def _load_articles(explicit: str | None) -> tuple[list[dict[str, Any]], list[Pat
     return records, sources
 
 
-def _reconcile_stale_points(
-    client: QdrantClient, collection: str, fresh_ids: set[str]
-) -> int:
+def _reconcile_stale_points(client: QdrantClient, collection: str, fresh_ids: set[str]) -> int:
     """Delete points whose IDs are not in ``fresh_ids``.
 
     Two reasons this matters:
@@ -229,7 +219,7 @@ def _reconcile_stale_points(
         for start in range(0, len(stale), BATCH):
             client.delete(
                 collection_name=collection,
-                points_selector=qmodels.PointIdsList(points=stale[start:start + BATCH]),
+                points_selector=qmodels.PointIdsList(points=stale[start : start + BATCH]),
                 wait=True,
             )
     return len(stale)
@@ -338,16 +328,14 @@ def main(argv: list[str] | None = None) -> int:
     for start in range(0, len(points), BATCH):
         client.upsert(
             collection_name=settings.qdrant_collection,
-            points=points[start:start + BATCH],
+            points=points[start : start + BATCH],
             wait=True,
         )
     print(f"Seeded {len(points)} articles into {settings.qdrant_collection}")
 
     if not args.no_reconcile:
         fresh_ids = {str(p.id) for p in points}
-        deleted = _reconcile_stale_points(
-            client, settings.qdrant_collection, fresh_ids
-        )
+        deleted = _reconcile_stale_points(client, settings.qdrant_collection, fresh_ids)
         if deleted:
             print(f"Reconciled {deleted} stale points (legacy IDs / dropped articles)")
 

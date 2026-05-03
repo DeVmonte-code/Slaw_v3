@@ -15,6 +15,7 @@ Task #26 will flip the call sites to managed agents; this task locks
 the contract and emits the structured ``claude_call`` log so the
 managed-agents migration can be proven (not asserted) end-to-end.
 """
+
 from __future__ import annotations
 
 from typing import Literal
@@ -141,6 +142,7 @@ class AgentProvenance(BaseModel):
         ``claude_call`` get the same field set whether the source is
         ``engine.verify``, ``api.chat``, or any future call site.
         """
+
         def _opt(v: object) -> str:
             return "" if v is None else str(v)
 

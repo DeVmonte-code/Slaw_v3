@@ -29,6 +29,7 @@ parsers are pure-string-in / records-out so the offline tests use
 literal HTML fixtures and ``ingest()``/``discover_specs`` are exercised
 against ``respx``-stubbed endpoints in the live runbook only.
 """
+
 from __future__ import annotations
 
 from collections.abc import Iterable
@@ -119,7 +120,7 @@ class _ZHActParser(HTMLParser):
         """``"art-27"`` -> ``"27"``. Defensive: returns None on garbage."""
         if not raw_id.startswith("art-"):
             return None
-        return raw_id[len("art-"):].strip() or None
+        return raw_id[len("art-") :].strip() or None
 
     def _flush(self) -> None:
         if not self._in_abs:
@@ -264,9 +265,7 @@ def parse_index(html: str, *, base_url: str = ZHLEX_INDEX_URL) -> list[_ZHArticl
     p = _ZHIndexParser()
     p.feed(html)
     p.close()
-    return [
-        replace(spec, url=urljoin(base_url, spec.url)) for spec in p.entries
-    ]
+    return [replace(spec, url=urljoin(base_url, spec.url)) for spec in p.entries]
 
 
 def discover_specs(

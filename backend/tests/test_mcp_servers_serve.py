@@ -15,6 +15,7 @@ Confirms that:
 These tests stay free of network IO and Anthropic credentials so they
 run on every commit, not just deploy-day smoke runs.
 """
+
 from __future__ import annotations
 
 import pytest
@@ -37,9 +38,7 @@ def test_app_mounts_three_mcp_servers_at_stable_prefixes() -> None:
     # which is the failure mode a missing ``app.mount`` would create.
     mounted_paths = {r.path for r in app.routes if hasattr(r, "path")}
     for prefix in mounts:
-        assert prefix in mounted_paths, (
-            f"FastAPI app missing MCP mount {prefix!r}"
-        )
+        assert prefix in mounted_paths, f"FastAPI app missing MCP mount {prefix!r}"
 
 
 def test_mcp_base_url_derives_per_server_urls() -> None:
@@ -120,9 +119,7 @@ async def test_user_context_server_invokes_read_user_docs() -> None:
     layer smoke test for this server.
     """
     fmcp = build_fastmcp(user_context.SERVER)
-    content, _structured = await fmcp.call_tool(
-        "read_user_docs", {"user_id": "__unknown_user__"}
-    )
+    content, _structured = await fmcp.call_tool("read_user_docs", {"user_id": "__unknown_user__"})
     # ``None`` returns are surfaced as a single text block "null"; we
     # don't bind to the exact wrapping, just to "tool ran and returned
     # the missing-user signal".

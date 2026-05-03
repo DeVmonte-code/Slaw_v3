@@ -11,6 +11,7 @@ Acceptance criteria mapped to tests (from task #21):
   * "repealed-article detection"         -> test_*_marks_repealed
   * "idempotent re-ingestion"            -> test_write_snapshot_is_deterministic
 """
+
 from __future__ import annotations
 
 import json
@@ -118,10 +119,10 @@ def test_zh_ingest_drives_parser_over_specs():
 
 def test_be_extracts_articles_and_paragraphs():
     records = bern_bsg.parse_articles(
-        _load("be_bsg_661_11.html"),
-        compilation_id="661.11",
+        _load("be_bsg_271_1.html"),
+        compilation_id="271.1",
         language="de",
-        source_url="https://www.belex.sites.be.ch/data/661.11/de",
+        source_url="https://www.belex.sites.be.ch/data/271.1/de",
         effective_date="1996-01-01",
     )
     by_key = {(r.article, r.paragraph): r for r in records}
@@ -133,22 +134,22 @@ def test_be_extracts_articles_and_paragraphs():
 
 def test_be_tags_canton_and_compilation():
     records = bern_bsg.parse_articles(
-        _load("be_bsg_661_11.html"),
-        compilation_id="661.11",
+        _load("be_bsg_271_1.html"),
+        compilation_id="271.1",
         language="de",
-        source_url="https://www.belex.sites.be.ch/data/661.11/de",
+        source_url="https://www.belex.sites.be.ch/data/271.1/de",
         effective_date="1996-01-01",
     )
     assert all(r.canton == "BE" for r in records)
-    assert all(r.compilation_id == "661.11" for r in records)
+    assert all(r.compilation_id == "271.1" for r in records)
 
 
 def test_be_marks_repealed_articles():
     records = bern_bsg.parse_articles(
-        _load("be_bsg_661_11.html"),
-        compilation_id="661.11",
+        _load("be_bsg_271_1.html"),
+        compilation_id="271.1",
         language="de",
-        source_url="https://www.belex.sites.be.ch/data/661.11/de",
+        source_url="https://www.belex.sites.be.ch/data/271.1/de",
         effective_date="1996-01-01",
     )
     art42 = [r for r in records if r.article == "42"]
@@ -199,7 +200,7 @@ def test_be_ingest_routes_pdf_entries_through_pdf_parser():
 def test_be_ingest_swallows_corrupt_pdf_without_aborting_run(caplog):
     """A malformed PDF is logged + skipped; subsequent specs still ingest."""
     url_bad = "https://www.belex.sites.be.ch/data/broken.pdf"
-    url_good = "https://www.belex.sites.be.ch/data/661.11/de"
+    url_good = "https://www.belex.sites.be.ch/data/271.1/de"
     respx.get(url_bad).mock(
         return_value=httpx.Response(
             200,
@@ -210,7 +211,7 @@ def test_be_ingest_swallows_corrupt_pdf_without_aborting_run(caplog):
     respx.get(url_good).mock(
         return_value=httpx.Response(
             200,
-            text=(FIXTURES / "be_bsg_661_11.html").read_text(),
+            text=(FIXTURES / "be_bsg_271_1.html").read_text(),
             headers={"content-type": "text/html; charset=utf-8"},
         )
     )
@@ -220,12 +221,16 @@ def test_be_ingest_swallows_corrupt_pdf_without_aborting_run(caplog):
             records = bern_bsg.ingest(
                 [
                     bern_bsg.ArticleSpec(
-                        url=url_bad, compilation_id="999.99",
-                        language="de", effective_date="1985-01-01",
+                        url=url_bad,
+                        compilation_id="999.99",
+                        language="de",
+                        effective_date="1985-01-01",
                     ),
                     bern_bsg.ArticleSpec(
-                        url=url_good, compilation_id="661.11",
-                        language="de", effective_date="1996-01-01",
+                        url=url_good,
+                        compilation_id="271.1",
+                        language="de",
+                        effective_date="1996-01-01",
                     ),
                 ],
                 client=client,
@@ -234,7 +239,7 @@ def test_be_ingest_swallows_corrupt_pdf_without_aborting_run(caplog):
         client.close()
     assert any("bsg_pdf_parse_failed" in r.message for r in caplog.records)
     # Subsequent HTML spec must still produce records.
-    assert any(r.compilation_id == "661.11" for r in records)
+    assert any(r.compilation_id == "271.1" for r in records)
 
 
 # ----- Geneva (RSG) --------------------------------------------------------
@@ -304,10 +309,10 @@ def test_write_snapshot_is_deterministic(tmp_path):
         effective_date="2005-08-22",
     )
     be = bern_bsg.parse_articles(
-        _load("be_bsg_661_11.html"),
-        compilation_id="661.11",
+        _load("be_bsg_271_1.html"),
+        compilation_id="271.1",
         language="de",
-        source_url="https://www.belex.sites.be.ch/data/661.11/de",
+        source_url="https://www.belex.sites.be.ch/data/271.1/de",
         effective_date="1996-01-01",
     )
     ge = geneva_rs.parse_articles(
@@ -329,8 +334,15 @@ def test_write_snapshot_is_deterministic(tmp_path):
     payload = json.loads(out1.read_text())
     # Required schema columns for downstream Qdrant ingestion.
     required = {
-        "eli_uri", "sr_number", "article", "paragraph", "language",
-        "text", "canton", "effective_date", "repealed_date",
+        "eli_uri",
+        "sr_number",
+        "article",
+        "paragraph",
+        "language",
+        "text",
+        "canton",
+        "effective_date",
+        "repealed_date",
     }
     for row in payload:
         assert required.issubset(row.keys()), f"missing keys: {required - row.keys()}"
@@ -346,9 +358,7 @@ def test_zh_index_discovers_in_force_acts_only():
     html = (FIXTURES / "zh_lex_index.html").read_text()
     specs = zurich_ls.parse_index(html)
     ordnrs = {s.compilation_id for s in specs}
-    assert ordnrs == {"412.31", "170.1"}, (
-        "repealed entries must be excluded; got " + repr(ordnrs)
-    )
+    assert ordnrs == {"412.31", "170.1"}, "repealed entries must be excluded; got " + repr(ordnrs)
     spec = next(s for s in specs if s.compilation_id == "412.31")
     assert spec.url.endswith("Ordnr=412.31")
     assert spec.effective_date == "2005-08-22"
@@ -362,8 +372,8 @@ def test_be_index_marks_pdf_entries():
     html = (FIXTURES / "be_bsg_index.html").read_text()
     specs = bern_bsg.parse_index(html)
     by_bsg = {s.compilation_id: s for s in specs}
-    assert set(by_bsg) == {"661.11", "155.21"}, "repealed entries excluded"
-    assert by_bsg["661.11"].is_pdf is False
+    assert set(by_bsg) == {"271.1", "155.21"}, "repealed entries excluded"
+    assert by_bsg["271.1"].is_pdf is False
     assert by_bsg["155.21"].is_pdf is True
     assert by_bsg["155.21"].url.endswith(".pdf")
 
@@ -373,9 +383,7 @@ def test_ge_odata_feed_discovers_in_force_acts_only():
     xml = (FIXTURES / "ge_rsg_odata.xml").read_text()
     specs = geneva_rs.parse_odata_feed(xml)
     ids = {s.compilation_id for s in specs}
-    assert ids == {"A2.05", "E5.05"}, (
-        "abrogated entries must be excluded; got " + repr(ids)
-    )
+    assert ids == {"A2.05", "E5.05"}, "abrogated entries must be excluded; got " + repr(ids)
     a205 = next(s for s in specs if s.compilation_id == "A2.05")
     assert a205.url.startswith("https://www.lexfind.ch/")
     assert a205.language == "fr"
@@ -398,9 +406,7 @@ def test_ge_html_index_discovers_in_force_acts_only():
     html = (FIXTURES / "ge_rsg_html_index.html").read_text()
     specs = geneva_rs.parse_html_index(html)
     ids = {s.compilation_id for s in specs}
-    assert ids == {"A2.05", "E5.05"}, (
-        "abrogated entries must be excluded; got " + repr(ids)
-    )
+    assert ids == {"A2.05", "E5.05"}, "abrogated entries must be excluded; got " + repr(ids)
     a205 = next(s for s in specs if s.compilation_id == "A2.05")
     assert a205.url.startswith("https://www.lexfind.ch/")
     assert a205.language == "fr"
@@ -454,9 +460,9 @@ def test_bern_parse_pdf_text_splits_articles_and_paragraphs():
     """
     records = bern_bsg.parse_pdf_text(
         _BSG_PDF_TEXT,
-        compilation_id="661.11",
+        compilation_id="271.1",
         language="de",
-        source_url="https://www.belex.sites.be.ch/data/661.11/de.pdf",
+        source_url="https://www.belex.sites.be.ch/data/271.1/de.pdf",
         effective_date="1996-01-01",
     )
     by_key = {(r.article, r.paragraph): r for r in records}
@@ -482,7 +488,7 @@ Art. 6
 """
     records = bern_bsg.parse_pdf_text(
         text,
-        compilation_id="661.11",
+        compilation_id="271.1",
         language="de",
         source_url="https://x",
         effective_date="1996-01-01",
@@ -502,7 +508,7 @@ def test_bern_extract_pdf_text_round_trip():
     pdf_bytes = _build_test_pdf("Art. 11\n1 Das Verfahren ist kostenlos.")
     records = bern_bsg.parse_pdf_articles(
         pdf_bytes,
-        compilation_id="661.11",
+        compilation_id="271.1",
         language="de",
         source_url="https://x.pdf",
         effective_date="1996-01-01",
@@ -535,10 +541,8 @@ def _build_test_pdf(text: str) -> bytes:
     content = (
         "BT\n"
         "/F1 12 Tf\n"
-        "14 TL\n"            # leading (line height) for T*
-        "50 750 Td\n"
-        + "\n".join(show_ops)
-        + "\nET\n"
+        "14 TL\n"  # leading (line height) for T*
+        "50 750 Td\n" + "\n".join(show_ops) + "\nET\n"
     ).encode("latin-1")
 
     objects: list[bytes] = []
@@ -553,8 +557,7 @@ def _build_test_pdf(text: str) -> bytes:
         b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] "
         b"/Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>"
     )
-    add(b"<< /Length " + str(len(content)).encode()
-        + b" >>\nstream\n" + content + b"endstream")
+    add(b"<< /Length " + str(len(content)).encode() + b" >>\nstream\n" + content + b"endstream")
     add(b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>")
 
     parts: list[bytes] = [b"%PDF-1.4\n%\xe2\xe3\xcf\xd3\n"]
@@ -563,12 +566,12 @@ def _build_test_pdf(text: str) -> bytes:
         offsets.append(sum(len(p) for p in parts))
         parts.append(f"{i} 0 obj\n".encode() + body + b"\nendobj\n")
     xref_pos = sum(len(p) for p in parts)
-    xref = [f"xref\n0 {len(objects)+1}\n", "0000000000 65535 f \n"]
+    xref = [f"xref\n0 {len(objects) + 1}\n", "0000000000 65535 f \n"]
     for off in offsets:
         xref.append(f"{off:010d} 00000 n \n")
     parts.append("".join(xref).encode())
     parts.append(
-        f"trailer\n<< /Size {len(objects)+1} /Root 1 0 R >>\n"
+        f"trailer\n<< /Size {len(objects) + 1} /Root 1 0 R >>\n"
         f"startxref\n{xref_pos}\n%%EOF\n".encode()
     )
     return b"".join(parts)
@@ -640,8 +643,7 @@ def test_be_repeal_marker_after_paragraphs_still_flags_article():
     art50 = [r for r in records if r.article == "50"]
     assert len(art50) == 2  # both paragraphs survived
     assert all(r.repealed_date == "9999-12-31" for r in art50), (
-        "every paragraph in a retroactively-repealed article must inherit "
-        "the repeal flag"
+        "every paragraph in a retroactively-repealed article must inherit the repeal flag"
     )
 
 
@@ -691,27 +693,57 @@ def test_seeder_load_articles_auto_merges_cantonal(tmp_path, monkeypatch):
     manual = seed_dir / "law_articles.json"
     cantonal = seed_dir / "law_articles.cantonal.json"
 
-    fedlex.write_text(_json.dumps([{
-        "sr_number": "220", "article": "1", "paragraph": "1",
-        "language": "de", "text": "Federal text.", "canton": "CH",
-        "effective_date": "1912-01-01", "repealed_date": None,
-    }]))
-    manual.write_text(_json.dumps([{
-        "sr_number": "220", "article": "1", "paragraph": "1",
-        "language": "de", "text": "manual fallback (should be skipped)",
-        "canton": "CH", "effective_date": "1912-01-01", "repealed_date": None,
-    }]))
-    cantonal.write_text(_json.dumps([{
-        "sr_number": "661.11", "article": "11", "paragraph": "3",
-        "language": "de", "text": "Das Verfahren ist kostenlos.",
-        "canton": "BE", "effective_date": "1996-01-01",
-        "repealed_date": None,
-        "eli_uri": "cantonal:BE:661.11",
-    }]))
-
-    fake_module = (
-        tmp_path / "src" / "swiss_legal_api" / "seeding" / "seed_qdrant.py"
+    fedlex.write_text(
+        _json.dumps(
+            [
+                {
+                    "sr_number": "220",
+                    "article": "1",
+                    "paragraph": "1",
+                    "language": "de",
+                    "text": "Federal text.",
+                    "canton": "CH",
+                    "effective_date": "1912-01-01",
+                    "repealed_date": None,
+                }
+            ]
+        )
     )
+    manual.write_text(
+        _json.dumps(
+            [
+                {
+                    "sr_number": "220",
+                    "article": "1",
+                    "paragraph": "1",
+                    "language": "de",
+                    "text": "manual fallback (should be skipped)",
+                    "canton": "CH",
+                    "effective_date": "1912-01-01",
+                    "repealed_date": None,
+                }
+            ]
+        )
+    )
+    cantonal.write_text(
+        _json.dumps(
+            [
+                {
+                    "sr_number": "271.1",
+                    "article": "11",
+                    "paragraph": "3",
+                    "language": "de",
+                    "text": "Das Verfahren ist kostenlos.",
+                    "canton": "BE",
+                    "effective_date": "1996-01-01",
+                    "repealed_date": None,
+                    "eli_uri": "cantonal:BE:271.1",
+                }
+            ]
+        )
+    )
+
+    fake_module = tmp_path / "src" / "swiss_legal_api" / "seeding" / "seed_qdrant.py"
     fake_module.parent.mkdir(parents=True)
     fake_module.touch()
     monkeypatch.setattr(seed_qdrant, "__file__", str(fake_module))

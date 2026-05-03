@@ -16,12 +16,21 @@ class TitleI18n(BaseModel):
 
 
 Category = Literal[
-    "tax_deduction", "tenancy_right", "employment_right", "family_benefit",
-    "business_subsidy", "social_security", "consumer_protection",
+    "tax_deduction",
+    "tenancy_right",
+    "employment_right",
+    "family_benefit",
+    "business_subsidy",
+    "social_security",
+    "consumer_protection",
 ]
 RequiredAction = Literal[
-    "claim_letter_to_landlord", "tax_declaration_field", "employer_request",
-    "cantonal_application", "federal_application", "consultation_with_lawyer",
+    "claim_letter_to_landlord",
+    "tax_declaration_field",
+    "employer_request",
+    "cantonal_application",
+    "federal_application",
+    "consultation_with_lawyer",
 ]
 ValuePer = Literal["year", "one_time", "month"]
 

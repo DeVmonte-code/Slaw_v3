@@ -15,6 +15,7 @@ inline curated list — useful for smoke runs when the canton's index is
 briefly unreachable, or when a contributor only wants to refresh one
 act for a fix-forward.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -45,8 +46,8 @@ ZH_STARTER_SPECS = [
 ]
 BE_STARTER_SPECS = [
     bern_bsg.ArticleSpec(
-        url="https://www.belex.sites.be.ch/data/661.11/de",
-        compilation_id="661.11",  # Mietverfahrensverordnung
+        url="https://www.belex.sites.be.ch/data/271.1/de",
+        compilation_id="271.1",  # Mietverfahrensverordnung
         language="de",
         effective_date="1996-01-01",
     ),
@@ -74,8 +75,7 @@ def _split_csv(raw: str) -> list[str]:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="python -m swiss_legal_api.ingest.cantonal",
-        description="Ingest cantonal-law articles from the per-canton "
-        "Systematic Compilations.",
+        description="Ingest cantonal-law articles from the per-canton Systematic Compilations.",
     )
     parser.add_argument(
         "--canton",
@@ -114,8 +114,7 @@ def main(argv: list[str] | None = None) -> int:
     unknown = [c for c in cantons if c not in ADAPTERS]
     if unknown:
         print(
-            f"Unknown canton(s): {', '.join(unknown)}. "
-            f"Available: {', '.join(sorted(ADAPTERS))}",
+            f"Unknown canton(s): {', '.join(unknown)}. Available: {', '.join(sorted(ADAPTERS))}",
             file=sys.stderr,
         )
         return 1
@@ -143,8 +142,9 @@ def main(argv: list[str] | None = None) -> int:
                     # reduced corpus. Exit 2 distinguishes this from
                     # argparse's exit 1 (unknown canton).
                     logger.error(
-                        "%s: discovery failed (%s) and --strict-discovery "
-                        "is set — aborting", canton, exc,
+                        "%s: discovery failed (%s) and --strict-discovery is set — aborting",
+                        canton,
+                        exc,
                     )
                     return 2
                 # Discovery failure must not silently shrink the corpus.
@@ -153,7 +153,8 @@ def main(argv: list[str] | None = None) -> int:
                 # attention.
                 logger.warning(
                     "%s: discovery failed (%s) — falling back to starter specs",
-                    canton, exc,
+                    canton,
+                    exc,
                 )
                 specs = starter_specs
         records = adapter.ingest(specs)

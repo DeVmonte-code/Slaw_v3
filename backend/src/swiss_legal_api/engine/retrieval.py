@@ -54,9 +54,7 @@ def _to_dt_utc(d: date) -> datetime:
     return datetime(d.year, d.month, d.day, tzinfo=UTC)
 
 
-def _build_query_filter(
-    citation: Citation, profile_canton: str, today: date
-) -> qmodels.Filter:
+def _build_query_filter(citation: Citation, profile_canton: str, today: date) -> qmodels.Filter:
     """Build the Qdrant filter that gates retrieval on the four guardrails:
 
     - sr_number match (exact)
@@ -118,9 +116,7 @@ def retrieve_for_citation(
     `caller_context` is appended to the telemetry line (the verifier passes
     `entitlement_id=...` so a single log row is enough to debug a refusal).
     """
-    threshold = (
-        score_threshold if score_threshold is not None else settings.score_threshold
-    )
+    threshold = score_threshold if score_threshold is not None else settings.score_threshold
     today = today or _today_utc()
 
     vec = embed_query(f"{citation.article} {extra_query}")
@@ -173,8 +169,7 @@ def retrieve_for_citation(
         )
         top_score = float(probe.points[0].score) if probe.points else 0.0
         logger.info(
-            "retrieval_below_threshold sr=%s art=%s canton=%s "
-            "top_score=%.3f threshold=%.3f%s",
+            "retrieval_below_threshold sr=%s art=%s canton=%s top_score=%.3f threshold=%.3f%s",
             citation.sr_number,
             citation.article,
             profile_canton,
@@ -239,9 +234,7 @@ def retrieve_supporting_context(
     try:
         vec = embed_query(query)
     except Exception as exc:
-        logger.warning(
-            "curriculum_embed_failed exc=%s; returning []", type(exc).__name__
-        )
+        logger.warning("curriculum_embed_failed exc=%s; returning []", type(exc).__name__)
         return []
 
     flt: qmodels.Filter | None = None
@@ -283,19 +276,9 @@ def retrieve_supporting_context(
                 text=str(payload.get("text", "")),
                 score=float(r.score),
                 source_doc=str(payload.get("source_doc", "")),
-                chapter=(
-                    str(payload["chapter"])
-                    if payload.get("chapter")
-                    else None
-                ),
-                section=(
-                    str(payload["section"])
-                    if payload.get("section")
-                    else None
-                ),
-                page=(
-                    int(payload["page"]) if payload.get("page") is not None else None
-                ),
+                chapter=(str(payload["chapter"]) if payload.get("chapter") else None),
+                section=(str(payload["section"]) if payload.get("section") else None),
+                page=(int(payload["page"]) if payload.get("page") is not None else None),
             )
         )
     return out

@@ -15,6 +15,7 @@ Kept dependency-free of FastAPI so the CLI (``python -m
 swiss_legal_api.audits agent_backed``) can run from cron without
 booting the HTTP app.
 """
+
 from __future__ import annotations
 
 import logging
@@ -71,9 +72,7 @@ def _iter_records(
                 "generated_at": report.generated_at,
                 "confidence": b.confidence,
                 "agent_provenance": (
-                    b.agent_provenance.model_dump()
-                    if b.agent_provenance is not None
-                    else None
+                    b.agent_provenance.model_dump() if b.agent_provenance is not None else None
                 ),
             }
 
@@ -154,11 +153,7 @@ def agent_backed_summary(
       per-verification provenance list under ``records``. Costs O(N)
       bytes; off by default so the headline call stays cheap.
     """
-    records = list(
-        _iter_records(
-            since=since, entitlement_id=entitlement_id, job_id=job_id
-        )
-    )
+    records = list(_iter_records(since=since, entitlement_id=entitlement_id, job_id=job_id))
     out = _aggregate(records)
     out["filter"] = {
         "since": since,

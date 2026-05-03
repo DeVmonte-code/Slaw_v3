@@ -21,7 +21,6 @@ import pytest
 from swiss_legal_api.api import main as main_mod
 from swiss_legal_api.engine import scan as scan_mod
 
-
 # --------------------------------------------------------------------------- #
 # _safe_url_host                                                              #
 # --------------------------------------------------------------------------- #
@@ -139,9 +138,7 @@ async def test_probe_one_mcp_reachable_on_4xx() -> None:
 
     transport = httpx.MockTransport(handler)
     async with httpx.AsyncClient(transport=transport) as client:
-        result = await main_mod._probe_one_mcp(
-            client, "https://mcp.example.com/mcp/swiss-law"
-        )
+        result = await main_mod._probe_one_mcp(client, "https://mcp.example.com/mcp/swiss-law")
     assert result["status"] == "reachable"
     assert result["http_status"] == 405
     assert result["host"] == "https://mcp.example.com"
@@ -303,7 +300,7 @@ def test_safe_url_host_handles_malformed_urls_without_leaking() -> None:
 
 
 @pytest.fixture
-def readyz_client(monkeypatch: pytest.MonkeyPatch) -> "Any":
+def readyz_client(monkeypatch: pytest.MonkeyPatch) -> Any:
     """ASGI test client wired with stub Qdrant + stub MCP probe.
 
     /readyz needs the embedder/Qdrant collection check to pass before

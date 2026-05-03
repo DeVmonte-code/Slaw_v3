@@ -9,7 +9,9 @@ from swiss_legal_api.schemas import Citation
 @pytest.mark.skipif(not os.getenv("QDRANT_URL"), reason="no QDRANT_URL set")
 def test_retrieve_known_article():
     cit = Citation(
-        sr_number="220", article="270a", language="en",
+        sr_number="220",
+        article="270a",
+        language="en",
         quote_under_15_words="The tenant may contest the level.",
     )
     chunks = retrieve_for_citation(cit, "rent reduction")

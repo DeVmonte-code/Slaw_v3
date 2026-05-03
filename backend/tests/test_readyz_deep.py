@@ -25,9 +25,7 @@ from swiss_legal_api.api.main import _probe_primary_collection, app
 from swiss_legal_api.config import settings
 
 
-def _fake_qdrant_client_factory(
-    *, collections: list[str], counts: dict[str, int] | None = None
-):
+def _fake_qdrant_client_factory(*, collections: list[str], counts: dict[str, int] | None = None):
     """Build a no-network qdrant_client() stand-in.
 
     `collections` controls which collections appear in get_collections().
@@ -40,9 +38,7 @@ def _fake_qdrant_client_factory(
 
     class _Client:
         def get_collections(self):
-            return SimpleNamespace(
-                collections=[SimpleNamespace(name=n) for n in collections]
-            )
+            return SimpleNamespace(collections=[SimpleNamespace(name=n) for n in collections])
 
         def count(self, collection_name: str, exact: bool = True):
             if collection_name not in counts:

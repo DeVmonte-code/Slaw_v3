@@ -25,6 +25,7 @@ scan / tort (these trigger Claude calls and Qdrant reads); the pure
 helpers (evaluate_trigger, classify_diff, score_confidence) are
 ``always_allow`` since they're side-effect free.
 """
+
 from __future__ import annotations
 
 from typing import Any
@@ -139,9 +140,7 @@ async def analyze_tort_tool(
     }
 
 
-def evaluate_trigger_tool(
-    trigger_expr: dict[str, Any], profile: dict[str, Any]
-) -> dict[str, Any]:
+def evaluate_trigger_tool(trigger_expr: dict[str, Any], profile: dict[str, Any]) -> dict[str, Any]:
     """MCP wrapper around :func:`engine.trigger.evaluate_trigger`."""
     ctx = ContextProfile.model_validate(profile)
     expr: TriggerExpr = _TRIGGER_ADAPTER.validate_python(trigger_expr)
@@ -156,9 +155,7 @@ def classify_diff_tool(
     changed_articles: list[dict[str, Any]] | None = None,
 ) -> list[dict[str, Any]]:
     """MCP wrapper around :func:`engine.sweep.classify_diff`."""
-    prev_report = (
-        BenefitReport.model_validate(previous) if previous is not None else None
-    )
+    prev_report = BenefitReport.model_validate(previous) if previous is not None else None
     curr_report = BenefitReport.model_validate(current)
     changes: dict[tuple[str, str], str | None] = {}
     for entry in changed_articles or []:
@@ -174,9 +171,7 @@ def classify_diff_tool(
     return [a.model_dump(mode="json") for a in alerts]
 
 
-def score_confidence_tool(
-    raw_confidence: float, translation_only: bool = False
-) -> dict[str, Any]:
+def score_confidence_tool(raw_confidence: float, translation_only: bool = False) -> dict[str, Any]:
     """Apply the server-side translation-only confidence cap.
 
     Returns ``{"confidence": float, "capped": bool}`` so the agent can

@@ -13,6 +13,7 @@ focus on the audit contract:
   rather than returning silent zeros.
 - Missing bootstrap IDs raise ``ManagedAgentsConfigError``.
 """
+
 from __future__ import annotations
 
 import json
@@ -302,9 +303,7 @@ async def test_retryable_session_error_raises_retryable_exception() -> None:
         ]
     )
     with pytest.raises(agent_runner.RetryableManagedAgentsError):
-        await agent_runner.run_session(
-            "transient", site="engine.verify:retry", transport=transport
-        )
+        await agent_runner.run_session("transient", site="engine.verify:retry", transport=transport)
 
 
 async def test_managed_verify_refuses_when_no_mcp_tool_invoked(
@@ -346,19 +345,15 @@ async def test_managed_verify_refuses_when_no_mcp_tool_invoked(
         ]
     )
 
-    async def fake_run_session(
-        user_message: str, *, site: str = "engine.verify", transport=None
-    ):
-        return await agent_runner.run_session(
-            user_message, site=site, transport=transport_real
-        )
+    async def fake_run_session(user_message: str, *, site: str = "engine.verify", transport=None):
+        return await agent_runner.run_session(user_message, site=site, transport=transport_real)
 
     transport_real = transport
     monkeypatch.setattr(
         verify_mod,
         "_call_claude",
-        lambda content, *, site="engine.verify", user_id="anonymous": (
-            agent_runner.run_session(content, site=site, transport=transport_real)
+        lambda content, *, site="engine.verify", user_id="anonymous": agent_runner.run_session(
+            content, site=site, transport=transport_real
         ),
     )
 
@@ -412,9 +407,7 @@ async def test_stream_opens_before_user_message_is_sent() -> None:
         return httpx.Response(404)
 
     transport = httpx.MockTransport(handler)
-    await agent_runner.run_session(
-        "race check", site="engine.verify:race", transport=transport
-    )
+    await agent_runner.run_session("race check", site="engine.verify:race", transport=transport)
     # The ready barrier guarantees stream is opened before events POST.
     assert order == ["create", "stream", "events"], order
 

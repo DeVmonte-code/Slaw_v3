@@ -4,6 +4,7 @@ These exercise ``_load_articles`` and ``_coverage_key`` directly, without
 touching Qdrant — the actual upsert path is integration-tested via the
 smoke gate.
 """
+
 from __future__ import annotations
 
 import json
@@ -125,9 +126,7 @@ def test_load_articles_strips_placeholder_sentinels(tmp_path, monkeypatch, capsy
     assert "Skipped 1 placeholder rows" in out
 
 
-def test_load_articles_strips_placeholders_from_merge_fallback(
-    tmp_path, monkeypatch, capsys
-):
+def test_load_articles_strips_placeholders_from_merge_fallback(tmp_path, monkeypatch, capsys):
     """Critical correctness case: when Fedlex is missing an act and the
     manual row for that act still carries the sentinel, the merge must not
     reintroduce the placeholder into the corpus."""

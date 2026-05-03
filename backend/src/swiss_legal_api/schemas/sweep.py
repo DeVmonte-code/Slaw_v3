@@ -17,6 +17,7 @@ referenced scan ages out of the per-user retention window; (2) GONE
 alerts have no current Benefit to point at, so the payload must be
 self-contained anyway.
 """
+
 from __future__ import annotations
 
 from typing import Literal

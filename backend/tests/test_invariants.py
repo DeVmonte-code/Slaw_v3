@@ -5,6 +5,7 @@ Loads each persona fixture and asserts that the trigger evaluation phase
 that permit + nationality combination. Catches catalog regressions without
 needing live Anthropic / Qdrant access.
 """
+
 from __future__ import annotations
 
 import json
@@ -63,37 +64,43 @@ def test_unemployment_requires_swiss_or_residency_permit() -> None:
     catalog = load_catalog()
     unemp = next(e for e in catalog if e.id == "unemployment_insurance_entitlement")
 
-    swiss_unemployed = ContextProfile.model_validate({
-        "canton": "ZH",
-        "employment_status": "unemployed",
-        "housing_status": "tenant",
-        "marital_status": "single",
-        "income_band_chf": "lt_30k",
-        "nationality_status": "swiss",
-        "permit_type": "none",
-    })
+    swiss_unemployed = ContextProfile.model_validate(
+        {
+            "canton": "ZH",
+            "employment_status": "unemployed",
+            "housing_status": "tenant",
+            "marital_status": "single",
+            "income_band_chf": "lt_30k",
+            "nationality_status": "swiss",
+            "permit_type": "none",
+        }
+    )
     assert evaluate_trigger(unemp.trigger, swiss_unemployed).matched is True
 
-    no_permit_unemployed = ContextProfile.model_validate({
-        "canton": "ZH",
-        "employment_status": "unemployed",
-        "housing_status": "tenant",
-        "marital_status": "single",
-        "income_band_chf": "lt_30k",
-        "nationality_status": "third_country",
-        "permit_type": "none",
-    })
+    no_permit_unemployed = ContextProfile.model_validate(
+        {
+            "canton": "ZH",
+            "employment_status": "unemployed",
+            "housing_status": "tenant",
+            "marital_status": "single",
+            "income_band_chf": "lt_30k",
+            "nationality_status": "third_country",
+            "permit_type": "none",
+        }
+    )
     assert evaluate_trigger(unemp.trigger, no_permit_unemployed).matched is False
 
-    b_permit_unemployed = ContextProfile.model_validate({
-        "canton": "VD",
-        "employment_status": "unemployed",
-        "housing_status": "tenant",
-        "marital_status": "single",
-        "income_band_chf": "lt_30k",
-        "nationality_status": "eu_efta",
-        "permit_type": "B",
-    })
+    b_permit_unemployed = ContextProfile.model_validate(
+        {
+            "canton": "VD",
+            "employment_status": "unemployed",
+            "housing_status": "tenant",
+            "marital_status": "single",
+            "income_band_chf": "lt_30k",
+            "nationality_status": "eu_efta",
+            "permit_type": "B",
+        }
+    )
     assert evaluate_trigger(unemp.trigger, b_permit_unemployed).matched is True
 
 
@@ -101,14 +108,16 @@ def test_naturalisation_unknown_years_does_not_match() -> None:
     """years_in_switzerland=None must not satisfy the gte threshold."""
     catalog = load_catalog()
     nat = next(e for e in catalog if e.id == "naturalisation_eligibility")
-    profile = ContextProfile.model_validate({
-        "canton": "ZH",
-        "employment_status": "employee_full_time",
-        "housing_status": "tenant",
-        "marital_status": "single",
-        "income_band_chf": "80_120k",
-        "nationality_status": "third_country",
-        "permit_type": "C",
-        # years_in_switzerland deliberately omitted → defaults to None
-    })
+    profile = ContextProfile.model_validate(
+        {
+            "canton": "ZH",
+            "employment_status": "employee_full_time",
+            "housing_status": "tenant",
+            "marital_status": "single",
+            "income_band_chf": "80_120k",
+            "nationality_status": "third_country",
+            "permit_type": "C",
+            # years_in_switzerland deliberately omitted → defaults to None
+        }
+    )
     assert evaluate_trigger(nat.trigger, profile).matched is False

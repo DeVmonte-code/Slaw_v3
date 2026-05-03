@@ -29,6 +29,7 @@ CLI::
    python -m swiss_legal_api.ingest.fedlex \\
        --sr 220,642.11,141.0,142.20,837.0,831.40
 """
+
 from __future__ import annotations
 
 import argparse
@@ -177,7 +178,7 @@ class FedlexClient:
         return ActMetadata(
             sr_number=sr_number,
             act_uri=act_uri,
-            eli_path=act_uri[len(ACT_URI_PREFIX):],
+            eli_path=act_uri[len(ACT_URI_PREFIX) :],
             effective_date=eif,
             repealed_date=nolonger,
             realisations=realisations,
@@ -207,8 +208,7 @@ class FedlexClient:
                 continue
             content_type = resp.headers.get("content-type", "").lower()
             if not (
-                content_type.startswith("application/xml")
-                or content_type.startswith("text/xml")
+                content_type.startswith("application/xml") or content_type.startswith("text/xml")
             ):
                 continue
             text = resp.text
@@ -308,8 +308,7 @@ def parse_articles(
         # Filter to direct paragraphs of *this* article so nested articles
         # (rare but possible in transitional provisions) don't bleed across.
         paragraphs = [
-            p for p in art.iter(paragraph_tag)
-            if p.attrib.get("eId", "").startswith(prefix)
+            p for p in art.iter(paragraph_tag) if p.attrib.get("eId", "").startswith(prefix)
         ]
         if paragraphs:
             for para in paragraphs:
@@ -363,12 +362,11 @@ def _sort_records(records: Iterable[ArticleRecord]) -> list[ArticleRecord]:
             _split_numeric(r.paragraph),
             r.language,
         )
+
     return sorted(records, key=key)
 
 
-def _candidate_snapshot_dates(
-    requested: str, effective_date: str | None
-) -> list[str]:
+def _candidate_snapshot_dates(requested: str, effective_date: str | None) -> list[str]:
     """Generate ``YYYYMMDD`` candidates from the requested date back to the
     act's entry-into-force year.
 
@@ -439,9 +437,7 @@ def ingest(
                 used_date: str | None = None
                 for candidate_date in candidates:
                     try:
-                        xml = fedlex.fetch_consolidated_xml(
-                            meta.eli_path, candidate_date, lang
-                        )
+                        xml = fedlex.fetch_consolidated_xml(meta.eli_path, candidate_date, lang)
                         used_date = candidate_date
                         break
                     except FedlexNotFoundError:
@@ -449,13 +445,19 @@ def ingest(
                 if xml is None or used_date is None:
                     logger.warning(
                         "fedlex_xml_missing sr=%s lang=%s probed=%s..%s",
-                        sr, lang, candidates[0], candidates[-1],
+                        sr,
+                        lang,
+                        candidates[0],
+                        candidates[-1],
                     )
                     continue
                 if used_date != snapshot_date:
                     logger.info(
                         "fedlex_xml_fallback sr=%s lang=%s requested=%s using=%s",
-                        sr, lang, snapshot_date, used_date,
+                        sr,
+                        lang,
+                        snapshot_date,
+                        used_date,
                     )
                 out.extend(
                     parse_articles(
@@ -548,10 +550,7 @@ def main(argv: list[str] | None = None) -> int:
         by_lang[r.language] = by_lang.get(r.language, 0) + 1
         key = (r.sr_number, r.language)
         by_sr_lang[key] = by_sr_lang.get(key, 0) + 1
-    print(
-        f"Ingested {n} articles across {len(by_sr)} SRs, "
-        f"{len(by_lang)} languages -> {out_path}"
-    )
+    print(f"Ingested {n} articles across {len(by_sr)} SRs, {len(by_lang)} languages -> {out_path}")
     for sr in sr_numbers:
         articles = by_sr.get(sr, set())
         if not articles:
@@ -562,9 +561,7 @@ def main(argv: list[str] | None = None) -> int:
             for lang in languages
             if by_sr_lang.get((sr, lang), 0)
         )
-        print(
-            f"  SR {sr}: {len(articles)} distinct articles ({lang_breakdown})"
-        )
+        print(f"  SR {sr}: {len(articles)} distinct articles ({lang_breakdown})")
     return 0
 
 

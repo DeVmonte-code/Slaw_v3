@@ -11,6 +11,7 @@ Both tools delegate to ``swiss_legal_api.storage`` directly — the SSOT
 test asserts identity so a future schema migration in ``storage.py``
 propagates to the MCP path with no second copy to update.
 """
+
 from __future__ import annotations
 
 from typing import Any

@@ -4,6 +4,7 @@ Network calls to Fedlex are stubbed via ``respx`` so the suite can run
 without internet access. Two SPARQL fixtures and two minimal Akoma Ntoso
 XML fixtures live under ``tests/fixtures/fedlex/``.
 """
+
 from __future__ import annotations
 
 import json
@@ -211,8 +212,7 @@ def test_ingest_filters_languages_and_picks_highest_valid_n(fedlex_client):
     assert all(r.repealed_date is None for r in records)
     # eli_uri is the realisation URI without the snapshot date.
     assert all(
-        r.eli_uri == "https://fedlex.data.admin.ch/eli/cc/27/317_321_377/de"
-        for r in records
+        r.eli_uri == "https://fedlex.data.admin.ch/eli/cc/27/317_321_377/de" for r in records
     )
 
 
@@ -263,9 +263,7 @@ def test_ingest_snapshot_diff_repealed_propagates(fedlex_client, tmp_path):
 
     # Second run: SPARQL now reports a dateNoLongerInForce.
     respx.post(fedlex.SPARQL_ENDPOINT).mock(
-        return_value=httpx.Response(
-            200, json=_load_json("sparql_sr220_repealed.json")
-        )
+        return_value=httpx.Response(200, json=_load_json("sparql_sr220_repealed.json"))
     )
     records_b = fedlex.ingest(
         ["220"],
@@ -374,8 +372,15 @@ def test_write_snapshot_is_deterministic(fedlex_client, tmp_path):
     # Required schema columns for downstream Qdrant ingestion.
     assert payload, "snapshot must not be empty"
     required = {
-        "eli_uri", "sr_number", "article", "paragraph",
-        "language", "text", "canton", "effective_date", "repealed_date",
+        "eli_uri",
+        "sr_number",
+        "article",
+        "paragraph",
+        "language",
+        "text",
+        "canton",
+        "effective_date",
+        "repealed_date",
     }
     for row in payload:
         assert required <= row.keys()

@@ -17,6 +17,7 @@ All tests run offline. The sqlite store is forced to ``:memory:`` per
 test via the ``_isolated_storage`` autouse fixture so they're order-
 independent.
 """
+
 from __future__ import annotations
 
 import json
@@ -98,7 +99,9 @@ def _benefit(
 
 
 def _report(
-    benefits: list[Benefit], *, generated_at: str = "2026-05-02T10:00:00Z",
+    benefits: list[Benefit],
+    *,
+    generated_at: str = "2026-05-02T10:00:00Z",
 ) -> BenefitReport:
     return BenefitReport(
         generated_at=generated_at,
@@ -165,9 +168,7 @@ class TestClassifyDiff:
         assert classify_diff(user_id="u", previous=prev, current=curr) == []
 
     def test_gone_alert_when_entitlement_drops(self):
-        prev = _report(
-            [_benefit("a"), _benefit("b")], generated_at="2026-05-01T10:00:00Z"
-        )
+        prev = _report([_benefit("a"), _benefit("b")], generated_at="2026-05-01T10:00:00Z")
         curr = _report([_benefit("a")])
         alerts = classify_diff(user_id="u", previous=prev, current=curr)
         assert [(a.kind, a.entitlement_id) for a in alerts] == [("GONE", "b")]
@@ -217,15 +218,24 @@ class TestFedlexDiff:
     def test_text_change_detected(self, tmp_path: Path):
         prev = tmp_path / "p.json"
         curr = tmp_path / "c.json"
-        _write_snapshot(prev, [
-            {"sr_number": "220", "article": "270", "paragraph": "1", "text": "old"},
-        ])
-        _write_snapshot(curr, [
-            {
-                "sr_number": "220", "article": "270", "paragraph": "1",
-                "text": "new", "effective_date": "2026-03-01",
-            },
-        ])
+        _write_snapshot(
+            prev,
+            [
+                {"sr_number": "220", "article": "270", "paragraph": "1", "text": "old"},
+            ],
+        )
+        _write_snapshot(
+            curr,
+            [
+                {
+                    "sr_number": "220",
+                    "article": "270",
+                    "paragraph": "1",
+                    "text": "new",
+                    "effective_date": "2026-03-01",
+                },
+            ],
+        )
         assert fedlex_changed_articles(curr, prev) == {("220", "270"): "2026-03-01"}
 
     def test_paragraph_renumbering_with_same_text_ignored(self, tmp_path: Path):
@@ -235,25 +245,37 @@ class TestFedlexDiff:
         # storm on every Fedlex republication.
         prev = tmp_path / "p.json"
         curr = tmp_path / "c.json"
-        _write_snapshot(prev, [
-            {"sr_number": "220", "article": "270", "paragraph": "1", "text": "alpha"},
-            {"sr_number": "220", "article": "270", "paragraph": "2", "text": "bravo"},
-        ])
-        _write_snapshot(curr, [
-            {"sr_number": "220", "article": "270", "paragraph": "alt-2", "text": "bravo"},
-            {"sr_number": "220", "article": "270", "paragraph": "alt-1", "text": "alpha"},
-        ])
+        _write_snapshot(
+            prev,
+            [
+                {"sr_number": "220", "article": "270", "paragraph": "1", "text": "alpha"},
+                {"sr_number": "220", "article": "270", "paragraph": "2", "text": "bravo"},
+            ],
+        )
+        _write_snapshot(
+            curr,
+            [
+                {"sr_number": "220", "article": "270", "paragraph": "alt-2", "text": "bravo"},
+                {"sr_number": "220", "article": "270", "paragraph": "alt-1", "text": "alpha"},
+            ],
+        )
         assert fedlex_changed_articles(curr, prev) == {}
 
     def test_repeal_counted_as_change(self, tmp_path: Path):
         prev = tmp_path / "p.json"
         curr = tmp_path / "c.json"
-        _write_snapshot(prev, [
-            {
-                "sr_number": "220", "article": "270", "paragraph": "1",
-                "text": "x", "effective_date": "2020-01-01",
-            },
-        ])
+        _write_snapshot(
+            prev,
+            [
+                {
+                    "sr_number": "220",
+                    "article": "270",
+                    "paragraph": "1",
+                    "text": "x",
+                    "effective_date": "2020-01-01",
+                },
+            ],
+        )
         _write_snapshot(curr, [])
         # Repeal carries the previous snapshot's date so the UI can
         # still render "amended on YYYY-MM-DD" for the GONE case.
@@ -297,7 +319,7 @@ class TestStorage:
         storage.upsert_user("u1", _profile(), notify_enabled=True)
         for i in range(5):
             storage.insert_scan(
-                "u1", _report([_benefit("a")], generated_at=f"2026-05-0{i+1}T10:00:00Z")
+                "u1", _report([_benefit("a")], generated_at=f"2026-05-0{i + 1}T10:00:00Z")
             )
         deleted = storage.prune_scans("u1", keep=2)
         assert deleted == 3
@@ -357,14 +379,20 @@ async def test_sweep_all_users_end_to_end(tmp_path: Path):
     prev.write_text("[]")
 
     summary1 = await sweep_all_users(
-        catalog=[], scan_fn=stub_scan, fedlex_current=cur, fedlex_previous=prev,
+        catalog=[],
+        scan_fn=stub_scan,
+        fedlex_current=cur,
+        fedlex_previous=prev,
     )
     assert summary1["users"] == 1  # only u1 (notify-enabled)
     assert summary1["failures"] == 0
     assert summary1["alerts_inserted"] == 1  # NEW for "a"
 
     summary2 = await sweep_all_users(
-        catalog=[], scan_fn=stub_scan, fedlex_current=cur, fedlex_previous=prev,
+        catalog=[],
+        scan_fn=stub_scan,
+        fedlex_current=cur,
+        fedlex_previous=prev,
     )
     assert summary2["alerts_inserted"] == 1  # UPDATED
 
@@ -391,12 +419,18 @@ async def test_sweep_force_rescan_via_fedlex_change(tmp_path: Path):
     storage.insert_scan("u1", report)
     prev = tmp_path / "prev.json"
     cur = tmp_path / "cur.json"
-    _write_snapshot(prev, [
-        {"sr_number": "220", "article": "270", "paragraph": "1", "text": "old text"},
-    ])
-    _write_snapshot(cur, [
-        {"sr_number": "220", "article": "270", "paragraph": "1", "text": "AMENDED"},
-    ])
+    _write_snapshot(
+        prev,
+        [
+            {"sr_number": "220", "article": "270", "paragraph": "1", "text": "old text"},
+        ],
+    )
+    _write_snapshot(
+        cur,
+        [
+            {"sr_number": "220", "article": "270", "paragraph": "1", "text": "AMENDED"},
+        ],
+    )
 
     async def stub_scan(profile: ContextProfile, catalog: list[Entitlement]) -> BenefitReport:
         # Same shape but with a fresh generated_at so the storage key differs.
@@ -406,7 +440,10 @@ async def test_sweep_force_rescan_via_fedlex_change(tmp_path: Path):
         )
 
     summary = await sweep_all_users(
-        catalog=[], scan_fn=stub_scan, fedlex_current=cur, fedlex_previous=prev,
+        catalog=[],
+        scan_fn=stub_scan,
+        fedlex_current=cur,
+        fedlex_previous=prev,
     )
     assert summary["changed_articles"] == 1
     alerts = storage.list_alerts("u1")
@@ -438,7 +475,10 @@ async def test_sweep_does_not_promote_snapshot_when_a_user_fails(tmp_path: Path)
 
     pre_prev = prev.read_text()
     summary = await sweep_all_users(
-        catalog=[], scan_fn=stub_scan, fedlex_current=cur, fedlex_previous=prev,
+        catalog=[],
+        scan_fn=stub_scan,
+        fedlex_current=cur,
+        fedlex_previous=prev,
     )
     assert summary["failures"] == 1
     # Snapshot NOT promoted: next run still sees the same delta and can

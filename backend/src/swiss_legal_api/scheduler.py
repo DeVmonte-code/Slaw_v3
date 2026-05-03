@@ -19,6 +19,7 @@ Why ``BackgroundScheduler`` (not ``AsyncIOScheduler``):
   isn't responsible for the scheduler's tick — ``/scan`` latency stays
   unaffected by the nightly job.
 """
+
 from __future__ import annotations
 
 import logging
@@ -44,24 +45,32 @@ def _job() -> None:
         catalog = load_catalog()
 
         if settings.fedlex_refresh_enabled:
-            from datetime import datetime, UTC
+            from datetime import UTC, datetime
             from pathlib import Path
+
+            from .engine.sweep import _default_fedlex_current, promote_fedlex_snapshot
             from .ingest.fedlex import ingest, write_snapshot
-            from .engine.sweep import promote_fedlex_snapshot, _default_fedlex_current
 
             logger.info("Starting nightly fedlex refresh")
-            srs = {c.sr_number for e in catalog for c in e.source_citations if not getattr(c, "canton", None)}
-            
+            srs = {
+                c.sr_number
+                for e in catalog
+                for c in e.source_citations
+                if not getattr(c, "canton", None)
+            }
+
             try:
                 records = ingest(sorted(list(srs)))
-                
+
                 ts = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
-                snap_path = Path(__file__).resolve().parents[2] / "seed" / "snapshots" / f"fedlex_{ts}.json"
+                snap_path = (
+                    Path(__file__).resolve().parents[2] / "seed" / "snapshots" / f"fedlex_{ts}.json"
+                )
                 snap_path.parent.mkdir(parents=True, exist_ok=True)
-                
+
                 write_snapshot(records, snap_path)
                 promote_fedlex_snapshot(snap_path, _default_fedlex_current())
-                
+
                 logger.info("Fedlex refresh successful. Wrote snapshot to %s", snap_path)
             except Exception as exc:
                 logger.warning("fedlex_refresh_failed err=%s", type(exc).__name__)
@@ -99,7 +108,8 @@ def start() -> BackgroundScheduler | None:
     _scheduler = sched
     logger.info(
         "sweep_scheduler_started cron=%02d:%02d",
-        settings.sweep_cron_hour, settings.sweep_cron_minute,
+        settings.sweep_cron_hour,
+        settings.sweep_cron_minute,
     )
     return sched
 

@@ -32,6 +32,7 @@ Parser shape (OData feed) — Atom XML with ``ge:Act`` entries:
     ``<d:Language>``, ``<d:EffectiveDate>``, ``<d:Status>``,
     ``<d:HtmlUrl>``.
 """
+
 from __future__ import annotations
 
 import logging
@@ -165,9 +166,7 @@ class _RSGActParser(HTMLParser):
         """Move accumulated text from ``_buf`` into the article buffer."""
         text = " ".join("".join(self._buf).split())
         if self._cur_article and self._cur_paragraph and text:
-            self._article_buffer.append(
-                (self._cur_article, self._cur_paragraph, text)
-            )
+            self._article_buffer.append((self._cur_article, self._cur_paragraph, text))
         self._buf = []
         self._cur_paragraph = None
 
@@ -356,9 +355,7 @@ class _RSGHtmlIndexParser(HTMLParser):
         )
 
 
-def parse_html_index(
-    html: str, *, base_url: str = RSG_HTML_INDEX_URL
-) -> list[_GEArticleSpec]:
+def parse_html_index(html: str, *, base_url: str = RSG_HTML_INDEX_URL) -> list[_GEArticleSpec]:
     """Pure parser: ge.ch HTML RSG index -> list of in-force-act specs.
 
     Relative ``href`` values are resolved against ``base_url`` so the
@@ -367,9 +364,7 @@ def parse_html_index(
     p = _RSGHtmlIndexParser()
     p.feed(html)
     p.close()
-    return [
-        replace(spec, url=urljoin(base_url, spec.url)) for spec in p.entries
-    ]
+    return [replace(spec, url=urljoin(base_url, spec.url)) for spec in p.entries]
 
 
 def discover_specs(
@@ -397,7 +392,8 @@ def discover_specs(
         except (httpx.HTTPError, ET.ParseError) as exc:
             logger.warning(
                 "rsg_odata_unavailable url=%s err=%s — falling back to HTML index",
-                odata_url, exc,
+                odata_url,
+                exc,
             )
         resp = http.get(html_index_url)
         resp.raise_for_status()

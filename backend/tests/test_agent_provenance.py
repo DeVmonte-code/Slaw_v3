@@ -14,6 +14,7 @@ Two non-negotiable invariants:
      ``messages.create``); for Task #26 the same query will flip to
      ``agent_backed_pct > 0``.
 """
+
 from __future__ import annotations
 
 import json
@@ -397,6 +398,7 @@ def test_managed_agents_provenance_invariant() -> None:
     # matches the validator on consistent inputs, so Task #26 cannot
     # accidentally weaken the contract.
     import pydantic
+
     with pytest.raises(pydantic.ValidationError):
         AgentProvenance(
             call_kind="messages.create",
@@ -483,14 +485,10 @@ async def test_audit_filters_since_and_entitlement_id_with_drilldown(
 
     # ``since`` is parsed as a real datetime, so the same instant
     # expressed in a different ISO-8601 variant must match.
-    same_instant_offset = agent_backed_summary(
-        since="2026-04-10T00:00:00+00:00"
-    )
+    same_instant_offset = agent_backed_summary(since="2026-04-10T00:00:00+00:00")
     assert same_instant_offset["total_benefits"] == windowed["total_benefits"]
 
-    drill = agent_backed_summary(
-        entitlement_id="test_ent_prov", include_records=True
-    )
+    drill = agent_backed_summary(entitlement_id="test_ent_prov", include_records=True)
     assert drill["total_benefits"] == 2
     assert "records" in drill
     assert len(drill["records"]) == 2
@@ -665,15 +663,11 @@ def test_audit_aggregation_counts_sessions_events_with_tool_use_as_agent_backed(
     assert summary["by_call_kind"]["messages.create"] == 1
     assert summary["by_model"]["claude-managed-agent-vNext"] == 2
 
-    drill = agent_backed_summary(
-        entitlement_id="ent_a", include_records=True
-    )
+    drill = agent_backed_summary(entitlement_id="ent_a", include_records=True)
     assert drill["agent_backed"] == 1
     assert drill["records"][0]["agent_provenance"]["agent_backed"] is True
     assert drill["records"][0]["agent_provenance"]["tool_use_count"] == 2
-    assert drill["records"][0]["agent_provenance"]["mcp_servers_invoked"] == [
-        "legal_kb"
-    ]
+    assert drill["records"][0]["agent_provenance"]["mcp_servers_invoked"] == ["legal_kb"]
 
 
 def test_agent_backed_is_derived_truth_enforced_by_validator() -> None:

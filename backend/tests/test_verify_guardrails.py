@@ -14,6 +14,7 @@ Covers Task #18:
        transforms payload (language + effective_date), and probes once for
        telemetry when the above-threshold response is empty.
 """
+
 from __future__ import annotations
 
 import json
@@ -112,9 +113,7 @@ def test_filter_includes_repealed_date_clause() -> None:
 
     # And the effective_date <= today gate is in the top-level must clauses.
     eff_conds = [
-        m
-        for m in flt.must
-        if isinstance(m, qmodels.FieldCondition) and m.key == "effective_date"
+        m for m in flt.must if isinstance(m, qmodels.FieldCondition) and m.key == "effective_date"
     ]
     assert len(eff_conds) == 1
     assert eff_conds[0].range is not None
@@ -127,9 +126,7 @@ def test_filter_includes_canton_match_any() -> None:
     """(ii) The canton clause accepts {profile_canton, "CH"} only."""
     flt = _build_query_filter(_de_citation(), "ZH", date(2026, 5, 2))
     canton_conds = [
-        m
-        for m in flt.must
-        if isinstance(m, qmodels.FieldCondition) and m.key == "canton"
+        m for m in flt.must if isinstance(m, qmodels.FieldCondition) and m.key == "canton"
     ]
     assert len(canton_conds) == 1
     assert isinstance(canton_conds[0].match, qmodels.MatchAny)
@@ -141,9 +138,7 @@ async def test_subthreshold_short_circuits_without_claude_call(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """(iii) Empty retrieval → hard refusal, no Claude tokens spent."""
-    monkeypatch.setattr(
-        verify_mod, "retrieve_for_citation", lambda *a, **k: []
-    )
+    monkeypatch.setattr(verify_mod, "retrieve_for_citation", lambda *a, **k: [])
     sentinel = AsyncMock()
     monkeypatch.setattr(verify_mod, "_call_claude", sentinel)
 
@@ -243,9 +238,7 @@ async def test_translation_only_keeps_en_non_authoritative(
         language="en",
         effective_date=date(1912, 1, 1),
     )
-    monkeypatch.setattr(
-        verify_mod, "retrieve_for_citation", lambda *a, **k: [en_only]
-    )
+    monkeypatch.setattr(verify_mod, "retrieve_for_citation", lambda *a, **k: [en_only])
 
     captured: dict[str, str] = {}
 
@@ -304,9 +297,7 @@ async def test_translation_only_caps_confidence_server_side(
         language="en",
         effective_date=date(1912, 1, 1),
     )
-    monkeypatch.setattr(
-        verify_mod, "retrieve_for_citation", lambda *a, **k: [en_only]
-    )
+    monkeypatch.setattr(verify_mod, "retrieve_for_citation", lambda *a, **k: [en_only])
 
     async def _fake_call_claude(_user: str, *, site: str = "") -> tuple[str, AgentProvenance]:
         # Model misbehaves and returns 0.95 despite the prompt cap.
@@ -426,9 +417,7 @@ def test_retrieve_for_citation_probes_for_telemetry_on_empty(
         if "score_threshold" in kwargs and kwargs["score_threshold"] is not None:
             return SimpleNamespace(points=[])
         # Probe response: return one low-similarity point for telemetry.
-        return SimpleNamespace(
-            points=[SimpleNamespace(score=0.31, payload=None)]
-        )
+        return SimpleNamespace(points=[SimpleNamespace(score=0.31, payload=None)])
 
     monkeypatch.setattr(
         retrieval_mod, "_client", lambda: SimpleNamespace(query_points=stub_query_points)

@@ -3,6 +3,7 @@
 The frontend repo consumes this file via openapi-typescript to generate its
 TypeScript types. Run this script whenever the API surface changes.
 """
+
 from __future__ import annotations
 
 import json
@@ -11,7 +12,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from swiss_legal_api.api.main import app  # noqa: E402
+from swiss_legal_api.api.main import app
 
 
 def main() -> int:

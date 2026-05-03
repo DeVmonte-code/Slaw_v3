@@ -16,43 +16,53 @@ from swiss_legal_api.schemas.trigger_dsl import (
 
 @pytest.fixture
 def luis() -> ContextProfile:
-    return ContextProfile.model_validate({
-        "canton": "ZH",
-        "employment_status": "employee_full_time",
-        "employment_start_year": 2018,
-        "weekly_hours": 42,
-        "housing_status": "tenant",
-        "rental_start_year": 2018,
-        "lease_reference_rate_tracked": True,
-        "rent_chf_monthly": 2400,
-        "household_size": 4,
-        "children_count": 2,
-        "children_ages": [3, 6],
-        "marital_status": "married",
-        "income_band_chf": "120_200k",
-        "has_third_pillar": True,
-        "third_pillar_chf_this_year": 7056,
-        "commute_km_daily": 12,
-        "childcare_cost_chf_yearly": 18000,
-    })
+    return ContextProfile.model_validate(
+        {
+            "canton": "ZH",
+            "employment_status": "employee_full_time",
+            "employment_start_year": 2018,
+            "weekly_hours": 42,
+            "housing_status": "tenant",
+            "rental_start_year": 2018,
+            "lease_reference_rate_tracked": True,
+            "rent_chf_monthly": 2400,
+            "household_size": 4,
+            "children_count": 2,
+            "children_ages": [3, 6],
+            "marital_status": "married",
+            "income_band_chf": "120_200k",
+            "has_third_pillar": True,
+            "third_pillar_chf_this_year": 7056,
+            "commute_km_daily": 12,
+            "childcare_cost_chf_yearly": 18000,
+        }
+    )
 
 
 def test_rent_reduction_trigger_matches(luis: ContextProfile):
-    expr = All.model_validate({"all": [
-        {"eq": ["housing_status", "tenant"]},
-        {"lte": ["rental_start_year", 2022]},
-        {"eq": ["lease_reference_rate_tracked", True]},
-    ]})
+    expr = All.model_validate(
+        {
+            "all": [
+                {"eq": ["housing_status", "tenant"]},
+                {"lte": ["rental_start_year", 2022]},
+                {"eq": ["lease_reference_rate_tracked", True]},
+            ]
+        }
+    )
     r = evaluate_trigger(expr, luis)
     assert r.matched is True
     assert len(r.evidence) == 3
 
 
 def test_childcare_trigger_matches(luis: ContextProfile):
-    expr = All.model_validate({"all": [
-        {"gte": ["children_count", 1]},
-        {"gte": ["childcare_cost_chf_yearly", 1]},
-    ]})
+    expr = All.model_validate(
+        {
+            "all": [
+                {"gte": ["children_count", 1]},
+                {"gte": ["childcare_cost_chf_yearly", 1]},
+            ]
+        }
+    )
     assert evaluate_trigger(expr, luis).matched is True
 
 

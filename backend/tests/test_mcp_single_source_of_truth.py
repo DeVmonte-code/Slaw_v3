@@ -17,6 +17,7 @@ The second assertion is what catches a "copy-paste analyzer" mistake
 where someone re-implements verification logic inside the MCP module
 rather than re-exporting the engine function.
 """
+
 from __future__ import annotations
 
 from swiss_legal_api import storage
@@ -41,12 +42,8 @@ REQUIRED_CONTRACT_TOOLS = frozenset(
         "score_confidence",
     }
 )
-REQUIRED_RETRIEVAL_TOOLS = frozenset(
-    {"qdrant_search", "fetch_article_by_sr", "list_citations"}
-)
-REQUIRED_USER_CONTEXT_TOOLS = frozenset(
-    {"read_user_docs", "update_user_profile"}
-)
+REQUIRED_RETRIEVAL_TOOLS = frozenset({"qdrant_search", "fetch_article_by_sr", "list_citations"})
+REQUIRED_USER_CONTEXT_TOOLS = frozenset({"read_user_docs", "update_user_profile"})
 
 
 def test_swiss_law_tools_resolve_to_canonical_callables() -> None:

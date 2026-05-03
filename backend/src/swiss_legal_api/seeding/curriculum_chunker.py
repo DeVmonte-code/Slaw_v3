@@ -12,6 +12,7 @@ The split matters: every change reviewer who touches the chunking heuristic
 should be able to write a regression test against a literal Python list of
 page strings instead of having to forge a PDF byte-stream.
 """
+
 from __future__ import annotations
 
 import re

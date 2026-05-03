@@ -36,9 +36,7 @@ async def test_readyz_default_returns_ok_when_qdrant_reachable(monkeypatch):
 
     def _fake_client():
         return SimpleNamespace(
-            get_collections=lambda: SimpleNamespace(
-                collections=[SimpleNamespace(name="swiss_law")]
-            )
+            get_collections=lambda: SimpleNamespace(collections=[SimpleNamespace(name="swiss_law")])
         )
 
     monkeypatch.setattr(api_main, "qdrant_client", _fake_client)
@@ -55,9 +53,7 @@ async def test_readyz_curriculum_branch_503_when_collection_missing(monkeypatch)
 
     def _fake_client():
         return SimpleNamespace(
-            get_collections=lambda: SimpleNamespace(
-                collections=[SimpleNamespace(name="swiss_law")]
-            )
+            get_collections=lambda: SimpleNamespace(collections=[SimpleNamespace(name="swiss_law")])
         )
 
     monkeypatch.setattr(api_main, "qdrant_client", _fake_client)
@@ -122,9 +118,7 @@ async def test_readyz_503_when_qdrant_unreachable(monkeypatch):
 async def test_scan_endpoint_live():
     fixture = Path(__file__).resolve().parents[1] / "fixtures" / "luis_profile.json"
     payload = json.loads(fixture.read_text())
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://t", timeout=180
-    ) as c:
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t", timeout=180) as c:
         r = await c.post("/scan", json=payload)
         assert r.status_code == 200
         report = r.json()

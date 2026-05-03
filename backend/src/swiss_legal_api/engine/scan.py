@@ -401,7 +401,7 @@ def _humanize_tool_call(tool: str, server: str | None) -> str:
 
 def _make_agent_event_cb(
     progress_cb: ProgressCallback | None,
-) -> "Any":
+) -> Any:
     """Build the per-event forwarder the managed-agents runner invokes.
 
     Translates ``agent.mcp_tool_use`` / ``agent.tool_use`` SSE events
@@ -726,7 +726,7 @@ async def run_benefit_scan(
             idx, out = await coro
             results[idx] = out
             e, _ev, v = out
-            title = str(getattr(e.title, profile.language, None) or e.title.en)
+            event_title = str(getattr(e.title, profile.language, None) or e.title.en)
             if v is None or not v.supports or v.confidence < e.confidence_floor:
                 suppressed_running += 1
                 await _emit(
@@ -734,7 +734,7 @@ async def run_benefit_scan(
                     {
                         "type": "verified",
                         "entitlement_id": e.id,
-                        "title": title,
+                        "title": event_title,
                         "supported": False,
                         "confidence": float(v.confidence) if v else 0.0,
                         "verified_count": verified_count,
@@ -749,7 +749,7 @@ async def run_benefit_scan(
                     {
                         "type": "verified",
                         "entitlement_id": e.id,
-                        "title": title,
+                        "title": event_title,
                         "supported": True,
                         "confidence": float(v.confidence),
                         "verified_count": verified_count,
@@ -773,11 +773,11 @@ async def run_benefit_scan(
         if v is None or not v.supports or v.confidence < e.confidence_floor:
             suppressed += 1
             continue
-        title: str = str(getattr(e.title, profile.language, None) or e.title.en)
+        out_title: str = str(getattr(e.title, profile.language, None) or e.title.en)
         benefits.append(
             Benefit(
                 entitlement_id=e.id,
-                title=title,
+                title=out_title,
                 category=e.category,
                 estimated_value_chf=e.estimated_value_chf,
                 confidence=v.confidence,

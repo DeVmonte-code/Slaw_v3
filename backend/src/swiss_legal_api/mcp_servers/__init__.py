@@ -17,6 +17,7 @@ Why a registry instead of three free-standing FastMCP modules:
   match exactly what the runner will see in
   ``agent.mcp_tool_use.name`` events.
 """
+
 from __future__ import annotations
 
 from collections.abc import Callable

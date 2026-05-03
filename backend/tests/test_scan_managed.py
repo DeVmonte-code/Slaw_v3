@@ -5,6 +5,7 @@ per request and that the agent's batched JSON reply is parsed back into
 the existing ``BenefitReport`` shape — without changing the schema or
 the local-path behaviour the rest of the test suite still exercises.
 """
+
 from __future__ import annotations
 
 import json
@@ -59,9 +60,7 @@ def _make_provenance(*, mcp_calls: int, tool_calls: int = 0) -> AgentProvenance:
         ],
         tool_use_count=tool_calls,
         mcp_tool_use_count=mcp_calls,
-        mcp_servers_invoked=(
-            ["swiss-contract-tools-mcp"] if mcp_calls else []
-        ),
+        mcp_servers_invoked=(["swiss-contract-tools-mcp"] if mcp_calls else []),
     )
 
 
@@ -82,6 +81,7 @@ def patched_resolution(monkeypatch: pytest.MonkeyPatch) -> None:
     # The driver imports retrieve_for_citation lazily inside
     # _resolve_agent_citation, so we patch the source module.
     import swiss_legal_api.engine.retrieval as retrieval_mod
+
     monkeypatch.setattr(retrieval_mod, "retrieve_for_citation", _stub_chunk)
     # Local verifier path also uses retrieve_for_citation; stub there
     # too in case a downstream code path falls through to it.
@@ -175,9 +175,7 @@ async def test_managed_scan_opens_one_session_for_whole_batch(
 
     report = await run_benefit_scan(profile, catalog)
 
-    assert sum(counter) == 1, (
-        f"managed scan must open exactly one session, got {sum(counter)}"
-    )
+    assert sum(counter) == 1, f"managed scan must open exactly one session, got {sum(counter)}"
     # Brief must list every triggered entitlement_id so the agent
     # actually has the work scoped — no implicit fan-out.
     brief = captured[0]
@@ -208,9 +206,7 @@ async def test_managed_scan_suppresses_unresolved_citations(
         e.id
         for e in catalog
         if scan_mod.evaluate_trigger(e.trigger, profile).matched
-        and not scan_mod._all_citations_pending(
-            e, scan_mod._pending_corpus_articles()
-        )
+        and not scan_mod._all_citations_pending(e, scan_mod._pending_corpus_articles())
     ]
     assert len(triggered_ids) >= 2, "need ≥2 to mix resolved + unresolved"
 
@@ -258,6 +254,7 @@ async def test_managed_scan_suppresses_unresolved_citations(
         return []
 
     import swiss_legal_api.engine.retrieval as retrieval_mod
+
     monkeypatch.setattr(retrieval_mod, "retrieve_for_citation", selective_resolve)
     monkeypatch.setattr(verify_mod, "retrieve_for_citation", selective_resolve)
 
@@ -293,9 +290,7 @@ async def test_managed_scan_no_mcp_tools_suppresses_everything(
         e.id
         for e in catalog
         if scan_mod.evaluate_trigger(e.trigger, profile).matched
-        and not scan_mod._all_citations_pending(
-            e, scan_mod._pending_corpus_articles()
-        )
+        and not scan_mod._all_citations_pending(e, scan_mod._pending_corpus_articles())
     ]
     by_id = {e.id: e for e in catalog}
 

@@ -20,6 +20,7 @@ Every test is offline. The Qdrant client is monkey-patched and the
 curriculum module's ``settings.qdrant_url`` is forced to a non-empty
 sentinel for the tests that need to exercise the live-path code.
 """
+
 from __future__ import annotations
 
 import json
@@ -67,6 +68,7 @@ def _fake_provenance() -> AgentProvenance:
         input_tokens=50,
         output_tokens=20,
     )
+
 
 # ---------------------------------------------------------------------------
 # Chunker determinism + ID stability
@@ -126,19 +128,13 @@ def test_chunk_index_resets_per_page_and_is_monotonic() -> None:
         by_page.setdefault(c.page, []).append(c.chunk_index)
     for page, indices in by_page.items():
         assert indices[0] == 0, f"page {page} did not start at chunk_index 0"
-        assert indices == sorted(indices), (
-            f"page {page} chunk_index not monotonic: {indices}"
-        )
-        assert len(indices) == len(set(indices)), (
-            f"page {page} has duplicate chunk_index"
-        )
+        assert indices == sorted(indices), f"page {page} chunk_index not monotonic: {indices}"
+        assert len(indices) == len(set(indices)), f"page {page} has duplicate chunk_index"
 
 
 def test_stable_id_round_trips_per_identity_tuple() -> None:
     """``_stable_id`` is a pure function of (source_doc, page, chunk_index)."""
-    same_a = CurriculumChunk(
-        source_doc="co_articles_1_183", page=12, chunk_index=3, text="x"
-    )
+    same_a = CurriculumChunk(source_doc="co_articles_1_183", page=12, chunk_index=3, text="x")
     same_b = CurriculumChunk(
         source_doc="co_articles_1_183",
         page=12,
@@ -147,9 +143,7 @@ def test_stable_id_round_trips_per_identity_tuple() -> None:
         chapter="Chapter 2",
         topic_tags=("contracts",),
     )
-    different = CurriculumChunk(
-        source_doc="co_articles_1_183", page=12, chunk_index=4, text="x"
-    )
+    different = CurriculumChunk(source_doc="co_articles_1_183", page=12, chunk_index=4, text="x")
     assert _stable_id(same_a) == _stable_id(same_b)
     assert _stable_id(same_a) != _stable_id(different)
 
@@ -205,6 +199,7 @@ def test_retrieve_supporting_context_short_circuits_when_qdrant_unset(
 ) -> None:
     """No Qdrant URL -> empty list, no embedder cold-start, no client call."""
     monkeypatch.setattr(retrieval_mod.settings, "qdrant_url", "")
+
     # Sentinel — fail loudly if the function tried to embed or call Qdrant.
     def _boom(*_a: Any, **_k: Any) -> Any:
         raise AssertionError("must not be called when qdrant_url is empty")
@@ -286,9 +281,9 @@ def test_retrieve_supporting_context_soft_fails_when_collection_missing(
     with caplog.at_level("WARNING", logger=retrieval_mod.__name__):
         out = retrieve_supporting_context("query", topic_tags=["contracts"])
     assert out == []
-    assert any(
-        "curriculum_retrieval_unavailable" in r.message for r in caplog.records
-    ), "expected a curriculum_retrieval_unavailable WARNING"
+    assert any("curriculum_retrieval_unavailable" in r.message for r in caplog.records), (
+        "expected a curriculum_retrieval_unavailable WARNING"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -354,9 +349,7 @@ async def test_verifier_envelope_includes_supporting_doctrine(
         language="de",
         effective_date=date(1912, 1, 1),
     )
-    monkeypatch.setattr(
-        verify_mod, "retrieve_for_citation", lambda *a, **k: [de_chunk]
-    )
+    monkeypatch.setattr(verify_mod, "retrieve_for_citation", lambda *a, **k: [de_chunk])
     doctrine = [
         SupportingChunk(
             text="In Swiss contract doctrine, mutual assent need not be express.",
@@ -366,9 +359,7 @@ async def test_verifier_envelope_includes_supporting_doctrine(
             page=4,
         ),
     ]
-    monkeypatch.setattr(
-        verify_mod, "retrieve_supporting_context", lambda *a, **k: doctrine
-    )
+    monkeypatch.setattr(verify_mod, "retrieve_supporting_context", lambda *a, **k: doctrine)
 
     captured: dict[str, str] = {}
 
@@ -425,12 +416,8 @@ async def test_verifier_works_when_curriculum_empty(
         language="de",
         effective_date=date(1995, 1, 1),
     )
-    monkeypatch.setattr(
-        verify_mod, "retrieve_for_citation", lambda *a, **k: [de_chunk]
-    )
-    monkeypatch.setattr(
-        verify_mod, "retrieve_supporting_context", lambda *a, **k: []
-    )
+    monkeypatch.setattr(verify_mod, "retrieve_for_citation", lambda *a, **k: [de_chunk])
+    monkeypatch.setattr(verify_mod, "retrieve_supporting_context", lambda *a, **k: [])
 
     captured: dict[str, str] = {}
 
@@ -469,9 +456,7 @@ async def test_verifier_soft_fails_on_doctrine_lookup_exception(
         language="de",
         effective_date=date(1995, 1, 1),
     )
-    monkeypatch.setattr(
-        verify_mod, "retrieve_for_citation", lambda *a, **k: [de_chunk]
-    )
+    monkeypatch.setattr(verify_mod, "retrieve_for_citation", lambda *a, **k: [de_chunk])
 
     def _boom(*_a: Any, **_k: Any) -> list[SupportingChunk]:
         raise RuntimeError("qdrant cluster 503")

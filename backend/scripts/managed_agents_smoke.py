@@ -22,6 +22,7 @@ Exit codes:
     3 — fatal session error (terminated or non-retryable error)
     4 — unexpected exception
 """
+
 from __future__ import annotations
 
 import asyncio

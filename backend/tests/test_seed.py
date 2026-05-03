@@ -15,8 +15,12 @@ def test_law_articles_parse():
         # Anti-hallucination guardrail (Task #18): every chunk must carry the
         # canton and effective_date fields the retrieval filter relies on.
         assert {
-            "sr_number", "article", "language", "text",
-            "canton", "effective_date",
+            "sr_number",
+            "article",
+            "language",
+            "text",
+            "canton",
+            "effective_date",
         } <= row.keys(), f"missing required keys in {row}"
         assert row["canton"] == "CH" or len(row["canton"]) == 2
         # ISO date 'YYYY-MM-DD' (validated downstream by the seeder).

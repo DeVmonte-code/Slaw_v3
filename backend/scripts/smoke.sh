@@ -126,7 +126,7 @@ sleep "$INTER_PERSONA_SLEEP"
 # Cantonal smoke gate (Task #21). Asserts the cantonal ingest +
 # seed_qdrant pipeline actually surfaces a cantonal entitlement
 # end-to-end. The bern_tenant_profile fixture triggers
-# `bern_rental_conciliation_free_procedure`, which cites BSG 661.11
+# `bern_rental_conciliation_free_procedure`, which cites BSG 271.1
 # Art. 11 §3 — a record only present in `seed/law_articles.cantonal.json`,
 # so a green here proves the cantonal corpus is in Qdrant and the
 # canton-scoped retrieval filter passes the row through.

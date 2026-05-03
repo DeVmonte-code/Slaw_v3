@@ -16,6 +16,7 @@ a ``CANTON``, ``COMPILATION_LABEL`` and ``ingest()`` symbol with the same
 signature as the existing adapters, and add it to ``ADAPTERS`` in
 :mod:`__main__`.
 """
+
 from __future__ import annotations
 
 from .base import (

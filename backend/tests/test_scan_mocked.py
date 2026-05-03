@@ -5,6 +5,7 @@ Qdrant retrieval helper so the test runs offline — no ANTHROPIC_API_KEY,
 no QDRANT_URL, no embedder load. Verifies that scan_profile produces a
 valid BenefitReport with the expected shape.
 """
+
 from __future__ import annotations
 
 import json
@@ -216,11 +217,10 @@ def test_all_citations_pending_requires_every_citation_to_be_pending() -> None:
     # citation to verify the all-citations rule on multi-citation inputs.
     base = by_id["family_reunification_right"]
     real_citation = by_id["unemployment_insurance_entitlement"].source_citations[0]
-    mixed = base.model_copy(
-        update={"source_citations": [base.source_citations[0], real_citation]}
+    mixed = base.model_copy(update={"source_citations": [base.source_citations[0], real_citation]})
+    pending_only_one = frozenset(
+        {(base.source_citations[0].sr_number, base.source_citations[0].article)}
     )
-    pending_only_one = frozenset({(base.source_citations[0].sr_number,
-                                    base.source_citations[0].article)})
 
     # Single-citation, fully pending → skip.
     assert scan_mod._all_citations_pending(base, pending_only_one) is True
@@ -236,9 +236,7 @@ def test_pending_corpus_articles_resolves_against_real_repo_seed() -> None:
     moves scan.py and forgets to bump ``parents[N]``, this test fails
     even when no placeholders are currently in the seed.
     """
-    expected = (
-        Path(__file__).resolve().parent.parent / "seed" / "law_articles.json"
-    )
+    expected = Path(__file__).resolve().parent.parent / "seed" / "law_articles.json"
     assert expected == scan_mod._LAW_ARTICLES_PATH
     assert scan_mod._LAW_ARTICLES_PATH.exists(), (
         f"seed file missing at {scan_mod._LAW_ARTICLES_PATH}; the placeholder "

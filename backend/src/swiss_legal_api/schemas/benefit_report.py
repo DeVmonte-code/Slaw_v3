@@ -46,7 +46,9 @@ class SupportingDoctrine(BaseModel):
         ),
     )
     score: float = Field(
-        ..., ge=0, le=1,
+        ...,
+        ge=0,
+        le=1,
         description="Cosine similarity of the supporting chunk (advisory only).",
     )
 
@@ -81,8 +83,7 @@ class Benefit(BaseModel):
         ),
     )
     disclaimer: str = (
-        "Not a substitute for advice from a Swiss attorney "
-        "registered with a cantonal bar."
+        "Not a substitute for advice from a Swiss attorney registered with a cantonal bar."
     )
 
 

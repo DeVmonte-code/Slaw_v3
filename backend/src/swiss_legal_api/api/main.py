@@ -6,7 +6,7 @@ import logging
 import sys
 import time
 from collections.abc import AsyncIterator
-from contextlib import AsyncExitStack, asynccontextmanager
+from contextlib import AsyncExitStack, asynccontextmanager, suppress
 from urllib.parse import urlparse
 
 import httpx
@@ -648,14 +648,12 @@ async def scan_stream(
                 yield (
                     f"event: {ev_type}\n"
                     f"data: {payload}\n\n"
-                ).encode("utf-8")
+                ).encode()
         finally:
             if not task.done():
                 task.cancel()
-                try:
+                with suppress(asyncio.CancelledError, Exception):
                     await task
-                except (asyncio.CancelledError, Exception):
-                    pass
 
     return StreamingResponse(
         _event_source(),

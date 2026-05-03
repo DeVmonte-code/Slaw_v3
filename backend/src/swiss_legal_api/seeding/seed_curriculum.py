@@ -21,6 +21,7 @@ None and the UI falls back to "page N".
 The seeder is intentionally a no-op when ``seed/curriculum/`` is empty so
 the bootstrap deployment (no PDFs committed yet) doesn't fail.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -79,9 +80,7 @@ def _build_chapter_index(raw: Any) -> dict[int, str]:
     return out
 
 
-def _resolve_chapter_for_page(
-    page: int, chapter_index: dict[int, str]
-) -> str | None:
+def _resolve_chapter_for_page(page: int, chapter_index: dict[int, str]) -> str | None:
     """Forward-fill chapter labels: a page inherits the most recent earlier
     chapter entry. Used when the sidecar is sparse (one entry per chapter
     boundary, not per page)."""
@@ -93,9 +92,7 @@ def _resolve_chapter_for_page(
     return chapter_index[max(candidates)]
 
 
-def _expand_chapter_index(
-    chapter_index: dict[int, str], total_pages: int
-) -> dict[int, str]:
+def _expand_chapter_index(chapter_index: dict[int, str], total_pages: int) -> dict[int, str]:
     """Forward-fill a sparse chapter_index over [1..total_pages]."""
     if not chapter_index or total_pages <= 0:
         return {}
@@ -137,9 +134,7 @@ def _ensure_collection(client: QdrantClient, name: str) -> None:
     if name not in existing:
         client.create_collection(
             collection_name=name,
-            vectors_config=qmodels.VectorParams(
-                size=384, distance=qmodels.Distance.COSINE
-            ),
+            vectors_config=qmodels.VectorParams(size=384, distance=qmodels.Distance.COSINE),
         )
     # Keyword payload indexes that ``retrieve_supporting_context`` filters
     # against. Wrapped in suppress so re-runs on an already-indexed
@@ -153,9 +148,7 @@ def _ensure_collection(client: QdrantClient, name: str) -> None:
             )
 
 
-def _upsert_chunks(
-    client: QdrantClient, collection: str, chunks: list[CurriculumChunk]
-) -> None:
+def _upsert_chunks(client: QdrantClient, collection: str, chunks: list[CurriculumChunk]) -> None:
     points: list[qmodels.PointStruct] = []
     for c in chunks:
         vec = embed_passage(c.text)
@@ -181,7 +174,7 @@ def _upsert_chunks(
     for start in range(0, len(points), BATCH):
         client.upsert(
             collection_name=collection,
-            points=points[start:start + BATCH],
+            points=points[start : start + BATCH],
             wait=True,
         )
 
@@ -232,9 +225,7 @@ def main(argv: list[str] | None = None) -> int:
         )
         return 0
 
-    client = QdrantClient(
-        url=settings.qdrant_url, api_key=settings.qdrant_api_key
-    )
+    client = QdrantClient(url=settings.qdrant_url, api_key=settings.qdrant_api_key)
     _ensure_collection(client, settings.curriculum_collection)
 
     total = 0

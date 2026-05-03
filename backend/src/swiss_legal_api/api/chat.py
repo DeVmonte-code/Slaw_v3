@@ -24,6 +24,7 @@ class UnknownBenefitError(ValueError):
     client error instead of an opaque 500.
     """
 
+
 logger = logging.getLogger(__name__)
 
 _anthropic = AsyncAnthropic(api_key=settings.anthropic_api_key)
@@ -67,9 +68,7 @@ async def _call_claude(
     if settings.use_managed_agents:
         from ..engine.agent_runner import run_session
 
-        return await run_session(
-            message_content, site=site, metadata={"user_id": user_id}
-        )
+        return await run_session(message_content, site=site, metadata={"user_id": user_id})
     started = time.perf_counter()
     resp = await _anthropic.messages.create(
         model=settings.claude_model,
@@ -174,10 +173,8 @@ async def answer_follow_up(
             # the same canton plumbing as /scan.
             "CH",
         )
-        context = (
-            f"Entitlement: {ent.title.en}\n\n"
-            f"Relevant article text:\n"
-            + "\n\n".join(c.text for c in chunks)
+        context = f"Entitlement: {ent.title.en}\n\nRelevant article text:\n" + "\n\n".join(
+            c.text for c in chunks
         )
 
     payload = f"{context}\n\nUser question: {message}"
@@ -185,7 +182,5 @@ async def answer_follow_up(
     # response envelope) so auditors can prove a chat answer wasn't
     # produced by a managed agent — Task #25 contract for the
     # non-persisted call site.
-    text, provenance = await _call_claude(
-        payload, site=f"api.chat:{benefit_id or 'no_benefit'}"
-    )
+    text, provenance = await _call_claude(payload, site=f"api.chat:{benefit_id or 'no_benefit'}")
     return text, provenance
