@@ -62,15 +62,6 @@ _JOLUX = "http://data.legilux.public.lu/resource/ontology/jolux#"
 _RDF = "http://www.w3.org/1999/02/22-rdf-syntax-ns#"
 _USER_AGENT = "SwissLegalAPI/1.0 (legal-rights-scan; read-only)"
 
-# Maps 2-letter BCP-47 codes to ISO 639-2/B (used in Fedlex URIs).
-_LANG_TO_ISO639_2: dict[str, str] = {
-    "de": "DEU",
-    "fr": "FRA",
-    "it": "ITA",
-    "rm": "ROH",
-    "en": "ENG",
-}
-
 # Patterns for splitting eli_uri into (law_base, language).
 # Dated:    …/eli/cc/27/317_321_377/20250101/de
 # Undated:  …/eli/cc/27/317_321_377/de
