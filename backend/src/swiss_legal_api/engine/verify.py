@@ -100,22 +100,16 @@ def _is_authoritative_language(sr_number: str, lang: str) -> bool:
 @retry(
     stop=stop_after_attempt(3),
     wait=wait_exponential(multiplier=1, min=2, max=30),
-    # Cover both the messages.create path (Anthropic SDK exceptions)
-    # and the managed-agents path (httpx transport errors raised by
-    # agent_runner.run_session). Without httpx.TransportError the
-    # managed path would lose retry parity with the legacy path.
+    # Retry only the Anthropic SDK / network errors that can occur on the
+    # direct messages.create path.  Managed-agent transport errors
+    # (httpx.TransportError, _RetryableManagedAgentsError) are NOT included
+    # here because _call_messages_create is never in a managed session; those
+    # are handled by the @retry on _call_claude which wraps run_session.
     retry=retry_if_exception_type(
         (
             RateLimitError,
             APIConnectionError,
             APITimeoutError,
-            httpx.TransportError,
-            # Managed-agents semantic retry signal: server emits
-            # ``session.error`` with ``retry_status='retryable'``. Treat
-            # it identically to a transport blip — same exponential
-            # backoff, capped attempts. Fatal/no_retry errors raise
-            # ManagedAgentsError instead and are NOT retried.
-            _RetryableManagedAgentsError,
         )
     ),
     reraise=True,
@@ -158,6 +152,28 @@ async def _call_messages_create(
     return text, prov
 
 
+@retry(
+    stop=stop_after_attempt(3),
+    wait=wait_exponential(multiplier=1, min=2, max=30),
+    # Cover both the messages.create path (SDK exceptions via _call_messages_create)
+    # and the managed-agents path (httpx transport errors raised by run_session).
+    # Without httpx.TransportError the managed path would lose retry parity.
+    retry=retry_if_exception_type(
+        (
+            RateLimitError,
+            APIConnectionError,
+            APITimeoutError,
+            httpx.TransportError,
+            # Managed-agents semantic retry signal: server emits
+            # ``session.error`` with ``retry_status='retryable'``. Treat
+            # it identically to a transport blip — same exponential
+            # backoff, capped attempts. Fatal/no_retry errors raise
+            # ManagedAgentsError instead and are NOT retried.
+            _RetryableManagedAgentsError,
+        )
+    ),
+    reraise=True,
+)
 async def _call_claude(
     user_content: str,
     *,
