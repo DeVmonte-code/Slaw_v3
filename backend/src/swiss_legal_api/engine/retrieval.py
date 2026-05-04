@@ -21,6 +21,8 @@ class RetrievedChunk:
     score: float
     language: str = "de"
     effective_date: date | None = None
+    eli_uri: str | None = None
+    paragraph: str | None = None
 
 
 @dataclass
@@ -153,6 +155,8 @@ def retrieve_for_citation(
                 score=score,
                 language=str(payload.get("language", "de")),
                 effective_date=eff_date,
+                eli_uri=str(payload["eli_uri"]) if payload.get("eli_uri") else None,
+                paragraph=str(payload["paragraph"]) if payload.get("paragraph") else None,
             )
         )
 

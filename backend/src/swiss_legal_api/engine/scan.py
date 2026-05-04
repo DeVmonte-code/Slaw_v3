@@ -232,16 +232,26 @@ def _build_agent_brief(
         "triggered_entitlements (JSON array):\n"
         f"{json.dumps(items, indent=2)}\n\n"
         "PROCEDURE (mandatory — follow EXACTLY):\n"
-        "1) For EACH entitlement_id in the list above, call\n"
+        "1) For EACH entitlement_id call swiss-law-retrieval-mcp.qdrant_search\n"
+        "   using the seed_citation sr_number and article. This returns chunks\n"
+        "   from the local corpus. Each chunk may include an 'eli_uri' field —\n"
+        "   this is the official Fedlex linked-data URI for that law article.\n\n"
+        "2) For every unique eli_uri returned in step 1, call\n"
+        "   swiss-law-retrieval-mcp.fetch_fedlex_article(eli_uri=<uri>).\n"
+        "   This fetches the FULL live article text from the official Swiss\n"
+        "   Fedlex portal (www.fedlex.admin.ch). The returned 'text' field is\n"
+        "   the authoritative wording — use it as your primary evidence to\n"
+        "   determine what benefits the user profile qualifies for. The Qdrant\n"
+        "   chunk is just a pointer; the Fedlex text is the ground truth.\n\n"
+        "3) For EACH entitlement_id call\n"
         "   swiss-contract-tools-mcp.verify_entitlement passing:\n"
         "     - entitlement_id: the string ID\n"
         "     - profile: the user_profile dict above\n"
+        "   Ground your reasoning in the Fedlex text fetched in step 2.\n"
         "   The tool returns: {entitlement_id, supports, confidence,\n"
         "   reasoning, best_citation{sr_number, article, paragraph,\n"
-        "   language, quote_under_15_words}}.\n"
-        "   You MAY also call swiss-law-retrieval-mcp.qdrant_search or\n"
-        "   fetch_article_by_sr to inspect raw corpus chunks.\n"
-        "2) After ALL tool calls are complete, your ENTIRE TEXT RESPONSE\n"
+        "   language, quote_under_15_words}}.\n\n"
+        "4) After ALL tool calls are complete, your ENTIRE TEXT RESPONSE\n"
         "   MUST be ONLY the following JSON object — no preamble, no\n"
         "   explanation, no markdown fences. Start with '{' and end\n"
         "   with '}'. Any other text will cause every benefit to be\n"
@@ -253,7 +263,7 @@ def _build_agent_brief(
         '      "entitlement_id": "<same id you passed to the tool>",\n'
         '      "supports": <bool from tool result>,\n'
         '      "confidence": <number 0..1 from tool result>,\n'
-        '      "reasoning": "<reasoning from tool result>",\n'
+        '      "reasoning": "<reasoning from tool result, grounded in Fedlex text>",\n'
         '      "best_citation": {\n'
         '        "sr_number": "<from tool result>",\n'
         '        "article": "<from tool result>",\n'
@@ -265,6 +275,9 @@ def _build_agent_brief(
         "  ]\n"
         "}\n\n"
         "CRITICAL RULES:\n"
+        "- Always call fetch_fedlex_article for every eli_uri you find.\n"
+        "  If qdrant_search returns no eli_uri, fall back to the Qdrant\n"
+        "  chunk text alone and note it in reasoning.\n"
         "- Include EVERY entitlement_id from the input list, even when\n"
         "  supports=false.\n"
         "- Do NOT add any text outside the JSON object.\n"

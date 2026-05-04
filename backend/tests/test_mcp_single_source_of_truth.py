@@ -42,7 +42,9 @@ REQUIRED_CONTRACT_TOOLS = frozenset(
         "score_confidence",
     }
 )
-REQUIRED_RETRIEVAL_TOOLS = frozenset({"qdrant_search", "fetch_article_by_sr", "list_citations"})
+REQUIRED_RETRIEVAL_TOOLS = frozenset(
+    {"qdrant_search", "fetch_article_by_sr", "list_citations", "fetch_fedlex_article"}
+)
 REQUIRED_USER_CONTEXT_TOOLS = frozenset({"read_user_docs", "update_user_profile"})
 
 
@@ -57,6 +59,7 @@ def test_swiss_law_tools_resolve_to_canonical_callables() -> None:
     assert by_name["qdrant_search"].impl is swiss_law.qdrant_search
     assert by_name["fetch_article_by_sr"].impl is swiss_law.fetch_article_by_sr
     assert by_name["list_citations"].impl is swiss_law.list_citations
+    assert by_name["fetch_fedlex_article"].impl is swiss_law.fetch_fedlex_article
     # The canonical retrieval function is shared (identity, not equality).
     assert swiss_law.retrieve_for_citation is engine_retrieval.retrieve_for_citation
 
