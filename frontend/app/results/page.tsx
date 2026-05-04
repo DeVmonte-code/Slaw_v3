@@ -17,7 +17,7 @@ const PHASES = [
 ];
 /** Approximate scan budget (s) used to drive the indeterminate bar.
  *  Caps at 95% so we never falsely "complete" before the response. */
-const EXPECTED_SECS = 35;
+const EXPECTED_SECS = 20;
 /** Milliseconds of SSE silence before the watchdog aborts the stream
  *  and shows a recoverable error.  15 s backend heartbeat + latency
  *  headroom → 60 s gives ~3 missed heartbeats before we give up. */
@@ -202,7 +202,7 @@ function ScanInProgress({
         </div>
 
         <div className="mt-2 flex items-center justify-between text-xs text-[var(--slaw-ink-muted)]">
-          <span>{fmtElapsed(elapsed)} elapsed · usually 20–60 s</span>
+          <span>{fmtElapsed(elapsed)} elapsed · usually 15–30 s</span>
           <span>{stepLabel ?? ""}</span>
         </div>
 

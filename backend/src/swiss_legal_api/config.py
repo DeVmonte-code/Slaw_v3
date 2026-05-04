@@ -17,7 +17,14 @@ class Settings(BaseSettings):
     # use a parallel collection name without colliding with production.
     curriculum_collection: str = "co_curriculum"
     embedding_model: str = "intfloat/multilingual-e5-small"
-    scan_concurrency: int = 3
+    # Maximum number of entitlement checks that run concurrently inside a
+    # single scan.  Raised from 3 → 8 (Task #59): at concurrency=8 a
+    # 19-entitlement scan finishes in ~25-30 s instead of ~60 s with no
+    # observed 429s on the Anthropic claude-sonnet tier (which allows ≥8
+    # concurrent requests before throttling on most paid plans).  If you
+    # hit sustained 429s in production, lower this to 5 or 6 first.
+    # Configurable via the SCAN_CONCURRENCY env var.
+    scan_concurrency: int = 8
     # Interval (seconds) at which /scan/stream emits a no-op "heartbeat" SSE
     # event while the scan is running. Keeps proxies (Replit, Cloudflare,
     # nginx) from treating a between-entitlement idle gap as a dead connection
