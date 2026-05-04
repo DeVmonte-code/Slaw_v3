@@ -63,7 +63,12 @@ def test_mcp_base_url_does_not_overwrite_explicit_url() -> None:
 async def test_swiss_law_server_lists_expected_tools() -> None:
     fmcp = build_fastmcp(swiss_law.SERVER)
     names = sorted(t.name for t in await fmcp.list_tools())
-    assert names == ["fetch_article_by_sr", "list_citations", "qdrant_search"]
+    assert names == [
+        "fetch_article_by_sr",
+        "fetch_fedlex_article",
+        "list_citations",
+        "qdrant_search",
+    ]
 
 
 @pytest.mark.asyncio

@@ -1,0 +1,3 @@
+{ "head": { "link": [], "vars": ["file"] },
+  "results": { "distinct": false, "ordered": true, "bindings": [
+    { "file": { "type": "uri", "value": "https://fedlex.data.admin.ch/filestore/fedlex.data.admin.ch/eli/cc/27/317_321_377/20260101/de/html/fedlex-data-admin-ch-eli-cc-27-317_321_377-20260101-de-html-12.html" }} ] } }

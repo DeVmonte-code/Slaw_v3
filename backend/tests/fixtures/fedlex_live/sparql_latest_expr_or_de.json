@@ -1,0 +1,3 @@
+{ "head": { "link": [], "vars": ["expr"] },
+  "results": { "distinct": false, "ordered": true, "bindings": [
+    { "expr": { "type": "uri", "value": "https://fedlex.data.admin.ch/eli/cc/27/317_321_377/20260101/de" }} ] } }
