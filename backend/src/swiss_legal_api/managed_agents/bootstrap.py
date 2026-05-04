@@ -156,21 +156,19 @@ def _environment_payload() -> dict[str, Any]:
 def _vault_payload() -> dict[str, Any]:
     """Build the vault payload, including any MCP auth credentials.
 
-    Each MCP server's bearer token (when present) is registered as a
-    named credential the agent can attach to outbound MCP requests.
-    The token VALUE itself is read from the environment and never
-    logged or echoed in --dry-run output (the script prints the
-    credential *name* + the env var that supplied it).
+    Return the payload for ``POST /v1/vaults``.
 
-    Recognised env vars (each optional):
+    The Anthropic API only accepts ``display_name`` and ``metadata`` at
+    vault-creation time.  Per-server bearer tokens are registered
+    *after* the vault exists via ``POST /v1/vaults/{id}/credentials``
+    — see :func:`_vault_credentials`.
+
+    Recognised env vars (each optional, registered post-creation):
 
     - ``MCP_SWISS_LAW_AUTH_TOKEN``      → ``swiss-law-retrieval-mcp/bearer``
     - ``MCP_CONTRACT_TOOLS_AUTH_TOKEN`` → ``swiss-contract-tools-mcp/bearer``
     - ``MCP_USER_CONTEXT_AUTH_TOKEN``   → ``swiss-user-context-mcp/bearer``
     """
-    # Vault creation only takes display_name + optional metadata.
-    # Credentials are registered separately via POST /v1/vaults/{id}/credentials
-    # after the vault exists — see _register_vault_credentials() below.
     return {
         "display_name": "swiss-legal-mcp-vault",
         "metadata": {"app": "slaw_v3"},
@@ -306,12 +304,29 @@ def bootstrap(
     vault_body = _vault_payload()
 
     if dry_run:
-        # Never echo raw credentials into stdout/CI logs — use the
-        # redacted variant instead so reviewers can see which
-        # credentials WILL be uploaded without leaking the values.
+        # Show the operation that WOULD be issued (PUT if ID already set, else
+        # POST) so idempotency intent is visible without a live mutation.
+        plan = {
+            "agent_op": (
+                f"PUT /v1/agents/{settings.managed_agent_id}"
+                if settings.managed_agent_id
+                else "POST /v1/agents"
+            ),
+            "environment_op": (
+                f"skip (reuse {settings.managed_environment_id})"
+                if settings.managed_environment_id
+                else "POST /v1/environments"
+            ),
+            "vault_op": (
+                f"skip (reuse {settings.managed_vault_id})"
+                if settings.managed_vault_id
+                else "POST /v1/vaults  then POST /v1/vaults/{id}/credentials (per token in env)"
+            ),
+        }
         print(
             json.dumps(
                 {
+                    "operation_plan": plan,
                     "agent": agent_body,
                     "environment": env_body,
                     "vault": _vault_payload_safe_for_logging(),
