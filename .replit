@@ -56,3 +56,10 @@ timeoutMs = 180000
 
 [userenv.development]
 
+[userenv.shared]
+MCP_BASE_URL = "https://4c580c1c-4c14-4c1a-98bc-2e896c3d565c-00-1zzbbir03dyxi.worf.replit.dev"
+MANAGED_AGENT_ID = "agent_011CahDujdLPd68LHdS6ueqe"
+MANAGED_AGENT_VERSION = "1"
+MANAGED_ENVIRONMENT_ID = "env_0137NKCALxA8uttrfn7hJJ9B"
+MANAGED_VAULT_ID = "vlt_011CahDumG4DjWqJ8SZbtSEN"
+

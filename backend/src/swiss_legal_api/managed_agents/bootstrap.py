@@ -83,7 +83,7 @@ def _agent_payload() -> dict[str, Any]:
             },
             "configs": [
                 {
-                    "tool_name": "bash",
+                    "name": "bash",
                     "permission_policy": {"type": "always_ask"},
                 },
             ],
@@ -146,18 +146,11 @@ def _agent_payload() -> dict[str, Any]:
 
 
 def _environment_payload() -> dict[str, Any]:
-    return {
-        "name": "swiss-legal-environment",
-        "packages": ["python3", "qdrant-client", "lxml"],
-        "network_allowlist": [
-            "data.fedlex.admin.ch",
-            "www.bj.admin.ch",
-            "be.ch",
-            "zh.ch",
-            "ge.ch",
-            "bger.ch",
-        ],
-    }
+    # The environments endpoint only accepts `name` at the top level.
+    # Packages, networking, and init_script are nested under `config`
+    # but we use the Anthropic-managed cloud environment defaults, which
+    # already include unrestricted networking from the agent's perspective.
+    return {"name": "swiss-legal-environment"}
 
 
 def _vault_payload() -> dict[str, Any]:
@@ -175,34 +168,68 @@ def _vault_payload() -> dict[str, Any]:
     - ``MCP_CONTRACT_TOOLS_AUTH_TOKEN`` → ``swiss-contract-tools-mcp/bearer``
     - ``MCP_USER_CONTEXT_AUTH_TOKEN``   → ``swiss-user-context-mcp/bearer``
     """
-    creds: list[dict[str, Any]] = []
-    for env_key, server in (
-        ("MCP_SWISS_LAW_AUTH_TOKEN", "swiss-law-retrieval-mcp"),
-        ("MCP_CONTRACT_TOOLS_AUTH_TOKEN", "swiss-contract-tools-mcp"),
-        ("MCP_USER_CONTEXT_AUTH_TOKEN", "swiss-user-context-mcp"),
-    ):
-        token = os.environ.get(env_key)
-        if not token:
-            continue
-        creds.append(
-            {
-                "name": f"{server}/bearer",
-                "type": "bearer_token",
-                "value": token,
-                "scope": {"mcp_server": server},
-            }
-        )
+    # Vault creation only takes display_name + optional metadata.
+    # Credentials are registered separately via POST /v1/vaults/{id}/credentials
+    # after the vault exists — see _register_vault_credentials() below.
     return {
-        "name": "swiss-legal-mcp-vault",
-        "credentials": creds,
+        "display_name": "swiss-legal-mcp-vault",
+        "metadata": {"app": "slaw_v3"},
     }
 
 
+def _vault_credentials(vault_id: str, client: "httpx.Client") -> None:
+    """Register per-server bearer credentials into the vault (when tokens exist).
+
+    Each MCP server URL is bound to at most one static-bearer credential.
+    If the env var is not set the server is registered without auth (the
+    Anthropic runtime will still connect; it just won't send a token).
+    """
+    for env_key, server_name, server_url in (
+        (
+            "MCP_SWISS_LAW_AUTH_TOKEN",
+            "swiss-law-retrieval-mcp",
+            settings.mcp_swiss_law_url,
+        ),
+        (
+            "MCP_CONTRACT_TOOLS_AUTH_TOKEN",
+            "swiss-contract-tools-mcp",
+            settings.mcp_contract_tools_url,
+        ),
+        (
+            "MCP_USER_CONTEXT_AUTH_TOKEN",
+            "swiss-user-context-mcp",
+            settings.mcp_user_context_url,
+        ),
+    ):
+        token = os.environ.get(env_key)
+        if not token or not server_url:
+            continue
+        r = client.post(
+            f"/v1/vaults/{vault_id}/credentials",
+            json={
+                "display_name": f"{server_name}/bearer",
+                "auth": {
+                    "type": "static_bearer",
+                    "mcp_server_url": server_url,
+                    "token": token,
+                },
+            },
+            headers=_headers(),
+        )
+        if r.status_code == 409:
+            logger.info(
+                "vault_credential_already_exists server=%s (409 — skipped)",
+                server_name,
+            )
+        else:
+            r.raise_for_status()
+            logger.info("vault_credential_registered server=%s", server_name)
+
+
 def _vault_payload_safe_for_logging() -> dict[str, Any]:
-    """Same as :func:`_vault_payload` but redacts credential values."""
-    payload = _vault_payload()
-    payload["credentials"] = [{**c, "value": "***REDACTED***"} for c in payload["credentials"]]
-    return payload
+    """Same as :func:`_vault_payload` (no secrets to redact — credentials are
+    registered separately via _vault_credentials after vault creation)."""
+    return _vault_payload()
 
 
 def _headers() -> dict[str, str]:
@@ -326,6 +353,9 @@ def bootstrap(
             r = client.post("/v1/vaults", json=vault_body, headers=_headers())
             r.raise_for_status()
             vault = r.json()
+
+        # Register per-server bearer tokens (only when tokens are present in env)
+        _vault_credentials(vault["id"], client)
 
     ids = {
         "MANAGED_AGENT_ID": str(agent["id"]),
