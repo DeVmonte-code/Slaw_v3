@@ -678,6 +678,10 @@ async def scan_stream(
                 # stop event was set — exit cleanly
                 return
             except asyncio.TimeoutError:
+                # Guard against the race where _stop_heartbeat is set
+                # in the same scheduler turn as the timeout fires.
+                if _stop_heartbeat.is_set():
+                    return
                 seq += 1
                 await queue.put(
                     {
