@@ -147,11 +147,11 @@ class Settings(BaseSettings):
         base = self.mcp_base_url.rstrip("/")
         if base:
             if not self.mcp_swiss_law_url:
-                self.mcp_swiss_law_url = f"{base}/mcp/swiss-law/"
+                self.mcp_swiss_law_url = f"{base}/mcp/swiss-law"
             if not self.mcp_contract_tools_url:
-                self.mcp_contract_tools_url = f"{base}/mcp/contract-tools/"
+                self.mcp_contract_tools_url = f"{base}/mcp/contract-tools"
             if not self.mcp_user_context_url:
-                self.mcp_user_context_url = f"{base}/mcp/user-context/"
+                self.mcp_user_context_url = f"{base}/mcp/user-context"
 
     def cors_origins_list(self) -> list[str]:
         raw = self.cors_allow_origins or self.frontend_origin

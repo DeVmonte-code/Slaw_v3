@@ -10,7 +10,7 @@ from contextlib import AsyncExitStack, asynccontextmanager, suppress
 from urllib.parse import urlparse
 
 import httpx
-from fastapi import FastAPI, Header, HTTPException, Query
+from fastapi import FastAPI, Header, HTTPException, Query, Request
 from fastapi import Path as PathParam
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
@@ -293,10 +293,12 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     async with AsyncExitStack() as mcp_stack:
         for prefix, fmcp in _MCP_MOUNTS:
             try:
-                # the run() method fails if called repeatedly on the same instance
-                # in a testing context where the app starts up multiple times.
-                from mcp.server.streamable_http_manager import StreamableHTTPSessionManager
-                fmcp._session_manager = StreamableHTTPSessionManager(fmcp._mcp_server)  # type: ignore
+                # streamable_http_app() was already called at module level
+                # (app.mount() below) which lazily created fmcp._session_manager
+                # (session manager A) and wired it into the StreamableHTTPASGIApp
+                # ASGI endpoint.  We must run() THAT same manager — NOT create a
+                # new one — otherwise A is never started and every request throws
+                # "Task group is not initialized".
                 await mcp_stack.enter_async_context(
                     fmcp.session_manager.run()  # type: ignore
                 )
@@ -307,7 +309,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
                 )
             except Exception:
                 logger.exception(
-                    "mcp_server_start_failed",
+                    "mcp_server_start_failed %s %s",
                     getattr(fmcp, "name", "unknown"),
                     prefix,
                 )
@@ -382,6 +384,31 @@ app = FastAPI(
 # ``streamable_http_path`` defaults to "/" via ``build_fastmcp``).
 for _prefix, _fmcp in _MCP_MOUNTS:
     app.mount(_prefix, _fmcp.streamable_http_app())  # type: ignore
+
+# ---------------------------------------------------------------------------
+# MCP path-normalizer middleware
+# ---------------------------------------------------------------------------
+# The Replit reverse-proxy strips trailing slashes from inbound URLs and
+# returns a 308 redirect when Starlette's Mount does the opposite 307.
+# This creates a redirect loop that Anthropic's managed-agents runtime
+# cannot escape during MCP initialise.
+#
+# Solution: intercept requests whose path EXACTLY matches a mount prefix
+# (i.e. ``/mcp/swiss-law`` with no trailing slash) and append the slash
+# BEFORE Starlette's routing sees the request.  The FastMCP sub-app
+# then handles the request directly (HTTP 200) with no redirect at all.
+_MCP_PREFIXES: frozenset[str] = frozenset(p for p, _ in _MCP_MOUNTS)
+
+
+@app.middleware("http")
+async def _mcp_slash_normalizer(request: Request, call_next):  # type: ignore[type-arg]
+    if request.scope.get("path") in _MCP_PREFIXES:
+        # Patch both ``path`` and ``raw_path`` so sub-app routing is correct.
+        request.scope["path"] = request.scope["path"] + "/"
+        raw = request.scope.get("raw_path", b"")
+        if raw and not raw.endswith(b"/"):
+            request.scope["raw_path"] = raw + b"/"
+    return await call_next(request)
 
 
 _origins = settings.cors_origins_list()

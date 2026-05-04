@@ -203,7 +203,7 @@ async def _stream_events(
     """
     async with client.stream(
         "GET",
-        f"/v1/sessions/{session_id}/stream",
+        f"/v1/sessions/{session_id}/events/stream",
         headers={**_headers(), "Accept": "text/event-stream"},
         timeout=settings.managed_session_timeout_s,
     ) as resp:

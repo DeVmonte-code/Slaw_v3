@@ -10,6 +10,7 @@ const PROXIED_PATHS = [
   "/audits/:path*",
   "/admin/:path*",
   "/users/:path*",
+  "/mcp/:path*",
   "/health",
   "/healthz",
   "/readyz",
