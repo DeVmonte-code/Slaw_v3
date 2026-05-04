@@ -30,7 +30,7 @@ else
   uvicorn swiss_legal_api.api.main:app --host 0.0.0.0 --port 8000 &
   SERVER_PID=$!
   trap "kill $SERVER_PID 2>/dev/null || true" EXIT
-  sleep 15
+  sleep 25
 fi
 
 echo "=== Health ==="
@@ -82,6 +82,12 @@ assert 'rent_reduction_reference_rate' in ids, 'rent_reduction missing'
 assert 'childcare_cost_deduction' in ids, 'childcare_cost_deduction missing'
 print('Luis required IDs present')
 "
+
+JOB_ID=$(echo "$RESP" | python -c "import sys, json; print(json.load(sys.stdin).get('generated_at', ''))")
+export SCAN_JOB_ID="$JOB_ID"
+export API_BASE_URL="$API_BASE_URL"
+echo "=== Acceptance Gate: 100% Agent-Backed ==="
+python scripts/check_agent_backed.py
 
 # Anthropic Opus ITPM (input-tokens-per-minute) is the tightest budget at tier 1.
 # Luis burns most of it in ~12 concurrent verify calls; the next persona scan can

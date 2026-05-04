@@ -79,13 +79,19 @@ class Settings(BaseSettings):
     # ``api.main.lifespan`` rather than degrading to zero-result scans.
     # Local dev / CI / unit tests set ``USE_MANAGED_AGENTS=0`` to opt
     # out (the test conftest does this for the whole offline suite).
-    use_managed_agents: bool = True
+    use_managed_agents: bool | None = None
     # Persisted IDs from the one-shot bootstrap. The bootstrap script
     # writes them back to the .env on success; the runner refuses to
     # start a session when ``use_managed_agents=True`` and any of these
     # are empty (fail loudly, not silently).
     managed_agent_id: str = ""
     managed_agent_version: int = 0
+
+    managed_agent_id_dev: str = ""
+    managed_agent_version_dev: int = 0
+    managed_agent_id_prod: str = ""
+    managed_agent_version_prod: int = 0
+
     managed_environment_id: str = ""
     managed_vault_id: str = ""
     # HTTPS URLs for the three MCP servers the agent registers.
@@ -113,6 +119,26 @@ class Settings(BaseSettings):
     managed_session_timeout_s: float = 180.0
 
     def model_post_init(self, __context: object) -> None:
+        # Map environment-specific agent IDs over to the active ones.
+        if self.is_production():
+            if self.managed_agent_id_prod and not self.managed_agent_id:
+                self.managed_agent_id = self.managed_agent_id_prod
+            if self.managed_agent_version_prod and not self.managed_agent_version:
+                self.managed_agent_version = self.managed_agent_version_prod
+        else:
+            if self.managed_agent_id_dev and not self.managed_agent_id:
+                self.managed_agent_id = self.managed_agent_id_dev
+            if self.managed_agent_version_dev and not self.managed_agent_version:
+                self.managed_agent_version = self.managed_agent_version_dev
+
+        # Default use_managed_agents to True only when runtime has valid IDs.
+        # Fall back strictly to False otherwise to avoid failing silently.
+        if self.use_managed_agents is None:
+            if self.managed_agent_id and self.managed_agent_version:
+                self.use_managed_agents = True
+            else:
+                self.use_managed_agents = False
+
         # Derive per-server MCP URLs from a single base, when given.
         # Per-server overrides win — a deploy that points one server
         # at a separate host (e.g. user_context running in a different

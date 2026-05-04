@@ -55,4 +55,4 @@ timeoutMs = 180000
 [userenv]
 
 [userenv.development]
-USE_MANAGED_AGENTS = "0"
+

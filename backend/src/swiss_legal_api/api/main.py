@@ -160,6 +160,11 @@ def _validate_managed_agents_config() -> None:
     for local dev / CI / unit tests where there is no real agent.
     """
     if not settings.use_managed_agents:
+        logger.warning(
+            "agent_runner_unconfigured - use_managed_agents is false, "
+            "agent IDs are missing or explicitly disabled. "
+            "Falling back to one-shot messages.create."
+        )
         return
     required = {
         "MANAGED_AGENT_ID": settings.managed_agent_id,
@@ -186,7 +191,7 @@ def _validate_managed_agents_config() -> None:
             "production must run the agent driver)."
         )
     logger.info(
-        "managed_agents_enabled agent=%s version=%d environment=%s "
+        "agent_runner_ready agent_id=%s version=%d environment_id=%s "
         "vault=%s mcp_swiss_law=%s mcp_contract_tools=%s "
         "mcp_user_context=%s",
         _redact_id(settings.managed_agent_id),

@@ -77,6 +77,14 @@ def _job() -> None:
 
         summary = sweep_all_users_sync(catalog, scan_fn=run_benefit_scan)
         logger.info("nightly_sweep_summary %s", summary)
+
+        from .audits import agent_backed_summary
+        metrics = agent_backed_summary()
+        logger.info(
+            "nightly_agent_metrics pct=%.1f%% total=%d",
+            metrics.get("agent_backed_pct", 0.0),
+            metrics.get("total_benefits", 0),
+        )
     except Exception as exc:
         logger.exception("nightly_sweep_failed err=%s", type(exc).__name__)
 
