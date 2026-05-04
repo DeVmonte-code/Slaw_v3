@@ -37,6 +37,7 @@ import logging
 import re
 import xml.etree.ElementTree as ET
 from collections import OrderedDict
+from datetime import date
 from typing import Any
 
 import httpx
@@ -218,19 +219,30 @@ async def _find_latest_expression_uri(
     law_base: str,
     lang: str,
 ) -> tuple[str, str]:
-    """Return ``(expression_uri, version_date)`` for the latest in-force version.
+    """Return ``(expression_uri, version_date)`` for the latest **in-force** version.
 
-    Uses SPARQL ORDER BY DESC on the expression URI string — ISO date ordering
-    makes lexicographic and chronological order equivalent (YYYYMMDD format).
-    Returns ``("", "")`` when no dated expression is found.
+    "In-force" here means the latest consolidated expression whose date is on
+    or before today.  Fedlex regularly publishes future-dated expressions for
+    scheduled law changes; using them would produce legal text that is not yet
+    legally effective, corrupting the agent's reasoning.
+
+    The upper bound ``{law_base}/{today}/{lang}`` exploits the fact that
+    lexicographic ordering of ISO dates (YYYYMMDD) equals chronological order
+    when the law base URI prefix is shared — so ``STR(?expr) <= upper_bound``
+    is both correct and server-evaluated, keeping the result set minimal.
+
+    Returns ``("", "")`` when no in-force dated expression is found.
     """
+    today = date.today().strftime("%Y%m%d")
+    upper_bound = f"{law_base}/{today}/{lang}"
     query = f"""
 PREFIX jolux: <http://data.legilux.public.lu/resource/ontology/jolux#>
 SELECT ?expr WHERE {{
   ?expr a jolux:Expression .
   FILTER(
     STRSTARTS(STR(?expr), "{law_base}/2") &&
-    STRENDS(STR(?expr), "/{lang}")
+    STRENDS(STR(?expr), "/{lang}") &&
+    STR(?expr) <= "{upper_bound}"
   )
 }}
 ORDER BY DESC(STR(?expr))

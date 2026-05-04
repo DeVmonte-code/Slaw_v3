@@ -236,7 +236,7 @@ def _build_agent_brief(
         "   using the seed_citation sr_number and article. This returns chunks\n"
         "   from the local corpus. Each chunk may include an 'eli_uri' field —\n"
         "   this is the official Fedlex linked-data URI for that law article.\n\n"
-        "2) For every unique eli_uri returned in step 1, call\n"
+        "2) For every unique (eli_uri, article) pair returned in step 1, call\n"
         "   swiss-law-retrieval-mcp.fetch_fedlex_article(\n"
         "     eli_uri=<uri>, article=<article from the matching seed_citation>\n"
         "   ).\n"

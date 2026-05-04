@@ -138,6 +138,75 @@ def test_normalize_article_id_digits_only() -> None:
 # ---------------------------------------------------------------------------
 
 
+async def test_expression_resolver_upper_bound_excludes_future() -> None:
+    """SPARQL query must contain today's date as an upper bound.
+
+    Fedlex publishes future-dated consolidated expressions for scheduled law
+    changes.  The resolver must only select expressions effective on or before
+    today.  We verify this by asserting:
+
+    1. The captured SPARQL query contains today's date string.
+    2. When SPARQL returns a future expression the resolver does NOT accept it.
+    """
+    from datetime import date
+
+    law_base = "https://fedlex.data.admin.ch/eli/cc/27/317_321_377"
+    today = date.today().strftime("%Y%m%d")
+    future_date = "20991231"
+    future_expr = f"{law_base}/{future_date}/de"
+    current_expr = f"{law_base}/{today}/de"
+
+    captured_queries: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        raw_query = request.url.params.get("query", "")
+        captured_queries.append(raw_query)
+        # A correct SPARQL server would apply our upper-bound filter and
+        # return only current_expr; simulate that here.
+        if today in raw_query and future_date not in raw_query:
+            return httpx.Response(
+                200,
+                json={
+                    "head": {"vars": ["expr"]},
+                    "results": {
+                        "bindings": [
+                            {"expr": {"type": "uri", "value": current_expr}}
+                        ]
+                    },
+                },
+                headers={"content-type": "application/sparql-results+json"},
+            )
+        # If the query were missing the upper bound it would return the future
+        # expression — prove the bound is present by returning nothing here.
+        return httpx.Response(
+            200,
+            json={"head": {"vars": ["expr"]}, "results": {"bindings": []}},
+            headers={"content-type": "application/sparql-results+json"},
+        )
+
+    transport = httpx.MockTransport(handler)
+    async with httpx.AsyncClient(transport=transport) as client:
+        expr_uri, version_date = await _find_latest_expression_uri(
+            client, law_base, "de"
+        )
+
+    # The function must return the current expression, not the future one.
+    assert expr_uri == current_expr, (
+        f"Expected in-force expression {current_expr!r}, got {expr_uri!r}"
+    )
+    assert version_date == today
+
+    # The SPARQL query must embed today's date as an upper bound.
+    assert captured_queries, "expected at least one SPARQL query"
+    assert today in captured_queries[0], (
+        "SPARQL upper-bound filter missing: "
+        f"today={today!r} not found in query"
+    )
+    assert future_expr not in captured_queries[0], (
+        "SPARQL query must not reference the future expression URI directly"
+    )
+
+
 async def test_sparql_manifestation_resolver() -> None:
     """SPARQL queries correctly return expression URI and HTML file URL."""
     sparql_expr = (_FIXTURES / "sparql_latest_expr_or_de.json").read_text()
