@@ -190,6 +190,26 @@ def upsert_user(user_id: str, profile: ContextProfile, notify_enabled: bool) -> 
     return rec
 
 
+def ensure_user_exists(user_id: str, profile: ContextProfile) -> None:
+    """Create the user row if it does not already exist.
+
+    Uses INSERT OR IGNORE so existing rows — including their ``notify_enabled``
+    preference — are *never* mutated.  Call this before ``insert_scan`` to
+    satisfy the FK constraint without overwriting user preferences.
+    """
+    now = _now_iso()
+    payload = profile.model_dump_json()
+    with _txn() as conn:
+        conn.execute(
+            """
+            INSERT OR IGNORE INTO users (user_id, profile_json, notify_enabled,
+                                         created_at, last_seen_at)
+            VALUES (?, ?, 1, ?, ?)
+            """,
+            (user_id, payload, now, now),
+        )
+
+
 def get_user(user_id: str) -> UserRecord | None:
     row = _get_conn().execute("SELECT * FROM users WHERE user_id = ?", (user_id,)).fetchone()
     if row is None:

@@ -613,10 +613,10 @@ async def scan(
         # can aggregate provenance over ad-hoc /scan calls in addition to the
         # nightly sweep. The sweep engine also calls insert_scan; using the same
         # function keeps the audit data path consistent.
-        # scan_results has a FK → users, so we upsert the user row first
-        # (idempotent; profile comes from the request body we already validated).
+        # scan_results has a FK → users. Ensure the row exists without
+        # touching any existing preferences (notify_enabled etc.).
         try:
-            storage.upsert_user(user_id, profile, notify_enabled=True)
+            storage.ensure_user_exists(user_id, profile)
             storage.insert_scan(user_id, report)
         except Exception as persist_exc:
             logger.warning("scan_persist_failed user_id=%s exc=%s", user_id, type(persist_exc).__name__)
