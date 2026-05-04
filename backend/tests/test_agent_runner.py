@@ -249,7 +249,7 @@ async def test_requires_action_loop_sends_tool_confirmation() -> None:
         isinstance(e, dict)
         and e.get("type") == "user.tool_confirmation"
         and e.get("tool_use_id") == "tu_1"
-        and e.get("decision") == "allow"
+        and e.get("result") == "allow"
         for e in confirmed_events
     )
 
