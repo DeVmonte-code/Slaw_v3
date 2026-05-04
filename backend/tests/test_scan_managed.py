@@ -341,8 +341,9 @@ async def test_managed_scan_force_local_keeps_per_entitlement_path(
 
     monkeypatch.setattr(scan_mod, "_verify_via_managed_session", boom)
 
-    # _verify_local needs a Claude stub; respx is overkill here — patch
-    # _call_claude on the verify module directly.
+    # _verify_local calls _call_messages_create directly (bypassing
+    # _call_claude) so the managed-agent path is never entered from within
+    # a tool call. Patch the correct seam.
     fake_prov = AgentProvenance(
         call_kind="messages.create",
         agent_backed=False,
@@ -350,8 +351,8 @@ async def test_managed_scan_force_local_keeps_per_entitlement_path(
         latency_ms=1,
     )
 
-    async def fake_call_claude(
-        content: str, *, site: str = "x", user_id: str = "anonymous"
+    async def fake_call_messages_create(
+        content: str, *, site: str = "x"
     ) -> tuple[str, AgentProvenance]:
         return (
             json.dumps(
@@ -365,7 +366,7 @@ async def test_managed_scan_force_local_keeps_per_entitlement_path(
             fake_prov,
         )
 
-    monkeypatch.setattr(verify_mod, "_call_claude", fake_call_claude)
+    monkeypatch.setattr(verify_mod, "_call_messages_create", fake_call_messages_create)
 
     report = await run_benefit_scan(_luis(), load_catalog(), force_local=True)
     assert sentinel["called"] is False
