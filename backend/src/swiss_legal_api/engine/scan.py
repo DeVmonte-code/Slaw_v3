@@ -231,41 +231,46 @@ def _build_agent_brief(
         f"{json.dumps(safe_fields, indent=2)}\n\n"
         "triggered_entitlements (JSON array):\n"
         f"{json.dumps(items, indent=2)}\n\n"
-        "PROCEDURE (mandatory):\n"
-        "1) For EACH entitlement above, call swiss-contract-tools-mcp.\n"
-        "   verify_entitlement with the entitlement_id and the\n"
-        "   user_profile dict. The MCP tool runs the canonical retrieval +\n"
-        "   analysis pipeline and returns supports / confidence /\n"
-        "   reasoning / best_citation. You MAY also call swiss-law-\n"
-        "   retrieval-mcp.qdrant_search or fetch_article_by_sr if you\n"
-        "   want to inspect raw chunks before deciding.\n"
-        "2) When you have a verdict for every entitlement, return ONLY\n"
-        "   the final JSON object as your last message. No prose.\n\n"
-        "REPLY SCHEMA (strict):\n"
+        "PROCEDURE (mandatory — follow EXACTLY):\n"
+        "1) For EACH entitlement_id in the list above, call\n"
+        "   swiss-contract-tools-mcp.verify_entitlement passing:\n"
+        "     - entitlement_id: the string ID\n"
+        "     - profile: the user_profile dict above\n"
+        "   The tool returns: {entitlement_id, supports, confidence,\n"
+        "   reasoning, best_citation{sr_number, article, paragraph,\n"
+        "   language, quote_under_15_words}}.\n"
+        "   You MAY also call swiss-law-retrieval-mcp.qdrant_search or\n"
+        "   fetch_article_by_sr to inspect raw corpus chunks.\n"
+        "2) After ALL tool calls are complete, your ENTIRE TEXT RESPONSE\n"
+        "   MUST be ONLY the following JSON object — no preamble, no\n"
+        "   explanation, no markdown fences. Start with '{' and end\n"
+        "   with '}'. Any other text will cause every benefit to be\n"
+        "   suppressed as unverified.\n\n"
+        "OUTPUT JSON (copy the tool results directly into this shape):\n"
         "{\n"
         '  "verifications": [\n'
         "    {\n"
-        '      "entitlement_id": str,\n'
-        '      "supports": bool,\n'
-        '      "confidence": number 0..1,\n'
-        '      "reasoning": str,\n'
-        '      "best_quote": str (<=15 words, verbatim from the corpus),\n'
-        '      "citation": {\n'
-        '        "sr_number": str,\n'
-        '        "article": str,\n'
-        '        "paragraph": str | null,\n'
-        '        "language": "de"|"fr"|"it"|"en"\n'
+        '      "entitlement_id": "<same id you passed to the tool>",\n'
+        '      "supports": <bool from tool result>,\n'
+        '      "confidence": <number 0..1 from tool result>,\n'
+        '      "reasoning": "<reasoning from tool result>",\n'
+        '      "best_citation": {\n'
+        '        "sr_number": "<from tool result>",\n'
+        '        "article": "<from tool result>",\n'
+        '        "paragraph": <str or null from tool result>,\n'
+        '        "language": "<de|fr|it|en from tool result>",\n'
+        '        "quote_under_15_words": "<from tool result>"\n'
         "      }\n"
-        "    }, ...\n"
+        "    }\n"
         "  ]\n"
         "}\n\n"
-        "Rules:\n"
-        "- Include EVERY entitlement_id from the input, even when supports=false.\n"
-        "- The citation MUST be a real Swiss SR article — the server\n"
-        "  re-checks resolution against the corpus and suppresses any\n"
-        "  entitlement whose citation does not retrieve.\n"
-        "- best_quote MUST come from the retrieved corpus, never from\n"
-        "  doctrine or from your own paraphrase.\n"
+        "CRITICAL RULES:\n"
+        "- Include EVERY entitlement_id from the input list, even when\n"
+        "  supports=false.\n"
+        "- Do NOT add any text outside the JSON object.\n"
+        "- Do NOT wrap the JSON in markdown code fences.\n"
+        "- Copy field values directly from the tool results — do not\n"
+        "  rephrase, summarise, or omit any field.\n"
     )
 
 
@@ -334,10 +339,14 @@ async def _resolve_agent_citation(
     """
     from .retrieval import retrieve_for_citation
 
-    raw_cit = entry.get("citation")
+    # Accept both "citation" (legacy prompt schema) and "best_citation"
+    # (matches verify_entitlement tool output directly).
+    raw_cit = entry.get("citation") or entry.get("best_citation")
     if not isinstance(raw_cit, dict):
         return None, []
-    quote = " ".join(str(entry.get("best_quote", "")).strip().split()[:14]) or "n/a"
+    # Accept quote from best_quote (legacy) or quote_under_15_words (tool output).
+    raw_quote = entry.get("best_quote") or raw_cit.get("quote_under_15_words", "")
+    quote = " ".join(str(raw_quote).strip().split()[:14]) or "n/a"
     try:
         cit = Citation(
             sr_number=str(raw_cit.get("sr_number", "")),

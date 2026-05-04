@@ -116,7 +116,7 @@ class Settings(BaseSettings):
     # Per-session wall-clock cap. Managed-agents sessions are bounded by
     # the agent's tool budget too, but we add a client-side timeout so
     # one stuck session can't block a /scan request indefinitely.
-    managed_session_timeout_s: float = 180.0
+    managed_session_timeout_s: float = 600.0
 
     def model_post_init(self, __context: object) -> None:
         # Map environment-specific agent IDs over to the active ones.

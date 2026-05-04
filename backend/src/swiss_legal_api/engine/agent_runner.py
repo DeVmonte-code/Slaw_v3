@@ -241,24 +241,48 @@ def _ingest_event(event: dict[str, object], acc: _RunAccumulator) -> bool:
         if isinstance(server, str) and server:
             acc.mcp_servers_invoked.add(server)
     elif et == "session.status_idle":
-        # ``always_ask`` boundary: the docs (Permission policies.md)
-        # specify the server pauses on ``status_idle`` with a
-        # ``requires_action`` payload until the client confirms each
-        # pending tool use via ``user.tool_confirmation``. Treat that
-        # as a continue signal — _consume will send the confirmations
-        # and keep streaming. Only a CLEAN ``status_idle`` (no
-        # required actions) terminates the session.
-        req = event.get("requires_action")
-        if isinstance(req, dict):
-            actions = req.get("tool_confirmations") or req.get("actions") or []
-        elif isinstance(req, list):
-            actions = req
-        else:
-            actions = []
-        if isinstance(actions, list) and actions:
-            for a in actions:
+        # ``always_ask`` boundary: the server pauses on ``status_idle``
+        # when any pending tool use requires user confirmation.
+        #
+        # Two payload shapes observed in the wild:
+        #
+        # Shape A (legacy / docs): top-level ``requires_action`` key
+        #   {"requires_action": {"tool_confirmations": [...]} | [...]}
+        #
+        # Shape B (current beta): ``stop_reason`` object
+        #   {"stop_reason": {"type": "requires_action",
+        #                    "event_ids": ["sevt_abc…", ...]}}
+        #   where each event_id is the ``id`` of an ``agent.mcp_tool_use``
+        #   event that needs a ``user.tool_confirmation`` with that id as
+        #   ``tool_use_id`` before the tool executes.
+        #
+        # Handle both so the confirmation loop works regardless of which
+        # shape the server sends. A CLEAN ``status_idle`` (no pending
+        # actions from either shape) terminates the stream.
+        actions: list[dict[str, object]] = []
+
+        # Shape B: stop_reason.type == "requires_action"
+        stop_reason = event.get("stop_reason")
+        if isinstance(stop_reason, dict) and stop_reason.get("type") == "requires_action":
+            for eid in stop_reason.get("event_ids") or []:
+                if eid:
+                    actions.append({"id": str(eid)})
+
+        # Shape A: top-level requires_action (legacy fallback)
+        if not actions:
+            req = event.get("requires_action")
+            if isinstance(req, dict):
+                raw = req.get("tool_confirmations") or req.get("actions") or []
+            elif isinstance(req, list):
+                raw = req
+            else:
+                raw = []
+            for a in raw:
                 if isinstance(a, dict):
-                    acc.pending_actions.append(a)
+                    actions.append(a)
+
+        if actions:
+            acc.pending_actions.extend(actions)
             return False
         return True
     elif et == "session.status_terminated":
@@ -305,7 +329,7 @@ async def _send_tool_confirmations(
             {
                 "type": "user.tool_confirmation",
                 "tool_use_id": action_id,
-                "decision": "allow",
+                "result": "allow",
             }
         )
     if not events:

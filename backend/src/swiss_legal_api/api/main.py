@@ -604,10 +604,20 @@ async def scan(
     # every managed-agents session run as part of this scan. Header is
     # optional — anonymous /scan still works for the public landing-
     # page surface; the per-user sweep path passes a real id.
+    user_id = x_user_id or "anonymous"
     try:
-        return await run_benefit_scan(
-            profile, load_catalog(), user_id=x_user_id or "anonymous"
+        report = await run_benefit_scan(
+            profile, load_catalog(), user_id=user_id
         )
+        # Persist so the agent-backed audit endpoint (/admin/audits/agent-backed)
+        # can aggregate provenance over ad-hoc /scan calls in addition to the
+        # nightly sweep. The sweep engine also calls insert_scan; using the same
+        # function keeps the audit data path consistent.
+        try:
+            storage.insert_scan(user_id, report)
+        except Exception as persist_exc:
+            logger.warning("scan_persist_failed user_id=%s exc=%s", user_id, type(persist_exc).__name__)
+        return report
     except Exception as exc:
         logger.exception("scan failed: %s", type(exc).__name__)
         raise HTTPException(status_code=500, detail="Internal error") from exc
