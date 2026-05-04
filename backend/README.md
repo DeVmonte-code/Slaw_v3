@@ -569,6 +569,69 @@ ASGITransport.
 pytest tests/test_sweep.py -v
 ```
 
+## Managed Agents
+
+In production every Claude call routes through **Anthropic Managed Agents** (`call_kind=sessions.events`, `agent_backed=true`) so each verification uses real MCP tool calls against the Qdrant and contract-tools servers rather than a single one-shot completion.
+
+### Provisioning (one-time per cluster)
+
+```bash
+cd backend
+# Set MCP_BASE_URL to the public HTTPS host of the running API, then:
+MCP_BASE_URL=https://<your-host> python -m swiss_legal_api.managed_agents.bootstrap \
+  --no-write-env --out /tmp/managed_ids.json
+# Paste the four values from /tmp/managed_ids.json into Replit Secrets:
+#   MANAGED_AGENT_ID, MANAGED_AGENT_VERSION, MANAGED_ENVIRONMENT_ID, MANAGED_VAULT_ID
+# Restart the workflow — boot log will show: agent_runner_ready agent_id=... version=N
+```
+
+Dry-run mode (`--dry-run`) prints the JSON payloads without posting. The script is idempotent: re-running it bumps the agent version rather than creating a duplicate.
+
+### Runtime auto-selection
+
+| IDs present? | `USE_MANAGED_AGENTS` override | Result |
+|---|---|---|
+| ✅ Both set | not set | Managed Agents (production default) |
+| ✅ Both set | `=0` | messages.create (forced fallback) |
+| ❌ Missing | not set | messages.create + `agent_runner_unconfigured` warning |
+| ❌ Missing | `=1` | Boot-time `RuntimeError` — crash loudly |
+
+For full environment-variable reference, tool allow-list, version-bump procedure, and troubleshooting, see [`docs/managed-agents.md`](../docs/managed-agents.md).
+
+## Acceptance gate — verifying agent-backed provenance
+
+The `/admin/audits/agent-backed` endpoint aggregates `agent_backed`, `tool_use_count`, and `mcp_servers_invoked` across every persisted scan. After any deploy, run the gate script to confirm 100% of verifications went through the agent path:
+
+```bash
+cd backend
+# SCAN_JOB_ID is the generated_at ISO timestamp of the scan you want to verify.
+SCAN_JOB_ID=<generated_at_iso> python scripts/check_agent_backed.py
+```
+
+The script exits non-zero unless `total_benefits >= 5` **and** `agent_backed_pct == 100.0`. It is wired into `scripts/smoke.sh` (line 90) so a CI run that downgrades any verification to `messages.create` fails the smoke gate before reaching users.
+
+### Drill-down on failure
+
+```bash
+curl "$API_BASE_URL/admin/audits/agent-backed?details=true&job_id=<SCAN_JOB_ID>"
+```
+
+The `records` array lists every persisted verification with its `call_kind`, `agent_backed`, `tool_use_count`, and `mcp_servers_invoked` — identify exactly which entitlement fell back and why.
+
+### Nightly metric
+
+The scheduler logs `agent_backed_pct` once per night alongside the sweep summary so long-term drift is observable without triggering a manual gate run:
+
+```
+agent_backed_nightly_metric pct=100.0 total=8 agent_backed=8
+```
+
+### Configuration
+
+| Env var | Default | Notes |
+|---|---|---|
+| `ADMIN_AUDIT_TOKEN` | `""` | When set, `X-Admin-Token` header required on audit endpoint. Required in production. |
+
 ## Legal Disclaimer
 
 This software is not a substitute for advice from a Swiss attorney registered with a cantonal bar.
