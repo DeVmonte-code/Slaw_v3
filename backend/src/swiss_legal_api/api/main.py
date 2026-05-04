@@ -7,6 +7,7 @@ import sys
 import time
 from collections.abc import AsyncIterator
 from contextlib import AsyncExitStack, asynccontextmanager, suppress
+from datetime import UTC, datetime
 from urllib.parse import urlparse
 
 import httpx
@@ -656,9 +657,35 @@ async def scan_stream(
     x_user_id: str | None = Header(default=None, alias="X-User-Id"),
 ) -> StreamingResponse:
     queue: asyncio.Queue[dict[str, object] | None] = asyncio.Queue()
+    # Used to signal the heartbeat task to stop *before* we push the
+    # terminal event, so no heartbeat ever appears after ``complete`` or
+    # ``error`` in the SSE stream.
+    _stop_heartbeat = asyncio.Event()
 
     async def _on_progress(event: dict[str, object]) -> None:
         await queue.put(event)
+
+    async def _heartbeat() -> None:
+        """Emit a tiny keep-alive event every ``scan_stream_heartbeat_s``
+        seconds so proxies (Replit, Cloudflare, nginx) don't treat an
+        idle-between-entitlements gap as a dead connection and silently
+        drop the stream.  The client uses these to detect genuine stalls."""
+        interval = float(settings.scan_stream_heartbeat_s)
+        seq = 0
+        while True:
+            try:
+                await asyncio.wait_for(_stop_heartbeat.wait(), timeout=interval)
+                # stop event was set — exit cleanly
+                return
+            except asyncio.TimeoutError:
+                seq += 1
+                await queue.put(
+                    {
+                        "type": "heartbeat",
+                        "ts": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
+                        "seq": seq,
+                    }
+                )
 
     async def _runner() -> None:
         try:
@@ -668,16 +695,21 @@ async def scan_stream(
                 user_id=x_user_id or "anonymous",
                 progress_cb=_on_progress,
             )
+            # Stop heartbeats *before* pushing complete so the client never
+            # sees a heartbeat after the terminal event.
+            _stop_heartbeat.set()
             await queue.put(
                 {"type": "complete", "report": report.model_dump(mode="json")}
             )
         except Exception as exc:  # pragma: no cover - defensive
             logger.exception("scan_stream failed: %s", type(exc).__name__)
+            _stop_heartbeat.set()
             await queue.put({"type": "error", "message": "Internal error"})
         finally:
             await queue.put(None)  # sentinel: close the stream
 
     async def _event_source() -> AsyncIterator[bytes]:
+        hb_task = asyncio.create_task(_heartbeat())
         task = asyncio.create_task(_runner())
         try:
             while True:
@@ -695,6 +727,12 @@ async def scan_stream(
                     f"data: {payload}\n\n"
                 ).encode()
         finally:
+            # Ensure both background tasks are stopped even when the
+            # client disconnects before the scan finishes.
+            _stop_heartbeat.set()
+            hb_task.cancel()
+            with suppress(asyncio.CancelledError, Exception):
+                await hb_task
             if not task.done():
                 task.cancel()
                 with suppress(asyncio.CancelledError, Exception):

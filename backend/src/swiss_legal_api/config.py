@@ -18,6 +18,12 @@ class Settings(BaseSettings):
     curriculum_collection: str = "co_curriculum"
     embedding_model: str = "intfloat/multilingual-e5-small"
     scan_concurrency: int = 3
+    # Interval (seconds) at which /scan/stream emits a no-op "heartbeat" SSE
+    # event while the scan is running. Keeps proxies (Replit, Cloudflare,
+    # nginx) from treating a between-entitlement idle gap as a dead connection
+    # and silently dropping the stream. Also gives the client a signal to
+    # detect genuine staleness.
+    scan_stream_heartbeat_s: int = 15
     # Cosine-similarity floor for retrieved Qdrant chunks. Anything below is
     # dropped before reaching the verifier, which then short-circuits to
     # supports=false without spending a Claude call.

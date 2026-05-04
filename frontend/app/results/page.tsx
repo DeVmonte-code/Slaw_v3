@@ -18,6 +18,13 @@ const PHASES = [
 /** Approximate scan budget (s) used to drive the indeterminate bar.
  *  Caps at 95% so we never falsely "complete" before the response. */
 const EXPECTED_SECS = 35;
+/** Milliseconds of SSE silence before the watchdog aborts the stream
+ *  and shows a recoverable error.  15 s backend heartbeat + latency
+ *  headroom → 60 s gives ~3 missed heartbeats before we give up. */
+const SILENCE_LIMIT_MS = 60_000;
+/** Show the "taking longer than usual" soft banner after this many seconds
+ *  of live-stream without a terminal event. */
+const SLOW_SCAN_BANNER_SECS = 90;
 
 /** Real progress snapshot derived from the /scan/stream SSE channel.
  *  When ``mode === "stream"`` the in-progress UI ignores the timer
@@ -205,6 +212,12 @@ function ScanInProgress({
           and grounding every result in a citation.
         </p>
 
+        {isStream && elapsed >= SLOW_SCAN_BANNER_SECS && (
+          <p className="mt-3 text-xs text-[var(--slaw-ink-muted)]">
+            Still working — this profile triggered more entitlements than usual.
+          </p>
+        )}
+
         {hasToolFeed && (
           <ol
             className="mt-4 space-y-1.5 text-xs text-[var(--slaw-ink-soft)]"
@@ -342,6 +355,9 @@ export default function ResultsPage() {
   // Guard so React 18 strict-mode double-mount doesn't fire two /scan
   // requests in dev.
   const inFlight = useRef(false);
+  // Updated on every received SSE event (including heartbeats). The
+  // silence watchdog uses this to detect a stalled stream.
+  const lastEventAt = useRef(0);
 
   // Hydrate: do we have a finished report? a pending request? or nothing?
   useEffect(() => {
@@ -391,6 +407,15 @@ export default function ResultsPage() {
       setElapsed(Math.floor((Date.now() - started) / 1000));
     }, 1000);
     const abort = new AbortController();
+    // Watchdog: interval handle + cleanup helper. Set up after the SSE
+    // fetch succeeds; cleared on every terminal transition.
+    let watchdogId: number | null = null;
+    const clearWatchdog = () => {
+      if (watchdogId !== null) {
+        window.clearInterval(watchdogId);
+        watchdogId = null;
+      }
+    };
 
     const finishOk = (data: BenefitReport) => {
       try {
@@ -483,18 +508,39 @@ export default function ResultsPage() {
           throw new Error("stream_unavailable_content_type");
         }
         setProgress({ mode: "stream", phaseMessage: "Starting your scan" });
+        // Arm the silence watchdog now that we know the stream is live.
+        // Reset lastEventAt so the first interval tick starts from now.
+        lastEventAt.current = Date.now();
+        watchdogId = window.setInterval(() => {
+          if (Date.now() - lastEventAt.current > SILENCE_LIMIT_MS) {
+            clearWatchdog();
+            window.clearInterval(tick);
+            abort.abort();
+            inFlight.current = false;
+            finishErr(
+              "Connection to the scan stream was lost. Please try again.",
+            );
+          }
+        }, 5_000);
+
         let terminal: "complete" | "error" | null = null;
         let finalReport: BenefitReport | null = null;
         let terminalErr = "";
         for await (const ev of readSse(res.body)) {
           streamWorked = true;
+          // Update the watchdog timestamp on every event, including
+          // heartbeats, so any sign of life resets the silence clock.
+          lastEventAt.current = Date.now();
           let payload: Record<string, unknown> = {};
           try {
             payload = JSON.parse(ev.data) as Record<string, unknown>;
           } catch {
             continue;
           }
-          if (ev.type === "phase") {
+          if (ev.type === "heartbeat") {
+            // No-op for the UI — the timestamp update above is enough.
+            continue;
+          } else if (ev.type === "phase") {
             const message = String(payload.message ?? "");
             setProgress((p) => ({
               ...p,
@@ -555,14 +601,17 @@ export default function ResultsPage() {
           } else if (ev.type === "complete") {
             finalReport = payload.report as BenefitReport;
             terminal = "complete";
+            clearWatchdog();
           } else if (ev.type === "error") {
             terminalErr =
               typeof payload.message === "string"
                 ? payload.message
                 : "Scan failed";
             terminal = "error";
+            clearWatchdog();
           }
         }
+        clearWatchdog();
         window.clearInterval(tick);
         inFlight.current = false;
         if (terminal === "complete" && finalReport) {
@@ -581,6 +630,7 @@ export default function ResultsPage() {
         finishErr("Scan ended unexpectedly. Please try again.");
         return;
       } catch (e) {
+        clearWatchdog();
         if (abort.signal.aborted) return;
         // eslint-disable-next-line no-console
         console.warn("scan_stream_unavailable", e);
@@ -601,6 +651,7 @@ export default function ResultsPage() {
     })();
 
     return () => {
+      clearWatchdog();
       window.clearInterval(tick);
       abort.abort();
     };
