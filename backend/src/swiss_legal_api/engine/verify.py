@@ -120,27 +120,20 @@ def _is_authoritative_language(sr_number: str, lang: str) -> bool:
     ),
     reraise=True,
 )
-async def _call_claude(
+async def _call_messages_create(
     user_content: str,
     *,
     site: str = "engine.verify",
-    user_id: str = "anonymous",
 ) -> tuple[str, AgentProvenance]:
-    """Run one Claude inference and return (text, provenance).
+    """Always-local path: calls ``messages.create`` directly.
 
-    When ``settings.use_managed_agents`` is True (Task #26 production
-    posture) the call routes through
-    :func:`engine.agent_runner.run_session` and the provenance carries
-    ``call_kind='sessions.events'`` plus the observed tool-use counts.
-    Otherwise we fall back to ``messages.create`` so dev / test
-    environments without a provisioned managed agent still work.
+    Used by ``_verify_local`` so the in-process verifier never spawns a
+    nested managed-agents session when ``use_managed_agents`` is True.
+    The MCP ``verify_entitlement`` tool routes through ``_verify_local``
+    and therefore through this function — one managed session per scan
+    (the outer one) is correct; one per entitlement verification would
+    be deeply nested and prohibitively slow.
     """
-    if settings.use_managed_agents:
-        # Lazy import keeps the messages.create cold-start path free of
-        # the agent_runner / httpx-streaming machinery.
-        from .agent_runner import run_session
-
-        return await run_session(user_content, site=site, metadata={"user_id": user_id})
     started = time.perf_counter()
     resp = await _anthropic.messages.create(
         model=settings.claude_model,
@@ -161,14 +154,36 @@ async def _call_claude(
         input_tokens=input_tokens,
         output_tokens=output_tokens,
     )
-    # One stable structured line per Claude call carrying the FULL
-    # provenance contract (nullable managed-agent fields included as
-    # empty values on the messages.create baseline). The audit endpoint
-    # and CLI parse persisted Benefit.agent_provenance, but ``/chat``
-    # and any future non-persisted call site still leave an audit trail
-    # here that auditors can grep with one ``claude_call`` selector.
     logger.info("%s", prov.to_log_fields(site=site))
     return text, prov
+
+
+async def _call_claude(
+    user_content: str,
+    *,
+    site: str = "engine.verify",
+    user_id: str = "anonymous",
+) -> tuple[str, AgentProvenance]:
+    """Run one Claude inference and return (text, provenance).
+
+    When ``settings.use_managed_agents`` is True (Task #26 production
+    posture) the call routes through
+    :func:`engine.agent_runner.run_session` and the provenance carries
+    ``call_kind='sessions.events'`` plus the observed tool-use counts.
+    Otherwise we fall back to ``messages.create`` so dev / test
+    environments without a provisioned managed agent still work.
+
+    NOTE: ``_verify_local`` must call ``_call_messages_create`` directly
+    rather than this function so that the MCP ``verify_entitlement`` tool
+    does not spawn a nested managed session per entitlement.
+    """
+    if settings.use_managed_agents:
+        # Lazy import keeps the messages.create cold-start path free of
+        # the agent_runner / httpx-streaming machinery.
+        from .agent_runner import run_session
+
+        return await run_session(user_content, site=site, metadata={"user_id": user_id})
+    return await _call_messages_create(user_content, site=site)
 
 
 async def _verify_via_managed_agent(
@@ -520,7 +535,7 @@ Retrieved legal text (authoritative chunks first):
 
 Respond with JSON only."""
 
-    text, provenance = await _call_claude(user_content, site=f"engine.verify:{entitlement.id}")
+    text, provenance = await _call_messages_create(user_content, site=f"engine.verify:{entitlement.id}")
     logger.info(
         "claude_verify entitlement_id=%s latency_ms=%d input_tokens=%d "
         "output_tokens=%d agent_backed=%s",

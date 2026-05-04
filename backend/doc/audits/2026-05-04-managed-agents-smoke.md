@@ -1,167 +1,120 @@
-# Audit — Managed Agents smoke-test (Task #51)
+# Managed-Agents Smoke Audit — 2026-05-04
 
-Date: 2026-05-04
+## Status: GREEN ✓
 
 ## Objective
 
-Smoke-test the Managed Agent runtime path end-to-end: trigger a live `/scan`
-or session, verify the agent actually invoked MCP tools (provenance
-`agent_backed=True`), and record any regressions or findings.
+Verify the Managed Agent runtime path end-to-end: smoke-test MCP connectivity,
+trigger a live `/scan`, confirm agent-backed provenance on every benefit, and
+pass the acceptance gate (`check_agent_backed.py` exit 0, ≥5 benefits at 100%
+agent-backed).
 
 ---
 
-## Bugs fixed during this task
+## Smoke Test — PASS
 
-Three bugs blocked the smoke path before the test could run.
-
-### Bug 1 — Wrong SSE stream URL in `agent_runner.py`
-
-`_stream_events()` opened `GET /v1/sessions/{id}/stream` which returns 404.
-The correct Managed Agents beta path is
-`GET /v1/sessions/{id}/events/stream` (200).
-
-**Fix:** `backend/src/swiss_legal_api/engine/agent_runner.py` line ~209.
-
-### Bug 2 — Wrong `StreamableHTTPSessionManager` instance started at lifespan
-
-`api/main.py` lifespan called `app.mount(_prefix, _fmcp.streamable_http_app())`
-at module load time. `streamable_http_app()` lazily creates session manager A
-and wires it into a `StreamableHTTPASGIApp(A)` ASGI endpoint. The lifespan then
-created a *second* manager B (`fmcp._session_manager = StreamableHTTPSessionManager(...)`)
-and called `B.run()`. Because the ASGI route still held a direct reference to A
-(not a dynamic property lookup), every MCP request through the route called
-`A.handle_request()` — and A was never started, so it raised
-`RuntimeError: Task group is not initialized. Make sure to use run()`.
-
-**Fix:** Removed the redundant manager creation in the lifespan so the existing
-manager (created by `streamable_http_app()`) is the one that `run()` is called
-on. `backend/src/swiss_legal_api/api/main.py` lifespan block.
-
-### Bug 3 — Replit proxy strips trailing slashes; MCP URLs unreachable from Anthropic
-
-The Replit reverse proxy redirects any URL ending with `/` to the same URL
-without the slash (HTTP 308). Anthropic's managed-agents runtime does not follow
-that redirect during MCP `initialize`, so every MCP server failed with
-`mcp_connection_failed_error: the URL does not point to a valid MCP endpoint`.
-
-Root cause chain:
-1. All traffic is proxied to Next.js on port 5000; `/mcp/*` was not in the
-   rewrite list, so Next.js returned a 404 HTML page for every MCP request.
-2. Even after adding `/mcp/:path*` to `next.config.mjs`, Next.js runs in
-   production mode (`pnpm start`) so the config is baked at build time — a
-   rebuild was required.
-3. The agent definition stored trailing-slash URLs
-   (e.g. `.../mcp/swiss-law/`). The proxy 308-redirected these before
-   Next.js ever saw them; the Anthropic runtime does not follow the 308.
-
-**Fixes applied:**
-- Added `/mcp/:path*` to `PROXIED_PATHS` in `frontend/next.config.mjs`.
-- Rebuilt the Next.js frontend (`pnpm build`).
-- Removed trailing slashes from `config.py` `mcp_base_url` derivation
-  (`.../mcp/swiss-law` not `.../mcp/swiss-law/`).
-- Added `_mcp_slash_normalizer` ASGI middleware to `main.py` so a request
-  arriving at the exact mount prefix (no slash) is transparently rewritten to
-  the slash form before Starlette's router sees it — handles the no-slash case
-  end-to-end without a redirect.
-- Created a new agent via `POST /v1/agents` with the corrected (no-slash) MCP
-  URLs; updated `MANAGED_AGENT_ID` env var. (`PUT /v1/agents/{id}` and
-  `PATCH /v1/agents/{id}` both return 405 in the managed-agents-2026-04-01
-  beta — only POST to create a new agent works.)
-
----
-
-## Smoke-test result — PASS (exit 0)
-
-```
-smoke_result mcp_tool_use_count=4 tool_use_count=0 agent_backed=True
-             session_id=sesn_…p2z1 text_len=0
-mcp_servers_invoked=swiss-contract-tools-mcp,swiss-law-retrieval-mcp
-agent_id=agen…op  agent_version=1  environment_id=env_…9B
-```
+| Field | Value |
+|---|---|
+| Script | `backend/scripts/managed_agents_smoke.py` |
+| Exit | **0** |
+| Session | `sesn_011CahKRocMvYZyD6g9w3UVP` |
+| `mcp_tool_use_count` | 4 |
+| `agent_backed` | `True` |
+| `text_len` | 1605 chars |
+| Model | `claude-sonnet-4-6` |
+| MCP servers invoked | `swiss-contract-tools-mcp`, `swiss-law-retrieval-mcp` |
 
 - Session created: `POST /v1/sessions` → 200
 - Events stream opened: `GET /v1/sessions/{id}/events/stream` → 200
-- User message sent: `POST /v1/sessions/{id}/events` → 200
-- MCP servers initialised successfully:
-  - `swiss-law-retrieval-mcp` (4 tool calls — Qdrant vector search)
-  - `swiss-contract-tools-mcp` (invoked during same session)
-  - `swiss-user-context-mcp` (listed tools, not called for this prompt)
-- Provenance: `agent_backed=True`, `call_kind=sessions.events`
+- Qdrant vector search confirmed live for each tool call
 - Script exit code: **0**
 
 ---
 
-## Live `/scan` via managed agents
+## Live `/scan` Run — PASS
 
-A concurrent `/scan` with the Luis fixture profile also ran through the managed
-agents path (confirmed by `claude_call` log line):
+| Field | Value |
+|---|---|
+| User-Id | `luis-gate-001` |
+| `generated_at` | `2026-05-04T10:04:36.633259Z` |
+| Outer session | `sesn_011CahKkrivYvwSpX3XzfD2V` |
+| `triggered` | 12 |
+| `verified` | 10 |
+| `suppressed` | 2 (no chunks above threshold) |
+| `duration_ms` | ~204,000 ms |
+| `agent_backed` | **10 / 10 (100%)** |
+| `call_kind` | `sessions.events` for all 10 |
 
 ```
-claude_call site=engine.scan.batch call_kind=sessions.events
-            agent_backed=true mcp_tool_use_count=12
-            mcp_servers_invoked=swiss-contract-tools-mcp
+scan_complete profile_hash=88a6e006943e047a triggered=12 verified=10
+             suppressed=2 duration_ms=204623
+managed_scan_session entitlements=12 session=sesn_011CahKkrivYvwSpX3XzfD2V
+                     agent_backed=true mcp_tools=12
 ```
 
-The session connected successfully and the agent invoked 12 MCP tool calls.
-However, the scan engine logged `managed_scan_bad_reply raw_len=60` — the
-agent returned ~60 characters of text rather than the structured
-benefit-verification JSON that `_parse_agent_verifications()` expects.
-Result: `triggered=12 verified=0 suppressed=12`.
-
-This is a **behavioral / prompting issue** in the scan verification step
-(the agent chose `swiss-contract-tools-mcp` for all 12 calls rather than the
-verification toolset), not an MCP connectivity issue. It is out of scope for
-Task #51 and should be tracked separately.
+Qdrant queries confirmed live for each `verify_entitlement` MCP tool call
+(`swiss_law` collection, real embeddings).
 
 ---
 
-## Acceptance gate result — FAIL (expected, scope-limited)
+## Acceptance Gate — PASS (exit 0)
 
 ```
-job_id: 2026-05-04T09:08:37.816624Z
-total_benefits: 0  agent_backed: 0  agent_backed_pct: 0.0%
-GATE: FAIL — total_benefits=0 < 5 (scan not persisted to sweep storage)
+Job: 2026-05-04T10:04:36.633259Z
+total_benefits     = 10
+agent_backed_pct   = 100.0%
+by_call_kind       = {'sessions.events': 10}
+by_model           = {'claude-sonnet-4-6': 10}
+SUCCESS: acceptance gate passed — 100% of verifications are agent-backed.
+GATE_EXIT=0
 ```
 
-The `/scan` endpoint does not persist results to the sweep SQLite store
-(`sweep.db`) — only `sweep_one_user()` does. The acceptance gate script
-(`check_agent_backed.py`) reads from the sweep store via
-`GET /admin/audits/agent-backed?job_id=…`. Because the scan was issued through
-the ad-hoc `/scan` path rather than the sweep engine, no rows were written and
-the gate saw `total_benefits=0`.
-
-**Conclusion:** The gate failure is a test-harness issue, not a regression in
-agent-backed provenance. The smoke test (which directly exercises the managed
-session path) passed with `mcp_tool_use_count=4` and `agent_backed=True`, which
-is the definitive proof of end-to-end MCP connectivity.
+Endpoint: `GET /admin/audits/agent-backed?job_id=2026-05-04T10%3A04%3A36.633259Z`
 
 ---
 
-## Infrastructure state after Task #51
+## Bugs Fixed During This Task
+
+| # | Description | Files changed |
+|---|---|---|
+| 1 | Stream URL `/stream` → `/events/stream` | `agent_runner.py` |
+| 2 | Duplicate `StreamableHTTPSessionManager` in lifespan | `main.py` |
+| 3 | Replit proxy strips trailing slashes — added `/mcp/:path*` proxy rule, slash-normalizer ASGI middleware, no-slash URL defaults | `next.config.mjs`, `main.py`, `config.py` |
+| 4 | `_ingest_event` parsed `event.get("requires_action")` but API sends `stop_reason: {type:"requires_action", event_ids:[…]}` | `agent_runner.py` |
+| 5 | Tool confirmation used `decision:"allow"` — API requires `result:"allow"` | `agent_runner.py` |
+| 6 | `_build_agent_brief` prompt referenced wrong key; `_resolve_agent_citation` only accepted `citation` | `scan.py` |
+| 7 | **Nested managed sessions** — `_verify_local` called `_call_claude` which re-entered the managed-agent path, spawning one full session per entitlement (57 s each × 12 = 684 s). Fixed by extracting `_call_messages_create` and routing `_verify_local` through it directly | `verify.py` |
+| 8 | `/scan` endpoint did not persist to `sweep.db` — acceptance gate always saw 0 rows | `main.py` |
+| 9 | FK violation on `insert_scan` — `users` row must exist before `scan_results` insert | `main.py` |
+| 10 | `managed_session_timeout_s` 180 s too short; raised to 600 s | `config.py` |
+
+---
+
+## Correct Session Topology
+
+```
+/scan
+  └── _verify_via_managed_session()        ← ONE managed session (outer)
+        └── verify_entitlement ×12 (MCP)  ← confirmed, then executes
+              └── _verify_local()           ← in-process
+                    └── _call_messages_create()  ← direct messages.create (~4 s)
+```
+
+One outer managed session per scan orchestrates all 12 `verify_entitlement`
+tool calls. Each tool call executes `_verify_local → _call_messages_create`
+(direct `messages.create`, ~4 s each). No nested managed sessions.
+
+---
+
+## Infrastructure State After Task #51
 
 | Item | Value |
-|------|-------|
-| MANAGED_AGENT_ID | `agen…op` (new, no-slash MCP URLs) |
-| MANAGED_AGENT_VERSION | 1 |
-| MANAGED_ENVIRONMENT_ID | `env_…9B` (unchanged) |
-| MANAGED_VAULT_ID | `vlt_…EN` (unchanged) |
-| MCP_BASE_URL | `https://<repl-domain>` (no trailing slash) |
-| Next.js proxy routes | `/mcp/:path*` added |
+|---|---|
+| `MANAGED_AGENT_ID` | `agent_011CahFzDgdkKuHmxpKAHqop` (version 1) |
+| `MANAGED_ENVIRONMENT_ID` | `env_0137NKCALxA8uttrfn7hJJ9B` |
+| `MANAGED_VAULT_ID` | `vlt_011CahDumG4DjWqJ8SZbtSEN` |
+| MCP URLs | No trailing slash (e.g. `.../mcp/swiss-law`) |
+| Next.js proxy routes | `/mcp/:path*` added and built |
 | FastAPI middleware | `_mcp_slash_normalizer` added |
-| Frontend build | Rebuilt 2026-05-04 |
-
----
-
-## Known follow-up items
-
-1. **`managed_scan_bad_reply`** — agent returns unstructured text instead of
-   benefit-verification JSON during `/scan`. Likely a system-prompt or
-   tool-selection issue in the scan verification step. Track as a separate task.
-2. **Agent update API** — `PUT /v1/agents/{id}` returns 405 in the
-   `managed-agents-2026-04-01` beta. Bootstrap must `POST /v1/agents` to create
-   a new agent when URLs change, which changes the agent ID. Consider
-   parametrising the smoke-test fixture so it always reads the current
-   `MANAGED_AGENT_ID` from env rather than a hardcoded value.
-3. **Acceptance gate harness** — `check_agent_backed.py` should be extended to
-   accept a bare session_id (from the smoke script's output) so it can gate on
-   the `claude_call` log line rather than requiring a persisted sweep scan.
+| `managed_session_timeout_s` | 600 s |
+| Anthropic beta header | `managed-agents-2026-04-01` |
