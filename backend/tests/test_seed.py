@@ -38,7 +38,7 @@ def test_entitlements_parse_and_count():
     # (quellensteuer_subsequent_assessment, naturalisation_eligibility,
     # family_reunification_right) + 1 cantonal smoke entitlement
     # (bern_rental_conciliation_free_procedure, task #21).
-    assert len(data) == 19
+    assert len(data) == 27
     ids = set()
     for row in data:
         e = Entitlement.model_validate(row)

@@ -121,6 +121,7 @@ async def test_verify_entitlement_attaches_provenance(monkeypatch) -> None:
             ),
         )
 
+    monkeypatch.setattr(verify_mod, "_call_messages_create", _fake_call_claude)
     monkeypatch.setattr(verify_mod, "_call_claude", _fake_call_claude)
 
     result = await verify_entitlement(_entitlement(), _profile(), [])
@@ -152,6 +153,7 @@ async def test_bad_json_path_still_carries_provenance(monkeypatch) -> None:
             latency_ms=7,
         )
 
+    monkeypatch.setattr(verify_mod, "_call_messages_create", _fake_call_claude)
     monkeypatch.setattr(verify_mod, "_call_claude", _fake_call_claude)
 
     result = await verify_entitlement(_entitlement(), _profile(), [])
@@ -192,6 +194,7 @@ async def test_persisted_benefit_round_trips_provenance(monkeypatch) -> None:
             ),
         )
 
+    monkeypatch.setattr(verify_mod, "_call_messages_create", _fake_call_claude)
     monkeypatch.setattr(verify_mod, "_call_claude", _fake_call_claude)
 
     report = await run_benefit_scan(_profile(), [_entitlement()])
@@ -237,6 +240,7 @@ async def test_audit_summary_baseline_is_zero_agent_backed(monkeypatch) -> None:
             ),
         )
 
+    monkeypatch.setattr(verify_mod, "_call_messages_create", _fake_call_claude)
     monkeypatch.setattr(verify_mod, "_call_claude", _fake_call_claude)
 
     report = await run_benefit_scan(_profile(), [_entitlement()])
@@ -333,6 +337,7 @@ async def test_audit_counts_every_persisted_scan_not_just_latest(monkeypatch) ->
             ),
         )
 
+    monkeypatch.setattr(verify_mod, "_call_messages_create", _fake_call_claude)
     monkeypatch.setattr(verify_mod, "_call_claude", _fake_call_claude)
 
     storage.upsert_user("u1", _profile(), notify_enabled=True)
@@ -460,6 +465,7 @@ async def test_audit_filters_since_and_entitlement_id_with_drilldown(
             ),
         )
 
+    monkeypatch.setattr(verify_mod, "_call_messages_create", _fake_call_claude)
     monkeypatch.setattr(verify_mod, "_call_claude", _fake_call_claude)
     storage.upsert_user("u1", _profile(), notify_enabled=True)
 

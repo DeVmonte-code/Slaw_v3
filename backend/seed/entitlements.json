@@ -19,12 +19,31 @@
     ],
     "trigger": {
       "all": [
-        {"eq": ["housing_status", "tenant"]},
-        {"lte": ["rental_start_year", 2022]},
-        {"eq": ["lease_reference_rate_tracked", true]}
+        {
+          "eq": [
+            "housing_status",
+            "tenant"
+          ]
+        },
+        {
+          "lte": [
+            "rental_start_year",
+            2022
+          ]
+        },
+        {
+          "eq": [
+            "lease_reference_rate_tracked",
+            true
+          ]
+        }
       ]
     },
-    "estimated_value_chf": {"min": 500, "max": 3000, "per": "year"},
+    "estimated_value_chf": {
+      "min": 500,
+      "max": 3000,
+      "per": "year"
+    },
     "required_action": "claim_letter_to_landlord",
     "time_limit_days": 30,
     "confidence_floor": 0.6
@@ -49,11 +68,25 @@
     ],
     "trigger": {
       "all": [
-        {"eq": ["housing_status", "tenant"]},
-        {"gte": ["rent_chf_monthly", 1]}
+        {
+          "eq": [
+            "housing_status",
+            "tenant"
+          ]
+        },
+        {
+          "gte": [
+            "rent_chf_monthly",
+            1
+          ]
+        }
       ]
     },
-    "estimated_value_chf": {"min": 50, "max": 300, "per": "year"},
+    "estimated_value_chf": {
+      "min": 50,
+      "max": 300,
+      "per": "year"
+    },
     "required_action": "claim_letter_to_landlord",
     "time_limit_days": null,
     "confidence_floor": 0.6
@@ -73,16 +106,33 @@
         "paragraph": "1",
         "canton": "CH",
         "language": "en",
-        "quote_under_15_words": "the employer must acknowledge and safeguard the employee’s personality rights"
+        "quote_under_15_words": "the employer must acknowledge and safeguard the employee\u2019s personality rights"
       }
     ],
     "trigger": {
       "all": [
-        {"in": ["employment_status", ["employee_full_time", "employee_part_time"]]},
-        {"gte": ["weekly_hours", 35]}
+        {
+          "in": [
+            "employment_status",
+            [
+              "employee_full_time",
+              "employee_part_time"
+            ]
+          ]
+        },
+        {
+          "gte": [
+            "weekly_hours",
+            35
+          ]
+        }
       ]
     },
-    "estimated_value_chf": {"min": 0, "max": 5000, "per": "year"},
+    "estimated_value_chf": {
+      "min": 0,
+      "max": 5000,
+      "per": "year"
+    },
     "required_action": "employer_request",
     "time_limit_days": null,
     "confidence_floor": 0.6
@@ -90,7 +140,7 @@
   {
     "id": "overtime_compensation",
     "title": {
-      "de": "Überstundenvergütung",
+      "de": "\u00dcberstundenverg\u00fctung",
       "en": "Overtime Compensation"
     },
     "category": "employment_right",
@@ -107,10 +157,22 @@
     ],
     "trigger": {
       "all": [
-        {"in": ["employment_status", ["employee_full_time", "employee_part_time"]]}
+        {
+          "in": [
+            "employment_status",
+            [
+              "employee_full_time",
+              "employee_part_time"
+            ]
+          ]
+        }
       ]
     },
-    "estimated_value_chf": {"min": 500, "max": 5000, "per": "year"},
+    "estimated_value_chf": {
+      "min": 500,
+      "max": 5000,
+      "per": "year"
+    },
     "required_action": "employer_request",
     "time_limit_days": 1825,
     "confidence_floor": 0.6
@@ -118,7 +180,7 @@
   {
     "id": "notice_period_seniority",
     "title": {
-      "de": "Verlängerte Kündigungsfrist nach Dienstjahren",
+      "de": "Verl\u00e4ngerte K\u00fcndigungsfrist nach Dienstjahren",
       "en": "Extended Notice Period by Seniority"
     },
     "category": "employment_right",
@@ -130,16 +192,33 @@
         "paragraph": "1",
         "canton": "CH",
         "language": "en",
-        "quote_under_15_words": "may be terminated at one month’s notice during the first year of service"
+        "quote_under_15_words": "may be terminated at one month\u2019s notice during the first year of service"
       }
     ],
     "trigger": {
       "all": [
-        {"in": ["employment_status", ["employee_full_time", "employee_part_time"]]},
-        {"lte": ["employment_start_year", 2020]}
+        {
+          "in": [
+            "employment_status",
+            [
+              "employee_full_time",
+              "employee_part_time"
+            ]
+          ]
+        },
+        {
+          "lte": [
+            "employment_start_year",
+            2020
+          ]
+        }
       ]
     },
-    "estimated_value_chf": {"min": 1000, "max": 3000, "per": "one_time"},
+    "estimated_value_chf": {
+      "min": 1000,
+      "max": 3000,
+      "per": "one_time"
+    },
     "required_action": "employer_request",
     "time_limit_days": null,
     "confidence_floor": 0.6
@@ -159,16 +238,30 @@
         "paragraph": "3",
         "canton": "CH",
         "language": "de",
-        "quote_under_15_words": "höchstens 25 800 Franken, für die Drittbetreuung jedes Kindes"
+        "quote_under_15_words": "h\u00f6chstens 25 800 Franken, f\u00fcr die Drittbetreuung jedes Kindes"
       }
     ],
     "trigger": {
       "all": [
-        {"gte": ["children_count", 1]},
-        {"gte": ["childcare_cost_chf_yearly", 1]}
+        {
+          "gte": [
+            "children_count",
+            1
+          ]
+        },
+        {
+          "gte": [
+            "childcare_cost_chf_yearly",
+            1
+          ]
+        }
       ]
     },
-    "estimated_value_chf": {"min": 2000, "max": 10250, "per": "year"},
+    "estimated_value_chf": {
+      "min": 2000,
+      "max": 10250,
+      "per": "year"
+    },
     "required_action": "tax_declaration_field",
     "time_limit_days": null,
     "confidence_floor": 0.6
@@ -188,16 +281,35 @@
         "paragraph": "1",
         "canton": "CH",
         "language": "de",
-        "quote_under_15_words": "die notwendigen Kosten für Fahrten zwischen Wohn- und Arbeitsstätte bis zu einem Maximalbetrag"
+        "quote_under_15_words": "die notwendigen Kosten f\u00fcr Fahrten zwischen Wohn- und Arbeitsst\u00e4tte bis zu einem Maximalbetrag"
       }
     ],
     "trigger": {
       "all": [
-        {"in": ["employment_status", ["employee_full_time", "employee_part_time", "self_employed"]]},
-        {"gte": ["commute_km_daily", 1]}
+        {
+          "in": [
+            "employment_status",
+            [
+              "employee_full_time",
+              "employee_part_time",
+              "self_employed",
+              "student"
+            ]
+          ]
+        },
+        {
+          "gte": [
+            "commute_km_daily",
+            1
+          ]
+        }
       ]
     },
-    "estimated_value_chf": {"min": 300, "max": 3000, "per": "year"},
+    "estimated_value_chf": {
+      "min": 300,
+      "max": 3000,
+      "per": "year"
+    },
     "required_action": "tax_declaration_field",
     "time_limit_days": null,
     "confidence_floor": 0.6
@@ -222,10 +334,24 @@
     ],
     "trigger": {
       "all": [
-        {"in": ["employment_status", ["employee_full_time", "employee_part_time", "self_employed"]]}
+        {
+          "in": [
+            "employment_status",
+            [
+              "employee_full_time",
+              "employee_part_time",
+              "self_employed",
+              "student"
+            ]
+          ]
+        }
       ]
     },
-    "estimated_value_chf": {"min": 500, "max": 12000, "per": "year"},
+    "estimated_value_chf": {
+      "min": 500,
+      "max": 12000,
+      "per": "year"
+    },
     "required_action": "tax_declaration_field",
     "time_limit_days": null,
     "confidence_floor": 0.6
@@ -233,7 +359,7 @@
   {
     "id": "third_pillar_deduction",
     "title": {
-      "de": "Säule-3a-Abzug",
+      "de": "S\u00e4ule-3a-Abzug",
       "en": "Third Pillar (Pillar 3a) Tax Deduction"
     },
     "category": "tax_deduction",
@@ -245,16 +371,30 @@
         "paragraph": "1",
         "canton": "CH",
         "language": "de",
-        "quote_under_15_words": "Einlagen, Prämien und Beiträge zum Erwerb von vertraglichen Ansprüchen aus anerkannten Formen"
+        "quote_under_15_words": "Einlagen, Pr\u00e4mien und Beitr\u00e4ge zum Erwerb von vertraglichen Anspr\u00fcchen aus anerkannten Formen"
       }
     ],
     "trigger": {
       "all": [
-        {"eq": ["has_third_pillar", true]},
-        {"gte": ["third_pillar_chf_this_year", 1]}
+        {
+          "eq": [
+            "has_third_pillar",
+            true
+          ]
+        },
+        {
+          "gte": [
+            "third_pillar_chf_this_year",
+            1
+          ]
+        }
       ]
     },
-    "estimated_value_chf": {"min": 6000, "max": 7056, "per": "year"},
+    "estimated_value_chf": {
+      "min": 6000,
+      "max": 7056,
+      "per": "year"
+    },
     "required_action": "tax_declaration_field",
     "time_limit_days": null,
     "confidence_floor": 0.6
@@ -274,11 +414,20 @@
         "paragraph": "2",
         "canton": "CH",
         "language": "de",
-        "quote_under_15_words": "Für Ehegatten, die in rechtlich und tatsächlich ungetrennter Ehe leben"
+        "quote_under_15_words": "F\u00fcr Ehegatten, die in rechtlich und tats\u00e4chlich ungetrennter Ehe leben"
       }
     ],
-    "trigger": {"eq": ["marital_status", "married"]},
-    "estimated_value_chf": {"min": 0, "max": 5000, "per": "year"},
+    "trigger": {
+      "eq": [
+        "marital_status",
+        "married"
+      ]
+    },
+    "estimated_value_chf": {
+      "min": 0,
+      "max": 5000,
+      "per": "year"
+    },
     "required_action": "tax_declaration_field",
     "time_limit_days": null,
     "confidence_floor": 0.6
@@ -286,7 +435,7 @@
   {
     "id": "unemployment_insurance_entitlement",
     "title": {
-      "de": "Anspruch auf Arbeitslosenentschädigung",
+      "de": "Anspruch auf Arbeitslosenentsch\u00e4digung",
       "en": "Unemployment Insurance Entitlement"
     },
     "category": "social_security",
@@ -298,19 +447,43 @@
         "paragraph": "1",
         "canton": "CH",
         "language": "de",
-        "quote_under_15_words": "Der Versicherte hat Anspruch auf Arbeitslosenentschädigung, wenn er ganz oder teilweise arbeitslos ist"
+        "quote_under_15_words": "Der Versicherte hat Anspruch auf Arbeitslosenentsch\u00e4digung, wenn er ganz oder teilweise arbeitslos ist"
       }
     ],
     "trigger": {
       "all": [
-        {"eq": ["employment_status", "unemployed"]},
-        {"any": [
-          {"eq": ["nationality_status", "swiss"]},
-          {"in": ["permit_type", ["B", "C"]]}
-        ]}
+        {
+          "eq": [
+            "employment_status",
+            "unemployed"
+          ]
+        },
+        {
+          "any": [
+            {
+              "eq": [
+                "nationality_status",
+                "swiss"
+              ]
+            },
+            {
+              "in": [
+                "permit_type",
+                [
+                  "B",
+                  "C"
+                ]
+              ]
+            }
+          ]
+        }
       ]
     },
-    "estimated_value_chf": {"min": 12000, "max": 70000, "per": "year"},
+    "estimated_value_chf": {
+      "min": 12000,
+      "max": 70000,
+      "per": "year"
+    },
     "required_action": "federal_application",
     "time_limit_days": 30,
     "confidence_floor": 0.6
@@ -330,13 +503,20 @@
         "paragraph": "1",
         "canton": "CH",
         "language": "de",
-        "quote_under_15_words": "Folgen eines Wohnsitzwechsels innerhalb der Schweiz so berücksichtigt, dass die Steuerpflicht"
+        "quote_under_15_words": "Folgen eines Wohnsitzwechsels innerhalb der Schweiz so ber\u00fccksichtigt, dass die Steuerpflicht"
       }
     ],
     "trigger": {
-      "event_within_years": ["moved_canton", 2]
+      "event_within_years": [
+        "moved_canton",
+        2
+      ]
     },
-    "estimated_value_chf": {"min": 0, "max": 3000, "per": "year"},
+    "estimated_value_chf": {
+      "min": 0,
+      "max": 3000,
+      "per": "year"
+    },
     "required_action": "tax_declaration_field",
     "time_limit_days": null,
     "confidence_floor": 0.6
@@ -359,8 +539,14 @@
         "quote_under_15_words": "An error is fundamental in the following cases in particular"
       }
     ],
-    "trigger": {"all": []},
-    "estimated_value_chf": {"min": 0, "max": 50000, "per": "one_time"},
+    "trigger": {
+      "all": []
+    },
+    "estimated_value_chf": {
+      "min": 0,
+      "max": 50000,
+      "per": "one_time"
+    },
     "required_action": "consultation_with_lawyer",
     "time_limit_days": 365,
     "confidence_floor": 0.5
@@ -368,7 +554,7 @@
   {
     "id": "rd_business_deduction_hint",
     "title": {
-      "de": "F&E Geschäftsausgaben Abzug",
+      "de": "F&E Gesch\u00e4ftsausgaben Abzug",
       "en": "R&D Business Deduction Hint"
     },
     "category": "tax_deduction",
@@ -380,16 +566,35 @@
         "paragraph": "1",
         "canton": "CH",
         "language": "de",
-        "quote_under_15_words": "Bei selbständiger Erwerbstätigkeit werden die geschäfts- oder berufsmässig begründeten Kosten abgezogen"
+        "quote_under_15_words": "Bei selbst\u00e4ndiger Erwerbst\u00e4tigkeit werden die gesch\u00e4fts- oder berufsm\u00e4ssig begr\u00fcndeten Kosten abgezogen"
       }
     ],
     "trigger": {
       "all": [
-        {"in": ["business_activity", ["freelance", "sole_proprietor", "gmbh", "ag"]]},
-        {"gte": ["rd_spend_chf_this_year", 1]}
+        {
+          "in": [
+            "business_activity",
+            [
+              "freelance",
+              "sole_proprietor",
+              "gmbh",
+              "ag"
+            ]
+          ]
+        },
+        {
+          "gte": [
+            "rd_spend_chf_this_year",
+            1
+          ]
+        }
       ]
     },
-    "estimated_value_chf": {"min": 1000, "max": 50000, "per": "year"},
+    "estimated_value_chf": {
+      "min": 1000,
+      "max": 50000,
+      "per": "year"
+    },
     "required_action": "tax_declaration_field",
     "time_limit_days": null,
     "confidence_floor": 0.6
@@ -412,8 +617,14 @@
         "quote_under_15_words": "Any person who unlawfully causes damage to another, whether wilfully or negligently"
       }
     ],
-    "trigger": {"all": []},
-    "estimated_value_chf": {"min": 0, "max": 100000, "per": "one_time"},
+    "trigger": {
+      "all": []
+    },
+    "estimated_value_chf": {
+      "min": 0,
+      "max": 100000,
+      "per": "one_time"
+    },
     "required_action": "consultation_with_lawyer",
     "time_limit_days": 3650,
     "confidence_floor": 0.5
@@ -421,7 +632,7 @@
   {
     "id": "quellensteuer_subsequent_assessment",
     "title": {
-      "de": "Nachträgliche ordentliche Veranlagung (Quellensteuer)",
+      "de": "Nachtr\u00e4gliche ordentliche Veranlagung (Quellensteuer)",
       "en": "Subsequent Ordinary Assessment (Source Tax)"
     },
     "category": "tax_deduction",
@@ -433,16 +644,32 @@
         "paragraph": "1",
         "canton": "CH",
         "language": "de",
-        "quote_under_15_words": "Personen, die nach Artikel 91 der Quellensteuer unterliegen, können für jede Steuerperiode"
+        "quote_under_15_words": "Personen, die nach Artikel 91 der Quellensteuer unterliegen, k\u00f6nnen f\u00fcr jede Steuerperiode"
       }
     ],
     "trigger": {
       "all": [
-        {"eq": ["permit_type", "B"]},
-        {"not": {"eq": ["nationality_status", "swiss"]}}
+        {
+          "eq": [
+            "permit_type",
+            "B"
+          ]
+        },
+        {
+          "not": {
+            "eq": [
+              "nationality_status",
+              "swiss"
+            ]
+          }
+        }
       ]
     },
-    "estimated_value_chf": {"min": 500, "max": 5000, "per": "year"},
+    "estimated_value_chf": {
+      "min": 500,
+      "max": 5000,
+      "per": "year"
+    },
     "required_action": "cantonal_application",
     "time_limit_days": null,
     "confidence_floor": 0.6
@@ -450,7 +677,7 @@
   {
     "id": "naturalisation_eligibility",
     "title": {
-      "de": "Anspruch auf ordentliche Einbürgerung",
+      "de": "Anspruch auf ordentliche Einb\u00fcrgerung",
       "en": "Ordinary Naturalisation Eligibility"
     },
     "category": "social_security",
@@ -467,12 +694,33 @@
     ],
     "trigger": {
       "all": [
-        {"eq": ["permit_type", "C"]},
-        {"gte": ["years_in_switzerland", 10]},
-        {"not": {"eq": ["nationality_status", "swiss"]}}
+        {
+          "eq": [
+            "permit_type",
+            "C"
+          ]
+        },
+        {
+          "gte": [
+            "years_in_switzerland",
+            10
+          ]
+        },
+        {
+          "not": {
+            "eq": [
+              "nationality_status",
+              "swiss"
+            ]
+          }
+        }
       ]
     },
-    "estimated_value_chf": {"min": 0, "max": 2000, "per": "one_time"},
+    "estimated_value_chf": {
+      "min": 0,
+      "max": 2000,
+      "per": "one_time"
+    },
     "required_action": "cantonal_application",
     "time_limit_days": null,
     "confidence_floor": 0.6
@@ -492,20 +740,51 @@
         "paragraph": "1",
         "canton": "CH",
         "language": "de",
-        "quote_under_15_words": "Ausländische Ehegatten und ledige Kinder unter 18 Jahren von Personen mit Niederlassungsbewilligung"
+        "quote_under_15_words": "Ausl\u00e4ndische Ehegatten und ledige Kinder unter 18 Jahren von Personen mit Niederlassungsbewilligung"
       }
     ],
     "trigger": {
       "all": [
-        {"not": {"eq": ["nationality_status", "swiss"]}},
-        {"in": ["permit_type", ["B", "C"]]},
-        {"any": [
-          {"eq": ["marital_status", "married"]},
-          {"gte": ["children_count", 1]}
-        ]}
+        {
+          "not": {
+            "eq": [
+              "nationality_status",
+              "swiss"
+            ]
+          }
+        },
+        {
+          "in": [
+            "permit_type",
+            [
+              "B",
+              "C"
+            ]
+          ]
+        },
+        {
+          "any": [
+            {
+              "eq": [
+                "marital_status",
+                "married"
+              ]
+            },
+            {
+              "gte": [
+                "children_count",
+                1
+              ]
+            }
+          ]
+        }
       ]
     },
-    "estimated_value_chf": {"min": 0, "max": 3000, "per": "one_time"},
+    "estimated_value_chf": {
+      "min": 0,
+      "max": 3000,
+      "per": "one_time"
+    },
     "required_action": "cantonal_application",
     "time_limit_days": null,
     "confidence_floor": 0.6
@@ -514,7 +793,7 @@
     "id": "bern_rental_conciliation_free_procedure",
     "title": {
       "de": "Kostenloses Schlichtungsverfahren bei Mietstreitigkeiten (BE)",
-      "fr": "Procédure de conciliation gratuite pour les litiges de bail (BE)",
+      "fr": "Proc\u00e9dure de conciliation gratuite pour les litiges de bail (BE)",
       "en": "Free Conciliation Procedure for Rental Disputes (Bern)"
     },
     "category": "tenancy_right",
@@ -531,12 +810,451 @@
     ],
     "trigger": {
       "all": [
-        {"eq": ["canton", "BE"]},
-        {"eq": ["housing_status", "tenant"]}
+        {
+          "eq": [
+            "canton",
+            "BE"
+          ]
+        },
+        {
+          "eq": [
+            "housing_status",
+            "tenant"
+          ]
+        }
       ]
     },
-    "estimated_value_chf": {"min": 200, "max": 1500, "per": "one_time"},
+    "estimated_value_chf": {
+      "min": 200,
+      "max": 1500,
+      "per": "one_time"
+    },
     "required_action": "cantonal_application",
+    "time_limit_days": null,
+    "confidence_floor": 0.6
+  },
+  {
+    "id": "student_b_permit_renewal_right",
+    "title": {
+      "de": "Aufenthaltsbewilligung B \u2013 Verl\u00e4ngerungsrecht f\u00fcr Studierende",
+      "en": "B Permit Renewal Right for Students"
+    },
+    "category": "social_security",
+    "jurisdiction": "CH",
+    "source_citations": [
+      {
+        "sr_number": "142.20",
+        "article": "22",
+        "paragraph": "1",
+        "canton": "CH",
+        "language": "de",
+        "quote_under_15_words": "Ausl\u00e4nderinnen und Ausl\u00e4nder k\u00f6nnen zur Aus- und Weiterbildung zugelassen werden"
+      }
+    ],
+    "trigger": {
+      "all": [
+        {
+          "eq": [
+            "employment_status",
+            "student"
+          ]
+        },
+        {
+          "any": [
+            {
+              "eq": [
+                "permit_type",
+                "B"
+              ]
+            },
+            {
+              "eq": [
+                "permit_type_inferred",
+                "B"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "estimated_value_chf": {
+      "min": 0,
+      "max": 500,
+      "per": "year"
+    },
+    "required_action": "cantonal_application",
+    "time_limit_days": null,
+    "confidence_floor": 0.6
+  },
+  {
+    "id": "working_student_ahv_partial_obligation",
+    "title": {
+      "de": "AHV-Beitragspflicht f\u00fcr arbeitende Studierende",
+      "en": "AHV Contribution Obligation for Working Students"
+    },
+    "category": "social_security",
+    "jurisdiction": "CH",
+    "source_citations": [
+      {
+        "sr_number": "831.10",
+        "article": "5",
+        "paragraph": "1",
+        "canton": "CH",
+        "language": "de",
+        "quote_under_15_words": "Vom Einkommen aus unselbst\u00e4ndiger Erwerbst\u00e4tigkeit wird ein Beitrag erhoben"
+      }
+    ],
+    "trigger": {
+      "any": [
+        {
+          "eq": [
+            "is_working_student",
+            true
+          ]
+        },
+        {
+          "all": [
+            {
+              "eq": [
+                "employment_status",
+                "student"
+              ]
+            },
+            {
+              "gte": [
+                "weekly_hours",
+                8
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "estimated_value_chf": {
+      "min": 0,
+      "max": 1500,
+      "per": "year"
+    },
+    "required_action": "employer_request",
+    "time_limit_days": null,
+    "confidence_floor": 0.6
+  },
+  {
+    "id": "health_premium_reduction_ipv",
+    "title": {
+      "de": "Individuelle Pr\u00e4mienverbilligung (IPV)",
+      "en": "Individual Health Insurance Premium Reduction (IPV)"
+    },
+    "category": "social_security",
+    "jurisdiction": "CH",
+    "source_citations": [
+      {
+        "sr_number": "832.10",
+        "article": "65",
+        "paragraph": "1",
+        "canton": "CH",
+        "language": "de",
+        "quote_under_15_words": "Versicherte in bescheidenen wirtschaftlichen Verh\u00e4ltnissen haben Anspruch auf Pr\u00e4mienverbilligung"
+      }
+    ],
+    "trigger": {
+      "any": [
+        {
+          "lte": [
+            "gross_income_chf_yearly",
+            75000
+          ]
+        },
+        {
+          "all": [
+            {
+              "exists": "gross_income_chf_yearly"
+            },
+            {
+              "lte": [
+                "gross_income_chf_yearly",
+                75000
+              ]
+            }
+          ]
+        },
+        {
+          "eq": [
+            "employment_status",
+            "student"
+          ]
+        },
+        {
+          "eq": [
+            "employment_status",
+            "unemployed"
+          ]
+        }
+      ]
+    },
+    "estimated_value_chf": {
+      "min": 500,
+      "max": 9000,
+      "per": "year"
+    },
+    "required_action": "cantonal_application",
+    "time_limit_days": null,
+    "confidence_floor": 0.6
+  },
+  {
+    "id": "quellensteuer_correction_inferred_permit",
+    "title": {
+      "de": "Nachtr\u00e4gliche Quellensteuerkorrektur (Permit aus Profil abgeleitet)",
+      "en": "Quellensteuer Subsequent Correction (Permit Inferred from Profile)"
+    },
+    "category": "tax_deduction",
+    "jurisdiction": "CH",
+    "source_citations": [
+      {
+        "sr_number": "642.11",
+        "article": "99a",
+        "paragraph": "1",
+        "canton": "CH",
+        "language": "de",
+        "quote_under_15_words": "Personen, die nach Artikel 91 der Quellensteuer unterliegen, k\u00f6nnen f\u00fcr jede Steuerperiode"
+      }
+    ],
+    "trigger": {
+      "any": [
+        {
+          "all": [
+            {
+              "eq": [
+                "permit_type",
+                "B"
+              ]
+            },
+            {
+              "not": {
+                "eq": [
+                  "nationality_status",
+                  "swiss"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "all": [
+            {
+              "eq": [
+                "permit_type_inferred",
+                "B"
+              ]
+            },
+            {
+              "not": {
+                "eq": [
+                  "nationality_status",
+                  "swiss"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "eq": [
+            "is_quellensteuer_liable",
+            true
+          ]
+        }
+      ]
+    },
+    "estimated_value_chf": {
+      "min": 500,
+      "max": 5000,
+      "per": "year"
+    },
+    "required_action": "cantonal_application",
+    "time_limit_days": null,
+    "confidence_floor": 0.6
+  },
+  {
+    "id": "registered_partnership_permit_right",
+    "title": {
+      "de": "Aufenthaltsrecht bei eingetragener Partnerschaft (AIG Art. 42/43)",
+      "en": "Residence Right via Registered Partnership (AIG Art. 42/43)"
+    },
+    "category": "social_security",
+    "jurisdiction": "CH",
+    "source_citations": [
+      {
+        "sr_number": "142.20",
+        "article": "42",
+        "paragraph": "1",
+        "canton": "CH",
+        "language": "de",
+        "quote_under_15_words": "Ausl\u00e4ndische Ehegatten und Kinder von Schweizerinnen und Schweizern"
+      }
+    ],
+    "trigger": {
+      "any": [
+        {
+          "eq": [
+            "wants_registered_partnership",
+            true
+          ]
+        },
+        {
+          "eq": [
+            "registered_partnership_permit_right",
+            true
+          ]
+        },
+        {
+          "eq": [
+            "marital_status",
+            "registered_partnership"
+          ]
+        }
+      ]
+    },
+    "estimated_value_chf": {
+      "min": 0,
+      "max": 3000,
+      "per": "one_time"
+    },
+    "required_action": "cantonal_application",
+    "time_limit_days": null,
+    "confidence_floor": 0.6
+  },
+  {
+    "id": "divorced_alimony_deduction",
+    "title": {
+      "de": "Unterhaltsabzug f\u00fcr Geschiedene (DBG Art. 33 lit. c)",
+      "en": "Alimony Deduction for Divorced Persons (DBG Art. 33 lit. c)"
+    },
+    "category": "tax_deduction",
+    "jurisdiction": "CH",
+    "source_citations": [
+      {
+        "sr_number": "642.11",
+        "article": "33",
+        "paragraph": "1",
+        "canton": "CH",
+        "language": "de",
+        "quote_under_15_words": "die Unterhaltsleistungen an den geschiedenen oder getrennt lebenden Ehegatten"
+      }
+    ],
+    "trigger": {
+      "all": [
+        {
+          "eq": [
+            "marital_status",
+            "divorced"
+          ]
+        },
+        {
+          "exists": "alimony_paid_chf_yearly"
+        },
+        {
+          "gte": [
+            "alimony_paid_chf_yearly",
+            1
+          ]
+        }
+      ]
+    },
+    "estimated_value_chf": {
+      "min": 1000,
+      "max": 30000,
+      "per": "year"
+    },
+    "required_action": "tax_declaration_field",
+    "time_limit_days": null,
+    "confidence_floor": 0.6
+  },
+  {
+    "id": "student_professional_training_deduction",
+    "title": {
+      "de": "Berufsausbildungskosten-Abzug f\u00fcr Studierende (DBG Art. 33 lit. j)",
+      "en": "Professional Training Cost Deduction for Students (DBG Art. 33 lit. j)"
+    },
+    "category": "tax_deduction",
+    "jurisdiction": "CH",
+    "source_citations": [
+      {
+        "sr_number": "642.11",
+        "article": "33",
+        "paragraph": "1",
+        "canton": "CH",
+        "language": "de",
+        "quote_under_15_words": "die Kosten der berufsorientierten Aus- und Weiterbildung, einschliesslich der Umschulungskosten"
+      }
+    ],
+    "trigger": {
+      "all": [
+        {
+          "eq": [
+            "employment_status",
+            "student"
+          ]
+        },
+        {
+          "gte": [
+            "weekly_hours",
+            8
+          ]
+        }
+      ]
+    },
+    "estimated_value_chf": {
+      "min": 500,
+      "max": 12000,
+      "per": "year"
+    },
+    "required_action": "tax_declaration_field",
+    "time_limit_days": null,
+    "confidence_floor": 0.6
+  },
+  {
+    "id": "tenant_deposit_cap_protection",
+    "title": {
+      "de": "Mietkautionsbegrenzung \u2013 R\u00fcckforderungsrecht bei \u00dcberziehung (OR Art. 257e)",
+      "en": "Rental Deposit Cap Protection \u2013 Right to Claim Excess (OR Art. 257e)"
+    },
+    "category": "tenancy_right",
+    "jurisdiction": "CH",
+    "source_citations": [
+      {
+        "sr_number": "220",
+        "article": "257e",
+        "paragraph": "1",
+        "canton": "CH",
+        "language": "de",
+        "quote_under_15_words": "Die Sicherheit darf h\u00f6chstens drei Monatsmieten betragen"
+      }
+    ],
+    "trigger": {
+      "all": [
+        {
+          "eq": [
+            "housing_status",
+            "tenant"
+          ]
+        },
+        {
+          "exists": "tenancy_deposit_chf"
+        },
+        {
+          "gte": [
+            "tenancy_deposit_chf",
+            1
+          ]
+        }
+      ]
+    },
+    "estimated_value_chf": {
+      "min": 0,
+      "max": 5000,
+      "per": "one_time"
+    },
+    "required_action": "claim_letter_to_landlord",
     "time_limit_days": null,
     "confidence_floor": 0.6
   }

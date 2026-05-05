@@ -82,7 +82,7 @@ def test_validate_passes_with_full_config_and_logs_redacted(
     with caplog.at_level(logging.INFO, logger=main_mod.logger.name):
         main_mod._validate_managed_agents_config()
     log_text = "\n".join(r.getMessage() for r in caplog.records)
-    assert "managed_agents_enabled" in log_text
+    assert "agent_runner_ready" in log_text
     # Raw IDs and full URLs must NOT appear.
     assert "agent_abcd1234" not in log_text
     assert "vault_abcd1234" not in log_text

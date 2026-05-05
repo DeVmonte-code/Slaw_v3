@@ -140,6 +140,7 @@ async def test_subthreshold_short_circuits_without_claude_call(
     """(iii) Empty retrieval → hard refusal, no Claude tokens spent."""
     monkeypatch.setattr(verify_mod, "retrieve_for_citation", lambda *a, **k: [])
     sentinel = AsyncMock()
+    monkeypatch.setattr(verify_mod, "_call_messages_create", sentinel)
     monkeypatch.setattr(verify_mod, "_call_claude", sentinel)
 
     cit = _de_citation()
@@ -201,6 +202,7 @@ async def test_de_chunk_marked_authoritative_for_de_provenance(
             output_tokens=20,
         )
 
+    monkeypatch.setattr(verify_mod, "_call_messages_create", _fake_call_claude)
     monkeypatch.setattr(verify_mod, "_call_claude", _fake_call_claude)
 
     cit = _de_citation()
@@ -263,6 +265,7 @@ async def test_translation_only_keeps_en_non_authoritative(
             output_tokens=15,
         )
 
+    monkeypatch.setattr(verify_mod, "_call_messages_create", _fake_call_claude)
     monkeypatch.setattr(verify_mod, "_call_claude", _fake_call_claude)
 
     cit = Citation(
@@ -318,6 +321,7 @@ async def test_translation_only_caps_confidence_server_side(
             output_tokens=15,
         )
 
+    monkeypatch.setattr(verify_mod, "_call_messages_create", _fake_call_claude)
     monkeypatch.setattr(verify_mod, "_call_claude", _fake_call_claude)
 
     cit = Citation(

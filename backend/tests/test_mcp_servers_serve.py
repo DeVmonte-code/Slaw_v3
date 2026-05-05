@@ -43,9 +43,9 @@ def test_app_mounts_three_mcp_servers_at_stable_prefixes() -> None:
 
 def test_mcp_base_url_derives_per_server_urls() -> None:
     s = Settings(mcp_base_url="https://swiss-legal.example.app")
-    assert s.mcp_swiss_law_url == "https://swiss-legal.example.app/mcp/swiss-law/"
-    assert s.mcp_contract_tools_url == "https://swiss-legal.example.app/mcp/contract-tools/"
-    assert s.mcp_user_context_url == "https://swiss-legal.example.app/mcp/user-context/"
+    assert s.mcp_swiss_law_url == "https://swiss-legal.example.app/mcp/swiss-law"
+    assert s.mcp_contract_tools_url == "https://swiss-legal.example.app/mcp/contract-tools"
+    assert s.mcp_user_context_url == "https://swiss-legal.example.app/mcp/user-context"
 
 
 def test_mcp_base_url_does_not_overwrite_explicit_url() -> None:
@@ -56,7 +56,7 @@ def test_mcp_base_url_does_not_overwrite_explicit_url() -> None:
     # Per-server override wins over the base derivation.
     assert s.mcp_user_context_url == "https://special.example.app/uc/"
     # The other two still derive from the base.
-    assert s.mcp_swiss_law_url == "https://default.example.app/mcp/swiss-law/"
+    assert s.mcp_swiss_law_url == "https://default.example.app/mcp/swiss-law"
 
 
 @pytest.mark.asyncio

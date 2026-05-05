@@ -375,6 +375,7 @@ async def test_verifier_envelope_includes_supporting_doctrine(
         )
         return body, _fake_provenance()
 
+    monkeypatch.setattr(verify_mod, "_call_messages_create", _fake_call_claude)
     monkeypatch.setattr(verify_mod, "_call_claude", _fake_call_claude)
 
     cit = _de_citation()
@@ -435,6 +436,7 @@ async def test_verifier_works_when_curriculum_empty(
             _fake_provenance(),
         )
 
+    monkeypatch.setattr(verify_mod, "_call_messages_create", _fake_call_claude)
     monkeypatch.setattr(verify_mod, "_call_claude", _fake_call_claude)
 
     result = await verify_entitlement(_entitlement(_de_citation()), _profile(), [])
@@ -476,6 +478,7 @@ async def test_verifier_soft_fails_on_doctrine_lookup_exception(
             _fake_provenance(),
         )
 
+    monkeypatch.setattr(verify_mod, "_call_messages_create", _fake_call_claude)
     monkeypatch.setattr(verify_mod, "_call_claude", _fake_call_claude)
 
     result = await verify_entitlement(_entitlement(_de_citation()), _profile(), [])
