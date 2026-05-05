@@ -1,0 +1,66 @@
+PHASE 1 — DIAGNOSTIC (BLOCKING)
+What & Why
+Audit the current state of ContextProfile and the canonical smoke test before touching any code.
+This phase determines the exact delta between current fields and the 27 new fields required.
+Its output is the gate condition for every subsequent phase.
+Done looks like
+
+A file backend/diagnostics/profile_audit.json exists and is valid JSON.
+The JSON contains keys present_fields, missing_fields, smoke_test_result, benefit_count.
+missing_fields lists at minimum: gross_income_chf_yearly, children_ages, employment_contract_type,
+pillar_3a_contribution_chf, health_insurance_franchise_chf.
+smoke_test_result is either "pass" or "fail" with a reason string.
+benefit_count is an integer ≥ 0.
+
+Out of scope
+
+Do NOT modify any source file in this phase.
+Do NOT add, remove, or change any field in any model.
+Do NOT run migrations or seed scripts.
+Do NOT touch the frontend.
+
+Done looks like (technical guardrails)
+bash# Validation command — must exit 0
+python - <<'EOF'
+import json, sys
+with open("backend/diagnostics/profile_audit.json") as f:
+    d = json.load(f)
+required_keys = {"present_fields", "missing_fields", "smoke_test_result", "benefit_count"}
+assert required_keys.issubset(d.keys()), f"Missing keys: {required_keys - d.keys()}"
+assert isinstance(d["benefit_count"], int), "benefit_count must be int"
+assert d["smoke_test_result"] in ("pass", "fail"), "smoke_test_result must be pass or fail"
+must_be_missing = [
+    "gross_income_chf_yearly", "children_ages", "employment_contract_type",
+    "pillar_3a_contribution_chf", "health_insurance_franchise_chf"
+]
+for f in must_be_missing:
+    assert f in d["missing_fields"], f"{f} should be in missing_fields"
+print("PHASE 1 GATE: PASSED")
+EOF
+Steps
+
+Read backend/models/context_profile.py and extract all current field names into present_fields.
+Run the existing smoke test against the canonical fixture (see Relevant Files).
+Capture the number of benefits returned into benefit_count.
+Set smoke_test_result to "pass" if ≥ 5 benefits returned, else "fail" with reason.
+Compute missing_fields as the set difference between the 27 target fields (listed below)
+and present_fields.
+Write backend/diagnostics/profile_audit.json with the four keys.
+Print the JSON to stdout.
+
+Target fields (all 27 must appear in missing_fields if not already present):
+gross_income_chf_yearly, pillar_3a_contribution_chf, health_insurance_franchise_chf,
+employment_contract_type, children_ages, is_quellensteuer_subject, is_cross_border_commuter,
+disability_iv_grade, ahv_contribution_gap_years, alv_contribution_months_last_2y,
+bvg_plan_type, home_office_days_weekly, professional_association_fees_chf,
+alimony_paid_chf_yearly, charitable_donations_chf_yearly, lease_type,
+last_rent_increase_year, tenancy_deposit_chf, has_received_termination_notice,
+is_on_sick_leave, maternity_expected_date, paternity_leave_taken,
+received_tenancy_termination, has_property_damage_dispute,
+is_caring_for_dependent_adult, is_survivor_with_dependents,
+kurzarbeit_or_partial_unemployment, personal_note
+Relevant files
+
+backend/models/context_profile.py — read-only in this phase
+backend/tests/test_smoke_canonical.py — run but do not modify
+backend/diagnostics/ — create this directory and write profile_audit.json here
