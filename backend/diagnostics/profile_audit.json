@@ -1,7 +1,4 @@
 {
-  "benefit_count": 12,
-  "benefit_count_source": "phase1_baseline",
-  "missing_fields": [],
   "present_fields": [
     "ahv_contribution_gap_years",
     "alimony_paid_chf_yearly",
@@ -56,6 +53,7 @@
     "weekly_hours",
     "years_in_switzerland"
   ],
+  "missing_fields": [],
   "smoke_test_result": "pass",
-  "strict_missing_field_count": 26
+  "benefit_count": 12
 }
