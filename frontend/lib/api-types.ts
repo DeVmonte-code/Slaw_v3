@@ -564,6 +564,103 @@ export interface components {
             recent_life_events?: components["schemas"]["LifeEvent"][];
             /** Free Text Narrative */
             free_text_narrative?: string | null;
+            /**
+             * Employment Contract Type
+             * @enum {string|null}
+             */
+            employment_contract_type?: "indefinite" | "fixed_term" | "apprenticeship" | null;
+            /** Is Quellensteuer Subject */
+            is_quellensteuer_subject?: boolean | null;
+            /**
+             * Is Cross Border Commuter
+             * @default false
+             */
+            is_cross_border_commuter: boolean;
+            /**
+             * Lease Type
+             * @enum {string|null}
+             */
+            lease_type?: "indefinite" | "fixed_term" | "subsidized" | null;
+            /** Last Rent Increase Year */
+            last_rent_increase_year?: number | null;
+            /** Tenancy Deposit Chf */
+            tenancy_deposit_chf?: number | null;
+            /** Gross Income Chf Yearly */
+            gross_income_chf_yearly?: number | null;
+            /**
+             * Health Insurance Franchise Chf
+             * @enum {integer|null}
+             */
+            health_insurance_franchise_chf?: 300 | 500 | 1000 | 1500 | 2000 | 2500 | null;
+            /** Home Office Days Weekly */
+            home_office_days_weekly?: number | null;
+            /** Professional Association Fees Chf */
+            professional_association_fees_chf?: number | null;
+            /** Alimony Paid Chf Yearly */
+            alimony_paid_chf_yearly?: number | null;
+            /** Charitable Donations Chf Yearly */
+            charitable_donations_chf_yearly?: number | null;
+            /**
+             * Disability Iv Grade
+             * @enum {string|null}
+             */
+            disability_iv_grade?: "none" | "40" | "50" | "60" | "70" | "full" | null;
+            /** Ahv Contribution Gap Years */
+            ahv_contribution_gap_years?: number | null;
+            /** Alv Contribution Months Last 2Y */
+            alv_contribution_months_last_2y?: number | null;
+            /**
+             * Bvg Plan Type
+             * @enum {string|null}
+             */
+            bvg_plan_type?: "mandatory_minimum" | "extended" | "executive" | "none" | null;
+            /**
+             * Has Received Termination Notice
+             * @default false
+             */
+            has_received_termination_notice: boolean;
+            /**
+             * Is On Sick Leave
+             * @default false
+             */
+            is_on_sick_leave: boolean;
+            /** Maternity Expected Date */
+            maternity_expected_date?: string | null;
+            /**
+             * Paternity Leave Taken
+             * @default false
+             */
+            paternity_leave_taken: boolean;
+            /**
+             * Received Tenancy Termination
+             * @default false
+             */
+            received_tenancy_termination: boolean;
+            /**
+             * Has Property Damage Dispute
+             * @default false
+             */
+            has_property_damage_dispute: boolean;
+            /**
+             * Is Caring For Dependent Adult
+             * @default false
+             */
+            is_caring_for_dependent_adult: boolean;
+            /**
+             * Is Survivor With Dependents
+             * @default false
+             */
+            is_survivor_with_dependents: boolean;
+            /**
+             * Kurzarbeit Or Partial Unemployment
+             * @default false
+             */
+            kurzarbeit_or_partial_unemployment: boolean;
+            /**
+             * Personal Note
+             * @description Free-text situation description for semantic benefit signal extraction. Processed at scan time only. Not persisted to any store.
+             */
+            personal_note?: string | null;
         };
         /** EstimatedValue */
         EstimatedValue: {

@@ -85,6 +85,88 @@ export const LIFE_EVENT_OPTIONS: { value: LifeEventKind; label: string }[] = [
   { value: "retired",          label: "Retired" },
 ];
 
+// --- ENRICHMENT CONSTANTS (Phase 2) ----------------------------------------
+
+export const EMPLOYMENT_CONTRACT_TYPE_OPTIONS = [
+  { value: "indefinite", label: "Open-ended (indefinite)" },
+  { value: "fixed_term", label: "Fixed-term" },
+  { value: "apprenticeship", label: "Apprenticeship / traineeship" },
+] as const;
+
+export const FRANCHISE_OPTIONS = [
+  { value: 300, label: "CHF 300 - minimum" },
+  { value: 500, label: "CHF 500" },
+  { value: 1000, label: "CHF 1,000" },
+  { value: 1500, label: "CHF 1,500" },
+  { value: 2000, label: "CHF 2,000" },
+  { value: 2500, label: "CHF 2,500 - maximum" },
+] as const;
+
+export const DISABILITY_IV_GRADE_OPTIONS = [
+  { value: "none", label: "No disability" },
+  { value: "40", label: "40% - quarter pension" },
+  { value: "50", label: "50% - half pension" },
+  { value: "60", label: "60% - three-quarter pension" },
+  { value: "70", label: "70%+ - full pension" },
+  { value: "full", label: "Full disability" },
+] as const;
+
+export const BVG_PLAN_TYPE_OPTIONS = [
+  { value: "mandatory_minimum", label: "Mandatory minimum only" },
+  { value: "extended", label: "Extended employer plan" },
+  { value: "executive", label: "Executive / Kader plan" },
+  { value: "none", label: "No pension fund (self-employed)" },
+] as const;
+
+export const LEASE_TYPE_OPTIONS = [
+  { value: "indefinite", label: "Open-ended" },
+  { value: "fixed_term", label: "Fixed-term" },
+  { value: "subsidized", label: "Subsidized / gemeinnuetzig" },
+] as const;
+
+export const EVENT_CHIP_OPTIONS = [
+  { value: "has_received_termination_notice", label: "Received employment termination notice" },
+  { value: "is_on_sick_leave", label: "Currently on sick leave" },
+  { value: "paternity_leave_taken", label: "Partner took / taking paternity leave" },
+  { value: "received_tenancy_termination", label: "Received lease termination notice" },
+  { value: "has_property_damage_dispute", label: "Dispute over deposit or property damage" },
+  { value: "is_caring_for_dependent_adult", label: "Caring for ill or disabled family member" },
+  { value: "is_survivor_with_dependents", label: "Recently widowed with dependents" },
+  { value: "kurzarbeit_or_partial_unemployment", label: "On Kurzarbeit / short-time work" },
+] as const satisfies readonly {
+  value: keyof ContextProfile;
+  label: string;
+}[];
+
+export const ENRICHMENT_DEFAULTS = {
+  employment_contract_type: undefined,
+  is_quellensteuer_subject: undefined,
+  is_cross_border_commuter: false,
+  lease_type: undefined,
+  last_rent_increase_year: undefined,
+  tenancy_deposit_chf: undefined,
+  gross_income_chf_yearly: undefined,
+  health_insurance_franchise_chf: undefined,
+  home_office_days_weekly: undefined,
+  professional_association_fees_chf: undefined,
+  alimony_paid_chf_yearly: undefined,
+  charitable_donations_chf_yearly: undefined,
+  disability_iv_grade: undefined,
+  ahv_contribution_gap_years: undefined,
+  alv_contribution_months_last_2y: undefined,
+  bvg_plan_type: undefined,
+  has_received_termination_notice: false,
+  is_on_sick_leave: false,
+  maternity_expected_date: undefined,
+  paternity_leave_taken: false,
+  received_tenancy_termination: false,
+  has_property_damage_dispute: false,
+  is_caring_for_dependent_adult: false,
+  is_survivor_with_dependents: false,
+  kurzarbeit_or_partial_unemployment: false,
+  personal_note: undefined,
+} satisfies Partial<ContextProfile>;
+
 export const DEFAULT_PROFILE: ContextProfile = {
   canton: "ZH",
   language: "de",
@@ -109,4 +191,5 @@ export const DEFAULT_PROFILE: ContextProfile = {
   nationality_status: "swiss",
   years_in_switzerland: null,
   recent_life_events: [],
+  ...ENRICHMENT_DEFAULTS,
 };

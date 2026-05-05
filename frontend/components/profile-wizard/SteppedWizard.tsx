@@ -14,12 +14,19 @@ import {
   LIFE_EVENT_OPTIONS,
   NATIONALITY_OPTIONS,
   PERMIT_OPTIONS,
+  EMPLOYMENT_CONTRACT_TYPE_OPTIONS,
+  FRANCHISE_OPTIONS,
+  DISABILITY_IV_GRADE_OPTIONS,
+  BVG_PLAN_TYPE_OPTIONS,
+  LEASE_TYPE_OPTIONS,
+  EVENT_CHIP_OPTIONS,
   DEFAULT_PROFILE,
 } from "./constants";
 import "./wizard.css";
 
 type LifeEvent = NonNullable<ContextProfile["recent_life_events"]>[number];
 type LifeEventKind = LifeEvent["event"];
+type EventChipField = (typeof EVENT_CHIP_OPTIONS)[number]["value"];
 
 const STEPS = [
   { id: "location", title: "Location & Employment" },
@@ -27,6 +34,7 @@ const STEPS = [
   { id: "housing", title: "Housing" },
   { id: "household", title: "Household & Family" },
   { id: "income", title: "Income & Savings" },
+  { id: "social-security", title: "Social Security" },
 ] as const;
 
 const inputClass =
@@ -126,14 +134,23 @@ export function SteppedWizard() {
       out.employment_start_year = null;
       out.weekly_hours = null;
       out.commute_km_daily = null;
+      out.employment_contract_type = null;
     }
     if (out.housing_status !== "tenant") {
       out.rental_start_year = null;
       out.rent_chf_monthly = null;
       out.lease_reference_rate_tracked = null;
+      out.lease_type = null;
+      out.last_rent_increase_year = null;
+      out.tenancy_deposit_chf = null;
+      out.received_tenancy_termination = false;
+      out.has_property_damage_dispute = false;
     }
     if (!out.has_third_pillar) {
       out.third_pillar_chf_this_year = null;
+    }
+    if (out.marital_status !== "divorced") {
+      out.alimony_paid_chf_yearly = null;
     }
     if ((out.children_count ?? 0) <= 0) {
       out.childcare_cost_chf_yearly = null;
@@ -146,6 +163,8 @@ export function SteppedWizard() {
     if (out.nationality_status === "swiss") {
       out.permit_type = "none";
       out.years_in_switzerland = null;
+      out.is_quellensteuer_subject = null;
+      out.is_cross_border_commuter = false;
     }
     return out;
   };
@@ -160,6 +179,16 @@ export function SteppedWizard() {
       return { ...prev, recent_life_events: next };
     });
   };
+
+  const toggleEventChip = (field: EventChipField) => {
+    setProfile((prev) => ({
+      ...prev,
+      [field]: !prev[field],
+    }));
+  };
+
+  const hasLifeEvent = (kind: LifeEventKind) =>
+    (profile.recent_life_events ?? []).some((e) => e.event === kind);
 
   const validateStep = (idx: number): Record<string, string> => {
     const e: Record<string, string> = {};
@@ -242,6 +271,9 @@ export function SteppedWizard() {
           e.childcare_cost_chf_yearly = "Childcare cost must be 0 or greater.";
         }
       }
+      if ((profile.personal_note ?? "").length > 1000) {
+        e.personal_note = "Personal note must be 1,000 characters or fewer.";
+      }
     }
     if (idx === 4) {
       if (!profile.income_band_chf) e.income_band_chf = "Select your income band.";
@@ -249,6 +281,42 @@ export function SteppedWizard() {
         const p3 = num(profile.third_pillar_chf_this_year);
         if (!Number.isFinite(p3) || p3 < 0 || p3 > 35280) {
           e.third_pillar_chf_this_year = "Pillar 3a must be between CHF 0 and 35,280.";
+        }
+      }
+      const optionalNonNegative = [
+        ["gross_income_chf_yearly", profile.gross_income_chf_yearly],
+        ["professional_association_fees_chf", profile.professional_association_fees_chf],
+        ["alimony_paid_chf_yearly", profile.alimony_paid_chf_yearly],
+        ["charitable_donations_chf_yearly", profile.charitable_donations_chf_yearly],
+      ] as const;
+      for (const [key, value] of optionalNonNegative) {
+        if (value !== null && value !== undefined && num(value) < 0) {
+          e[key] = "Amount must be 0 or greater.";
+        }
+      }
+      if (
+        profile.home_office_days_weekly !== null &&
+        profile.home_office_days_weekly !== undefined
+      ) {
+        const homeOffice = num(profile.home_office_days_weekly);
+        if (!Number.isInteger(homeOffice) || homeOffice < 0 || homeOffice > 5) {
+          e.home_office_days_weekly = "Home office days must be between 0 and 5.";
+        }
+      }
+    }
+    if (idx === 5) {
+      const ahv = profile.ahv_contribution_gap_years;
+      if (ahv !== null && ahv !== undefined) {
+        const value = num(ahv);
+        if (!Number.isInteger(value) || value < 0 || value > 44) {
+          e.ahv_contribution_gap_years = "AHV gap years must be between 0 and 44.";
+        }
+      }
+      const alv = profile.alv_contribution_months_last_2y;
+      if (alv !== null && alv !== undefined) {
+        const value = num(alv);
+        if (!Number.isInteger(value) || value < 0 || value > 24) {
+          e.alv_contribution_months_last_2y = "ALV months must be between 0 and 24.";
         }
       }
     }
@@ -454,6 +522,28 @@ export function SteppedWizard() {
                         className={inputClass}
                       />
                     </Field>
+
+                    {(profile.employment_status === "employee_full_time" ||
+                      profile.employment_status === "employee_part_time") && (
+                      <Field label="Employment Contract Type">
+                        <select
+                          name="employment_contract_type"
+                          value={profile.employment_contract_type ?? ""}
+                          onChange={(e) =>
+                            update(
+                              "employment_contract_type",
+                              (e.target.value || null) as ContextProfile["employment_contract_type"],
+                            )
+                          }
+                          className={inputClass}
+                        >
+                          <option value="">Select...</option>
+                          {EMPLOYMENT_CONTRACT_TYPE_OPTIONS.map((o) => (
+                            <option key={o.value} value={o.value}>{o.label}</option>
+                          ))}
+                        </select>
+                      </Field>
+                    )}
                   </div>
                 )}
 
@@ -514,6 +604,44 @@ export function SteppedWizard() {
                             this year.
                           </span>
                         </Field>
+
+                        {profile.permit_type !== "C" && (
+                          <label className="flex items-start gap-3 mt-2 rounded-md border border-[var(--slaw-line)] bg-white p-4 shadow-sm cursor-pointer hover:border-[var(--slaw-primary-soft)] transition-colors">
+                            <input
+                              name="is_quellensteuer_subject"
+                              type="checkbox"
+                              checked={!!profile.is_quellensteuer_subject}
+                              onChange={handleChange}
+                              className="mt-0.5 h-4 w-4 rounded border-gray-300 text-[var(--slaw-primary)] focus:ring-[var(--slaw-primary)] cursor-pointer"
+                            />
+                            <div className="flex flex-col">
+                              <span className="text-sm font-medium text-[var(--slaw-ink)]">
+                                Quellensteuer deducted at source
+                              </span>
+                              <span className="text-xs text-[var(--slaw-ink-soft)] mt-0.5">
+                                My employer deducts income tax directly from payroll.
+                              </span>
+                            </div>
+                          </label>
+                        )}
+
+                        <label className="flex items-start gap-3 mt-2 rounded-md border border-[var(--slaw-line)] bg-white p-4 shadow-sm cursor-pointer hover:border-[var(--slaw-primary-soft)] transition-colors">
+                          <input
+                            name="is_cross_border_commuter"
+                            type="checkbox"
+                            checked={!!profile.is_cross_border_commuter}
+                            onChange={handleChange}
+                            className="mt-0.5 h-4 w-4 rounded border-gray-300 text-[var(--slaw-primary)] focus:ring-[var(--slaw-primary)] cursor-pointer"
+                          />
+                          <div className="flex flex-col">
+                            <span className="text-sm font-medium text-[var(--slaw-ink)]">
+                              Cross-border commuter
+                            </span>
+                            <span className="text-xs text-[var(--slaw-ink-soft)] mt-0.5">
+                              I live abroad and work in Switzerland.
+                            </span>
+                          </div>
+                        </label>
                       </>
                     )}
 
@@ -581,6 +709,51 @@ export function SteppedWizard() {
                             </span>
                           </div>
                         </label>
+
+                        <Field label="Lease Type">
+                          <select
+                            name="lease_type"
+                            value={profile.lease_type ?? ""}
+                            onChange={(e) =>
+                              update(
+                                "lease_type",
+                                (e.target.value || null) as ContextProfile["lease_type"],
+                              )
+                            }
+                            className={inputClass}
+                          >
+                            <option value="">Select...</option>
+                            {LEASE_TYPE_OPTIONS.map((o) => (
+                              <option key={o.value} value={o.value}>{o.label}</option>
+                            ))}
+                          </select>
+                        </Field>
+
+                        <div className="grid grid-cols-2 gap-4">
+                          <Field label="Last Rent Increase Year" error={errors.last_rent_increase_year}>
+                            <input
+                              name="last_rent_increase_year"
+                              type="number"
+                              min={2000}
+                              max={new Date().getFullYear()}
+                              value={profile.last_rent_increase_year ?? ""}
+                              onChange={handleChange}
+                              className={inputClass}
+                              placeholder="e.g. 2022"
+                            />
+                          </Field>
+                          <Field label="Tenancy Deposit (CHF)" error={errors.tenancy_deposit_chf}>
+                            <input
+                              name="tenancy_deposit_chf"
+                              type="number"
+                              min={0}
+                              value={profile.tenancy_deposit_chf ?? ""}
+                              onChange={handleChange}
+                              className={inputClass}
+                              placeholder="e.g. 4500"
+                            />
+                          </Field>
+                        </div>
                       </>
                     )}
                   </div>
@@ -673,6 +846,61 @@ export function SteppedWizard() {
                         Tap any change from the last 12 months. Leave empty if none apply.
                       </span>
                     </div>
+
+                    <div className="flex flex-col gap-2">
+                      <label className="text-sm font-medium text-[var(--slaw-ink)]">
+                        Current events{" "}
+                        <span className="text-xs font-normal text-[var(--slaw-ink-soft)]">
+                          (optional)
+                        </span>
+                      </label>
+                      <div className="flex flex-wrap gap-2">
+                        {EVENT_CHIP_OPTIONS.map((opt) => {
+                          const selected = Boolean(profile[opt.value]);
+                          return (
+                            <button
+                              key={opt.value}
+                              type="button"
+                              onClick={() => toggleEventChip(opt.value)}
+                              className={`px-3 py-1.5 rounded-full border text-xs font-medium transition-all ${
+                                selected
+                                  ? "bg-[var(--slaw-primary-soft)] border-[var(--slaw-primary)] text-[var(--slaw-primary-strong)]"
+                                  : "bg-white border-[var(--slaw-line-strong)] text-[var(--slaw-ink-soft)] hover:border-[var(--slaw-primary)]"
+                              }`}
+                            >
+                              {opt.label}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {hasLifeEvent("had_child") && (
+                      <Field label="Expected Birth Month">
+                        <input
+                          name="maternity_expected_date"
+                          type="month"
+                          value={profile.maternity_expected_date ?? ""}
+                          onChange={(e) => update("maternity_expected_date", e.target.value || null)}
+                          className={inputClass}
+                        />
+                      </Field>
+                    )}
+
+                    <Field label="Anything else about your situation?" error={errors.personal_note}>
+                      <textarea
+                        name="personal_note"
+                        rows={4}
+                        maxLength={1000}
+                        value={profile.personal_note ?? ""}
+                        onChange={(e) => update("personal_note", e.target.value || null)}
+                        className={inputClass}
+                        placeholder="Describe a dispute, accident, unpaid wages, permit concern, or anything else."
+                      />
+                      <span className="text-xs text-[var(--slaw-ink-soft)] mt-1 block">
+                        {(profile.personal_note ?? "").length} / 1000
+                      </span>
+                    </Field>
                   </div>
                 )}
 
@@ -689,6 +917,18 @@ export function SteppedWizard() {
                           <option key={o.value} value={o.value}>{o.label}</option>
                         ))}
                       </select>
+                    </Field>
+
+                    <Field label="Annual Gross Income (CHF)" error={errors.gross_income_chf_yearly}>
+                      <input
+                        name="gross_income_chf_yearly"
+                        type="number"
+                        min={0}
+                        value={profile.gross_income_chf_yearly ?? ""}
+                        onChange={handleChange}
+                        className={inputClass}
+                        placeholder="e.g. 95000"
+                      />
                     </Field>
 
                     <label className="flex items-start gap-3 mt-2 rounded-md border border-[var(--slaw-line)] bg-white p-4 shadow-sm cursor-pointer hover:border-[var(--slaw-primary-soft)] transition-colors">
@@ -729,6 +969,157 @@ export function SteppedWizard() {
                         </Field>
                       </motion.div>
                     )}
+
+                    <Field label="Health Insurance Franchise">
+                      <select
+                        name="health_insurance_franchise_chf"
+                        value={profile.health_insurance_franchise_chf ?? ""}
+                        onChange={(e) =>
+                          update(
+                            "health_insurance_franchise_chf",
+                            (e.target.value
+                              ? Number(e.target.value)
+                              : null) as ContextProfile["health_insurance_franchise_chf"],
+                          )
+                        }
+                        className={inputClass}
+                      >
+                        <option value="">Select...</option>
+                        {FRANCHISE_OPTIONS.map((o) => (
+                          <option key={o.value} value={o.value}>{o.label}</option>
+                        ))}
+                      </select>
+                    </Field>
+
+                    <div className="grid grid-cols-2 gap-4">
+                      <Field label="Home Office Days / Week" error={errors.home_office_days_weekly}>
+                        <input
+                          name="home_office_days_weekly"
+                          type="number"
+                          min={0}
+                          max={5}
+                          value={profile.home_office_days_weekly ?? ""}
+                          onChange={handleChange}
+                          className={inputClass}
+                          placeholder="e.g. 2"
+                        />
+                      </Field>
+                      <Field
+                        label="Professional Fees (CHF/year)"
+                        error={errors.professional_association_fees_chf}
+                      >
+                        <input
+                          name="professional_association_fees_chf"
+                          type="number"
+                          min={0}
+                          value={profile.professional_association_fees_chf ?? ""}
+                          onChange={handleChange}
+                          className={inputClass}
+                          placeholder="e.g. 600"
+                        />
+                      </Field>
+                    </div>
+
+                    {profile.marital_status === "divorced" && (
+                      <Field label="Alimony Paid (CHF/year)" error={errors.alimony_paid_chf_yearly}>
+                        <input
+                          name="alimony_paid_chf_yearly"
+                          type="number"
+                          min={0}
+                          value={profile.alimony_paid_chf_yearly ?? ""}
+                          onChange={handleChange}
+                          className={inputClass}
+                          placeholder="e.g. 18000"
+                        />
+                      </Field>
+                    )}
+
+                    <Field
+                      label="Charitable Donations (CHF/year)"
+                      error={errors.charitable_donations_chf_yearly}
+                    >
+                      <input
+                        name="charitable_donations_chf_yearly"
+                        type="number"
+                        min={0}
+                        value={profile.charitable_donations_chf_yearly ?? ""}
+                        onChange={handleChange}
+                        className={inputClass}
+                        placeholder="e.g. 2000"
+                      />
+                    </Field>
+                  </div>
+                )}
+
+                {stepIndex === 5 && (
+                  <div className="flex flex-col gap-5">
+                    <Field label="Disability Status">
+                      <select
+                        name="disability_iv_grade"
+                        value={profile.disability_iv_grade ?? ""}
+                        onChange={(e) =>
+                          update(
+                            "disability_iv_grade",
+                            (e.target.value || null) as ContextProfile["disability_iv_grade"],
+                          )
+                        }
+                        className={inputClass}
+                      >
+                        <option value="">Select...</option>
+                        {DISABILITY_IV_GRADE_OPTIONS.map((o) => (
+                          <option key={o.value} value={o.value}>{o.label}</option>
+                        ))}
+                      </select>
+                    </Field>
+
+                    <div className="grid grid-cols-2 gap-4">
+                      <Field label="AHV Gap Years" error={errors.ahv_contribution_gap_years}>
+                        <input
+                          name="ahv_contribution_gap_years"
+                          type="number"
+                          min={0}
+                          max={44}
+                          value={profile.ahv_contribution_gap_years ?? ""}
+                          onChange={handleChange}
+                          className={inputClass}
+                          placeholder="e.g. 3"
+                        />
+                      </Field>
+                      <Field
+                        label="ALV Months Last 2 Years"
+                        error={errors.alv_contribution_months_last_2y}
+                      >
+                        <input
+                          name="alv_contribution_months_last_2y"
+                          type="number"
+                          min={0}
+                          max={24}
+                          value={profile.alv_contribution_months_last_2y ?? ""}
+                          onChange={handleChange}
+                          className={inputClass}
+                          placeholder="e.g. 18"
+                        />
+                      </Field>
+                    </div>
+
+                    <Field label="Pension Fund Plan (BVG)">
+                      <select
+                        name="bvg_plan_type"
+                        value={profile.bvg_plan_type ?? ""}
+                        onChange={(e) =>
+                          update(
+                            "bvg_plan_type",
+                            (e.target.value || null) as ContextProfile["bvg_plan_type"],
+                          )
+                        }
+                        className={inputClass}
+                      >
+                        <option value="">Select...</option>
+                        {BVG_PLAN_TYPE_OPTIONS.map((o) => (
+                          <option key={o.value} value={o.value}>{o.label}</option>
+                        ))}
+                      </select>
+                    </Field>
                   </div>
                 )}
               </div>

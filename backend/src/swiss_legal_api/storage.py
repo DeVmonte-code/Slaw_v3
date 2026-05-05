@@ -146,6 +146,12 @@ def _init_schema(conn: sqlite3.Connection) -> None:
     )
 
 
+def _profile_json_for_storage(profile: ContextProfile) -> str:
+    """Serialize profiles without scan-only free text."""
+    payload = profile.model_copy(update={"personal_note": None})
+    return payload.model_dump_json()
+
+
 @contextmanager
 def _txn() -> Iterator[sqlite3.Connection]:
     """Group a multi-statement write into one transaction."""
@@ -171,7 +177,7 @@ def upsert_user(user_id: str, profile: ContextProfile, notify_enabled: bool) -> 
     ``last_seen_at`` while preserving ``created_at``.
     """
     now = _now_iso()
-    payload = profile.model_dump_json()
+    payload = _profile_json_for_storage(profile)
     with _txn() as conn:
         conn.execute(
             """
@@ -198,7 +204,7 @@ def ensure_user_exists(user_id: str, profile: ContextProfile) -> None:
     satisfy the FK constraint without overwriting user preferences.
     """
     now = _now_iso()
-    payload = profile.model_dump_json()
+    payload = _profile_json_for_storage(profile)
     with _txn() as conn:
         conn.execute(
             """
