@@ -194,6 +194,93 @@ def retrieve_for_citation(
     return above
 
 
+def retrieve_semantic(
+    query: str,
+    canton: str = "CH",
+    limit: int = 5,
+    score_threshold: float = 0.6,
+    today: date | None = None,
+) -> list[RetrievedChunk]:
+    """Retrieve semantically related chunks bypassing SR/article exact-match constraints.
+    
+    Retains temporal and canton guardrails.
+    """
+    threshold = score_threshold if score_threshold is not None else settings.score_threshold
+    today = today or _today_utc()
+    today_dt = _to_dt_utc(today)
+
+    flt = qmodels.Filter(
+        must=[
+            qmodels.FieldCondition(
+                key="canton",
+                match=qmodels.MatchAny(any=[canton, "CH"]),
+            ),
+            qmodels.FieldCondition(
+                key="effective_date",
+                range=qmodels.DatetimeRange(lte=today_dt),
+            ),
+            qmodels.Filter(
+                should=[
+                    qmodels.IsEmptyCondition(
+                        is_empty=qmodels.PayloadField(key="repealed_date"),
+                    ),
+                    qmodels.IsNullCondition(
+                        is_null=qmodels.PayloadField(key="repealed_date"),
+                    ),
+                    qmodels.FieldCondition(
+                        key="repealed_date",
+                        range=qmodels.DatetimeRange(gt=today_dt),
+                    ),
+                ],
+            ),
+        ]
+    )
+
+    vec = embed_query(query)
+    client = _client()
+    response = client.query_points(
+        collection_name=settings.qdrant_collection,
+        query=vec,
+        limit=limit,
+        query_filter=flt,
+        with_payload=True,
+        score_threshold=threshold,
+    )
+
+    above: list[RetrievedChunk] = []
+    for r in response.points:
+        payload = r.payload or {}
+        score = float(r.score)
+        if score < threshold:
+            continue
+        eff_raw = payload.get("effective_date")
+        eff_date: date | None = None
+        if isinstance(eff_raw, str) and eff_raw:
+            try:
+                eff_date = date.fromisoformat(eff_raw[:10])
+            except ValueError:
+                eff_date = None
+        above.append(
+            RetrievedChunk(
+                text=str(payload.get("text", "")),
+                score=score,
+                language=str(payload.get("language", "de")),
+                effective_date=eff_date,
+                eli_uri=str(payload["eli_uri"]) if payload.get("eli_uri") else None,
+                paragraph=str(payload["paragraph"]) if payload.get("paragraph") else None,
+            )
+        )
+
+    if above:
+        logger.debug(
+            "retrieval_semantic_ok canton=%s top_score=%.3f n=%d",
+            canton,
+            above[0].score,
+            len(above),
+        )
+    return above
+
+
 # Default similarity floor for the curriculum collection. Lower than the
 # law-article retriever's threshold because curriculum chunks are wider in
 # scope (a doctrine paragraph may only loosely relate to a specific

@@ -43,7 +43,7 @@ from typing import Any
 import httpx
 
 from ..catalog import load_catalog
-from ..engine.retrieval import retrieve_for_citation
+from ..engine.retrieval import retrieve_for_citation, retrieve_semantic
 from ..schemas import Citation
 from . import McpServerSpec, McpToolSpec, build_fastmcp
 
@@ -565,6 +565,30 @@ def qdrant_search(
     ]
 
 
+def qdrant_semantic_search(
+    query: str,
+    canton: str = "CH",
+) -> list[dict[str, Any]]:
+    """Discover related topics bypassing exact-match SR/Article filters.
+
+    Runs a semantic search over the corpus using `canton` and temporal
+    guardrails. Returns chunks containing `eli_uri` and text snippets
+    that the agent can inspect to organically discover new authorities.
+    """
+    chunks = retrieve_semantic(query, canton)
+    return [
+        {
+            "text": c.text,
+            "language": c.language,
+            "score": round(c.score, 3),
+            "effective_date": c.effective_date.isoformat() if c.effective_date else None,
+            "eli_uri": c.eli_uri,
+            "paragraph": c.paragraph,
+        }
+        for c in chunks
+    ]
+
+
 def fetch_article_by_sr(sr_number: str, article: str, canton: str = "CH") -> list[dict[str, Any]]:
     """Exact-match retrieval — same callable, empty query string."""
     return qdrant_search("", sr_number, article, canton)
@@ -639,6 +663,16 @@ async def fetch_fedlex_article(
 SERVER = McpServerSpec(
     name="swiss-law-retrieval-mcp",
     tools=(
+        McpToolSpec(
+            name="qdrant_semantic_search",
+            description=(
+                "Discover related topics bypassing exact-match SR/Article filters. "
+                "Runs a semantic search over the corpus using `canton` and temporal "
+                "guardrails. Returns chunks containing `eli_uri` and text snippets "
+                "that the agent can inspect to organically discover new authorities."
+            ),
+            impl=qdrant_semantic_search,
+        ),
         McpToolSpec(
             name="qdrant_search",
             description=(

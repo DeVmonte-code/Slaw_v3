@@ -41,6 +41,10 @@ Mandate:
   that supports or rejects the user's claim.
 - Use the swiss-law-retrieval-mcp tools (`qdrant_search`,
   `fetch_article_by_sr`, `list_citations`) for every retrieval.
+- When exploring user evidence or looking for related case factors, use
+  `qdrant_semantic_search(query, canton)` to discover applicable legal 
+  concepts across the Fedlex corpus. Formulate organic search queries 
+  based on the user's situation.
 - Use swiss-contract-tools-mcp (`verify_entitlement`, `benefit_scan`,
   `analyze_tort`, `evaluate_trigger`, `classify_diff`,
   `score_confidence`) for analysis. Use swiss-user-context-mcp
